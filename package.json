@@ -1,0 +1,33 @@
+{
+  "name": "-template-",
+  "version": "1.0.0",
+  "description": "",
+  "author": "Krombik",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Krombik/-template-.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Krombik/-template-/issues"
+  },
+  "homepage": "https://github.com/Krombik/-template-#readme",
+  "type": "module",
+  "source": "src/index.ts",
+  "engines": {
+    "node": ">=10"
+  },
+  "scripts": {
+    "build": "ts-node ./scripts/build.mts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.9.4",
+    "prettier": "^3.1.0",
+    "ts-node": "^10.9.1",
+    "tsup": "^8.0.1",
+    "typescript": "^5.3.2"
+  },
+  "keywords": [
+  ],
+  "sideEffects": false
+}
