@@ -1,17 +1,17 @@
 {
-  "name": "-template-",
+  "name": "temp",
   "version": "1.0.0",
   "description": "",
   "author": "Krombik",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Krombik/-template-.git"
+    "url": "git+https://github.com/Krombik/temp.git"
   },
   "bugs": {
-    "url": "https://github.com/Krombik/-template-/issues"
+    "url": "https://github.com/Krombik/temp/issues"
   },
-  "homepage": "https://github.com/Krombik/-template-#readme",
+  "homepage": "https://github.com/Krombik/temp#readme",
   "type": "module",
   "source": "src/index.ts",
   "engines": {
@@ -20,14 +20,27 @@
   "scripts": {
     "build": "ts-node ./scripts/build.mts"
   },
+  "peerDependencies": {
+    "@types/react": ">=16.8.0",
+    "react": ">=16.8.0"
+  },
+  "peerDependenciesMeta": {
+    "@types/react": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@types/lodash.noop": "^3.0.9",
     "@types/node": "^20.9.4",
+    "@types/react": "^18.2.38",
     "prettier": "^3.1.0",
     "ts-node": "^10.9.1",
     "tsup": "^8.0.1",
     "typescript": "^5.3.2"
   },
-  "keywords": [
-  ],
-  "sideEffects": false
+  "keywords": [],
+  "sideEffects": false,
+  "dependencies": {
+    "lodash.noop": "^3.0.1"
+  }
 }
