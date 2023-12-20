@@ -18,7 +18,7 @@
     "node": ">=10"
   },
   "scripts": {
-    "build": "ts-node ./scripts/build.mts"
+    "build": "node --loader ts-node/esm ./scripts/build.ts"
   },
   "peerDependencies": {
     "@types/react": ">=16.8.0",

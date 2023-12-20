@@ -1,12 +1,12 @@
 import { build } from 'tsup';
 import ts from 'typescript';
 import fs from 'fs/promises';
-import { FILES_TO_COPY } from './constants.mjs';
+import { FILES_TO_COPY } from './constants';
 import {
   addNestedPackagesJson,
   getMainPackageJson,
   handleChild,
-} from './utils.mjs';
+} from './utils';
 
 const run = async (outDir: string) => {
   await fs.rm(outDir, { recursive: true, force: true });

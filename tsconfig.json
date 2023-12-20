@@ -18,11 +18,13 @@
     "allowSyntheticDefaultImports": true,
     "skipLibCheck": true,
     "stripInternal": true,
-    "types": ["node"]
+    "types": ["node"],
   },
   "ts-node": {
     "esm": true,
-    "files": true
+    "files": true,
+    "esModuleInterop": true,
+    "experimentalSpecifierResolution": "node"
   },
   "include": ["src", "scripts"],
   "exclude": ["node_modules", "build", "example"]

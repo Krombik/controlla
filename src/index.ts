@@ -1,6 +1,6 @@
 import { useLayoutEffect, useState } from 'react';
 import noop from 'lodash.noop';
-import { kek } from './types';
+import { SuperVersionedState } from './types';
 
 type Key = string | number;
 
@@ -13,24 +13,24 @@ const enum RootKey {
   PROMISE,
 }
 
-type Start = 0 | 1;
-
-type SetMap = Map<typeof SET_KEY, Set<(value: unknown) => void>>;
+type SetMap = Map<typeof SET_KEY, Set<(value: any) => void>>;
 
 type CommonMap = SetMap & Map<Key, NestedMap>;
 
 type NestedMap = CommonMap;
 
 type Root = Map<RootKey.MAP, CommonMap> &
-  Map<RootKey.VALUE, unknown> &
-  Map<RootKey.ERROR, unknown> &
-  Map<typeof SET_KEY, Set<(error: unknown) => void>> &
-  Map<RootKey.PROMISE, Promise<unknown>>;
+  Map<RootKey.VALUE, any> &
+  Map<RootKey.ERROR, any> &
+  Map<typeof SET_KEY, Set<(error: any) => void>> &
+  Map<RootKey.PROMISE, Promise<any>>;
 
 type StorageMap = Map<Key, Root>;
 
-const safeGet = (value: any, path: any[], start: number = 0, end: number) => {
-  for (let i = start; i < end; i++) {
+const safeGet = (value: any, path: Key[]) => {
+  const l = path.length;
+
+  for (let i = 0; i < l; i++) {
     const k = path[i];
 
     if (value && k in value) {
@@ -42,6 +42,8 @@ const safeGet = (value: any, path: any[], start: number = 0, end: number) => {
 
   return value;
 };
+
+const EMPTY_PATH: [] = [];
 
 const createRoot = () => {
   const rootMap: NestedMap = new Map();
@@ -57,16 +59,64 @@ const createRoot = () => {
   return root;
 };
 
-const getRoot = (storage: StorageMap, key: Key) => {
-  if (storage.has(key)) {
-    return storage.get(key)!;
+const toKey = (value: any) => {
+  if (value && Object.getPrototypeOf(value) == Object.prototype) {
+    const keys = Object.keys(value).sort();
+
+    let str = '';
+
+    for (let i = keys.length; i--; ) {
+      const key = keys[i];
+
+      const child = value[key];
+
+      if (child !== undefined) {
+        str += `${key}=${toKey(child)}\f`;
+      }
+    }
+
+    return str;
   }
 
-  const root = createRoot();
+  return '' + value;
+};
 
-  storage.set(key, root);
+const handleVersionedStorage = () => {
+  const storage: StorageMap = new Map();
 
-  return root;
+  const keyStorage = new Map<string, any>();
+
+  return (key: any) => {
+    if (storage.has(key)) {
+      return storage.get(key)!;
+    }
+
+    if (key && typeof key == 'object') {
+      const strKey = toKey(key);
+
+      if (keyStorage.has(strKey)) {
+        const prevKey = keyStorage.get(strKey)!;
+
+        if (storage.has(prevKey)) {
+          const root = storage.get(key)!;
+
+          storage.delete(prevKey);
+
+          storage.set(key, root);
+
+          return root;
+        }
+      } else {
+        keyStorage.set(strKey, key);
+      }
+    }
+
+    const root = createRoot();
+
+    storage.set(key, root);
+
+    return root;
+  };
 };
 
 const alwaysFalse = () => false as const;
@@ -240,7 +290,8 @@ const handleNotEqual = (
 
 const getNewRootValue = (
   prevValue: any,
-  args: any[],
+  nextValue: any,
+  path: Key[],
   index: number,
   end: number,
   push: (value: any) => any
@@ -248,7 +299,7 @@ const getNewRootValue = (
   let newValue;
 
   if (index < end) {
-    const k = args[index++] as Key;
+    const k = path[index++] as Key;
 
     if (prevValue == null || typeof prevValue != 'object') {
       prevValue = typeof k == 'string' ? {} : [];
@@ -259,7 +310,8 @@ const getNewRootValue = (
 
       newValue[k as number] = getNewRootValue(
         prevValue[k as number],
-        args,
+        nextValue,
+        path,
         index,
         end,
         push
@@ -267,11 +319,11 @@ const getNewRootValue = (
     } else {
       newValue = {
         ...prevValue,
-        [k]: getNewRootValue(prevValue[k], args, index, end, push),
+        [k]: getNewRootValue(prevValue[k], nextValue, path, index, end, push),
       };
     }
   } else {
-    newValue = args[end];
+    newValue = nextValue;
   }
 
   push(newValue);
@@ -303,14 +355,16 @@ const forEachChild = (storage: NestedMap, fn: (key: Key) => void) => {
   }
 };
 
-const getMap = (root: Root, path: any[], i: number, end: number) => {
+const getMap = (root: Root, path: Key[]) => {
+  const l = path.length;
+
   let parent = root.get(RootKey.MAP)!;
 
-  for (; i < end; i++) {
+  for (let i = 0; i < l; i++) {
     const k: Key = path[i];
 
     if (!parent.has(k)) {
-      for (; i < end; i++) {
+      for (; i < l; i++) {
         const child: NestedMap = new Map();
 
         child.set(SET_KEY, new Set());
@@ -337,14 +391,14 @@ const deleteError = (root: Root) => {
 
 const deleteValue = (root: Root) => {
   if (root.has(RootKey.VALUE)) {
-    safeSet(root, [0, undefined], 1);
+    safeSet(root, EMPTY_PATH, undefined);
 
     root.delete(RootKey.VALUE);
   }
 };
 
-const safeSet = (root: Root, args: any[], start: Start) => {
-  const l = args.length - 1;
+const safeSet = (root: Root, path: Key[], nextValue: any) => {
+  const l = path.length;
 
   const rootMap = root.get(RootKey.MAP)!;
 
@@ -354,14 +408,14 @@ const safeSet = (root: Root, args: any[], start: Start) => {
 
   const rootValue = root.get(RootKey.VALUE);
 
-  const prevValue = safeGet(rootValue, args, start, l);
+  const prevValue = safeGet(rootValue, path);
 
   let currentNode: NestedMap | undefined = rootMap;
 
   let isNotUpdated = true;
 
-  for (let i = start; i < l; i++) {
-    const k = args[i] as Key;
+  for (let i = 0; i < l; i++) {
+    const k = path[i] as Key;
 
     if (currentNode.has(k)) {
       nodesQueue.push((currentNode = currentNode.get(k)!));
@@ -373,14 +427,15 @@ const safeSet = (root: Root, args: any[], start: Start) => {
   }
 
   if (
-    handleNotEqual(prevValue, args[l], currentNode, (): true => {
+    handleNotEqual(prevValue, nextValue, currentNode, (): true => {
       if (isNotUpdated) {
         root.set(
           RootKey.VALUE,
           getNewRootValue(
             rootValue,
-            args,
-            start,
+            nextValue,
+            path,
+            0,
             l,
             valuesQueue.push.bind(valuesQueue)
           )
@@ -462,40 +517,30 @@ const addToSet = (root: SetMap, cb: (value: unknown) => void) => {
   };
 };
 
-const _set = (root: Root, args: any[], start: Start) => {
+const _set = (root: Root, path: Key[], value: any) => {
   deleteError(root);
 
-  safeSet(root, args, start);
+  safeSet(root, path, value);
 };
 
-const _get = (root: Root, args: any[], start: Start) =>
-  safeGet(root.get(RootKey.VALUE), args, start, args.length);
+const _get = (root: Root, path: Key[]) =>
+  safeGet(root.get(RootKey.VALUE), path);
 
-const _use = (root: Root, args: any[], start: Start) => {
-  let end = args.length;
-
-  let isEnabled: true | undefined = true;
+const _use = (root: Root, path: Key[], disabled?: boolean) => {
+  const isEnabled = disabled ? undefined : true;
 
   const forceRerender = useState<{}>()[1];
-
-  const last = args[end - 1];
-
-  if (typeof last == 'boolean') {
-    end--;
-
-    isEnabled = !last || undefined;
-  }
 
   useLayoutEffect(
     () =>
       isEnabled &&
-      addToSet(getMap(root, args, start, end), () => {
+      addToSet(getMap(root, path), () => {
         forceRerender({});
       }),
-    args
+    [isEnabled && path.join('.')]
   );
 
-  return isEnabled && safeGet(root.get(RootKey.VALUE), args, start, end);
+  return isEnabled && safeGet(root.get(RootKey.VALUE), path);
 };
 
 const _delete = (root: Root) => {
@@ -526,27 +571,8 @@ const _useError = (root: Root) => {
   return root.get(RootKey.ERROR);
 };
 
-const _onChange = (root: Root, args: any[], start: Start) => {
-  const l = args.length - 1;
-
-  return addToSet(
-    getMap(root, args, start, l),
-    args[l] as (value: unknown) => void
-  );
-};
-
-const _suspense = (root: Root, args: any[], start: Start) => {
-  let end = args.length;
-
-  let isEnabled = true;
-
-  const last = args[end - 1];
-
-  if (typeof last == 'boolean') {
-    end--;
-
-    isEnabled = !last;
-  }
+const _suspense = (root: Root, path: Key[], disabled?: boolean) => {
+  const isEnabled = !disabled;
 
   if (isEnabled && root.has(RootKey.VALUE)) {
     const t = useState<{}>();
@@ -558,7 +584,7 @@ const _suspense = (root: Root, args: any[], start: Start) => {
         setValue({});
       };
 
-      const valueSet = getMap(root, args, start, end).get(SET_KEY)!;
+      const valueSet = getMap(root, path).get(SET_KEY)!;
 
       const errorSet = root.get(SET_KEY)!;
 
@@ -571,68 +597,72 @@ const _suspense = (root: Root, args: any[], start: Start) => {
 
         errorSet.delete(forceRerender);
       };
-    }, args);
+    }, [path.join('.')]);
 
-    return safeGet(root.get(RootKey.VALUE), args, start, end);
+    return safeGet(root.get(RootKey.VALUE), path);
   }
 
   useState();
 
-  useLayoutEffect(noop, Array(args.length));
+  useLayoutEffect(noop, [0]);
 
   if (isEnabled) {
     throw root.has(RootKey.ERROR) ? root.get(RootKey.ERROR) : getPromise(root);
   }
 };
 
-export const createVersionedStorage = <T>(): kek<T> => {
-  const storage: StorageMap = new Map();
+export const createVersionedState = <V, T, E = any>() => {
+  const getRoot = handleVersionedStorage();
 
-  const start = 1;
+  const superVersionedState = ((...path: Key[]) => ({
+    get(version) {
+      return _get(getRoot(version), path);
+    },
+    set(version, value) {
+      _set(getRoot(version), path, value);
+    },
+    onChange(version, cb) {
+      return addToSet(getMap(getRoot(version), path), cb);
+    },
+    suspense(version, disabled) {
+      return _suspense(getRoot(version), path, disabled);
+    },
+    use(version, disabled) {
+      return _use(getRoot(version), path, disabled);
+    },
+  })) as SuperVersionedState<V, T, E>;
 
-  return {
-    set(...args) {
-      _set(getRoot(storage, args[0]), args, start);
-    },
-    get(...args) {
-      return _get(getRoot(storage, args[0]), args, start);
-    },
-    use(...args) {
-      return _use(getRoot(storage, args[0]), args, start);
-    },
-    delete(version) {
-      _delete(getRoot(storage, version));
-    },
-    getPromise(version) {
-      return getPromise(getRoot(storage, version));
-    },
-    setError(version, error) {
-      _setError(getRoot(storage, version), error);
-    },
-    getError(version) {
-      return getRoot(storage, version).get(RootKey.ERROR);
-    },
-    useError(version) {
-      return _useError(getRoot(storage, version));
-    },
-    onChange(...args) {
-      return _onChange(getRoot(storage, args[0]), args, start);
-    },
-    onError(version, cb) {
-      return addToSet(getRoot(storage, version), cb);
-    },
-    suspense(...args) {
-      return _suspense(getRoot(storage, args[0]), args, start);
-    },
+  superVersionedState.delete = (version) => {
+    _delete(getRoot(version));
   };
-};
 
-type Obj = {
-  k: {
-    a: { b: number };
-    j: { c: [kek: number, bek: {}] };
+  superVersionedState.get = (version) => _get(getRoot(version), EMPTY_PATH);
+
+  superVersionedState.getError = (version) =>
+    getRoot(version).get(RootKey.ERROR);
+
+  superVersionedState.getPromise = (version) => getPromise(getRoot(version));
+
+  superVersionedState.onChange = (version, cb) =>
+    addToSet(getMap(getRoot(version), EMPTY_PATH), cb);
+
+  superVersionedState.onError = (version, cb) => addToSet(getRoot(version), cb);
+
+  superVersionedState.set = (version, value) => {
+    _set(getRoot(version), EMPTY_PATH, value);
   };
-  l: string;
-};
 
-createVersionedStorage<Obj>().get('k', 'j', 'c', 1);
+  superVersionedState.setError = (version, error) => {
+    _setError(getRoot(version), error);
+  };
+
+  superVersionedState.suspense = (version, disabled) =>
+    _suspense(getRoot(version), EMPTY_PATH, disabled);
+
+  superVersionedState.use = (version, disabled) =>
+    _use(getRoot(version), EMPTY_PATH, disabled);
+
+  superVersionedState.useError = (version) => _useError(getRoot(version));
+
+  return superVersionedState;
+};
