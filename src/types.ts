@@ -28,53 +28,74 @@ type Path<O> = O extends any[] | Record<any, any>
   : [];
 
 // @ts-expect-error
-declare const __nastyHack = <T, E>() =>
+declare const __getSuperState = <T, E>() =>
   class SuperState {
     static get(): T;
     static set(value: T): void;
     static delete(): void;
-    static use(disabled?: boolean): T;
+    static use(disabled?: false): T;
+    static use(disabled: true): undefined;
     static getPromise(): Promise<T>;
     static setError(error: E): void;
-    static getError(): E;
-    static useError(): E;
-    static onChange(cb: (value: T) => void): void;
-    static onError(cb: (error: E) => void): void;
-    static suspense(disabled?: boolean): T;
+    static getError(): E | undefined;
+    static useError(): E | undefined;
+    static onChange(cb: (value: T) => void): () => void;
+    static onError(cb: (error: E) => void): () => void;
+    static suspense(disabled?: false): T;
+    static suspense(disabled: true): undefined;
   };
+
+type Nill = null | undefined;
 
 // @ts-expect-error
-declare const __versionedNastyHack = <V, T, E>() =>
+declare const __getVersionedSuperState = <V, T, E>() =>
   class SuperVersionedState {
     static get(version: V): T;
-    static set(version: V, value: T): void;
-    static delete(version: V): void;
-    static use(version: V, disabled?: boolean): T;
+    static get(version: Nill): undefined;
+    static set(version: V | Nill, value: T): void;
+    static delete(version: V | Nill): void;
+    static use(version: V, disabled?: false): T;
+    static use(version: V, disabled: true): undefined;
+    static use(version: Nill, disabled?: boolean): undefined;
     static getPromise(version: V): Promise<T>;
-    static setError(version: V, error: E): void;
-    static getError(version: V): E;
-    static useError(version: V): E;
-    static onChange(version: V, cb: (value: T) => void): ()=>void;
-    static onError(version: V, cb: (error: E) => void): ()=>void;
-    static suspense(version: V, disabled?: boolean): T;
+    static getPromise(version: Nill): undefined;
+    static setError(version: V | Nill, error: E): void;
+    static getError(version: V): E | undefined;
+    static getError(version: Nill): undefined;
+    static useError(version: V): E | undefined;
+    static useError(version: Nill): undefined;
+    static onChange(version: V, cb: (value: T) => void): () => void;
+    static onChange(version: Nill, cb: (value: T) => void): void;
+    static onError(version: V, cb: (error: E) => void): () => void;
+    static onError(version: Nill, cb: (error: E) => void): void;
+    static suspense(version: V, disabled?: false): T;
+    static suspense(version: V, disabled: true): undefined;
+    static suspense(version: Nill, disabled?: boolean): undefined;
   };
 
-export interface SuperVersionedState<V, T, E = any>
-  extends ReturnType<typeof __versionedNastyHack<V, T, E>> {
+export type NestedMethods = Extract<
+  keyof ReturnType<typeof __getSuperState>,
+  'get' | 'set' | 'onChange' | 'suspense' | 'use'
+>;
+
+export type RootMethods = Exclude<
+  keyof ReturnType<typeof __getSuperState>,
+  NestedMethods | 'prototype'
+>;
+
+export interface VersionedSuperState<V, T, E = any>
+  extends ReturnType<typeof __getVersionedSuperState<V, T, E>> {
   <P extends Path<T>>(
     ...path: P
   ): Pick<
-    ReturnType<typeof __versionedNastyHack<V, Get<T, P>, E>>,
-    'get' | 'set' | 'onChange' | 'suspense' | 'use'
+    ReturnType<typeof __getVersionedSuperState<V, Get<T, P>, E>>,
+    NestedMethods
   >;
 }
 
 export interface SuperState<T, E = any>
-  extends ReturnType<typeof __nastyHack<T, E>> {
+  extends ReturnType<typeof __getSuperState<T, E>> {
   <P extends Path<T>>(
     ...path: P
-  ): Pick<
-    ReturnType<typeof __nastyHack<Get<T, P>, E>>,
-    'get' | 'set' | 'onChange' | 'suspense' | 'use'
-  >;
+  ): Pick<ReturnType<typeof __getSuperState<Get<T, P>, E>>, NestedMethods>;
 }

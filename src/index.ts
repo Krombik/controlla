@@ -1,8 +1,12 @@
 import { useLayoutEffect, useState } from 'react';
 import noop from 'lodash.noop';
-import { SuperVersionedState } from './types';
-
-type Key = string | number;
+import {
+  Key,
+  NestedMethods,
+  RootMethods,
+  SuperState,
+  VersionedSuperState,
+} from './types';
 
 const SET_KEY = Symbol();
 
@@ -43,8 +47,6 @@ const safeGet = (value: any, path: Key[]) => {
   return value;
 };
 
-const EMPTY_PATH: [] = [];
-
 const createRoot = () => {
   const rootMap: NestedMap = new Map();
 
@@ -71,7 +73,7 @@ const toKey = (value: any) => {
       const child = value[key];
 
       if (child !== undefined) {
-        str += `${key}=${toKey(child)}\f`;
+        str += `${key}\v${toKey(child)}\f`;
       }
     }
 
@@ -391,7 +393,7 @@ const deleteError = (root: Root) => {
 
 const deleteValue = (root: Root) => {
   if (root.has(RootKey.VALUE)) {
-    safeSet(root, EMPTY_PATH, undefined);
+    safeSet(root, [], undefined);
 
     root.delete(RootKey.VALUE);
   }
@@ -537,7 +539,7 @@ const _use = (root: Root, path: Key[], disabled?: boolean) => {
       addToSet(getMap(root, path), () => {
         forceRerender({});
       }),
-    [isEnabled && path.join('.')]
+    [root, isEnabled && path.join('.')]
   );
 
   return isEnabled && safeGet(root.get(RootKey.VALUE), path);
@@ -597,72 +599,156 @@ const _suspense = (root: Root, path: Key[], disabled?: boolean) => {
 
         errorSet.delete(forceRerender);
       };
-    }, [path.join('.')]);
+    }, [root, path.join('.')]);
 
     return safeGet(root.get(RootKey.VALUE), path);
   }
 
   useState();
 
-  useLayoutEffect(noop, [0]);
+  useLayoutEffect(noop, [0, 0]);
 
   if (isEnabled) {
     throw root.has(RootKey.ERROR) ? root.get(RootKey.ERROR) : getPromise(root);
   }
 };
 
+const defineProperties = (target: Function, methods: Record<string, any>) => {
+  for (const key in methods) {
+    Object.defineProperty(target, key, { value: methods[key] });
+  }
+};
+
+const handleState = <
+  O extends Record<NestedMethods | RootMethods, any> &
+    ((...path: any[]) => Record<NestedMethods, any>),
+>(
+  rootMethods: Pick<O, RootMethods>,
+  getNestedMethods: (path: Key[]) => Pick<O, NestedMethods>
+) => {
+  const target = (...path: Key[]) => getNestedMethods(path);
+
+  defineProperties(target, rootMethods);
+
+  defineProperties(target, getNestedMethods([]));
+
+  return target as O;
+};
+
 export const createVersionedState = <V, T, E = any>() => {
   const getRoot = handleVersionedStorage();
 
-  const superVersionedState = ((...path: Key[]) => ({
-    get(version) {
-      return _get(getRoot(version), path);
+  return handleState<VersionedSuperState<V, T, E>>(
+    {
+      delete(version) {
+        if (version != null) {
+          _delete(getRoot(version));
+        }
+      },
+      getError(version) {
+        if (version != null) {
+          return getRoot(version).get(RootKey.ERROR);
+        }
+      },
+      getPromise(version) {
+        if (version != null) {
+          return getPromise(getRoot(version)) as any;
+        }
+      },
+      onError(version, cb) {
+        if (version != null) {
+          return addToSet(getRoot(version), cb) as any;
+        }
+      },
+      setError(version, error) {
+        if (version != null) {
+          _setError(getRoot(version), error);
+        }
+      },
+      useError(version) {
+        if (version != null) {
+          return _useError(getRoot(version));
+        }
+      },
     },
-    set(version, value) {
-      _set(getRoot(version), path, value);
+    (path) => ({
+      get(version) {
+        if (version != null) {
+          return _get(getRoot(version), path);
+        }
+      },
+      set(version, value) {
+        if (version != null) {
+          _set(getRoot(version), path, value);
+        }
+      },
+      onChange(version, cb) {
+        if (version != null) {
+          return addToSet(getMap(getRoot(version), path), cb) as any;
+        }
+      },
+      suspense(version, disabled) {
+        const isNotNill = version != null;
+
+        return _suspense(
+          isNotNill && (getRoot(version) as any),
+          path,
+          disabled || !isNotNill
+        );
+      },
+      use(version, disabled) {
+        const isNotNill = version != null;
+
+        return _use(
+          isNotNill && (getRoot(version) as any),
+          path,
+          disabled || !isNotNill
+        );
+      },
+    })
+  );
+};
+
+export const createSuperState = <T, E = any>() => {
+  const root = createRoot();
+
+  return handleState<SuperState<T, E>>(
+    {
+      delete() {
+        _delete(root);
+      },
+      getError() {
+        return root.get(RootKey.ERROR);
+      },
+      getPromise() {
+        return getPromise(root);
+      },
+      onError(cb) {
+        return addToSet(root, cb);
+      },
+      setError(error) {
+        _setError(root, error);
+      },
+      useError() {
+        return _useError(root);
+      },
     },
-    onChange(version, cb) {
-      return addToSet(getMap(getRoot(version), path), cb);
-    },
-    suspense(version, disabled) {
-      return _suspense(getRoot(version), path, disabled);
-    },
-    use(version, disabled) {
-      return _use(getRoot(version), path, disabled);
-    },
-  })) as SuperVersionedState<V, T, E>;
-
-  superVersionedState.delete = (version) => {
-    _delete(getRoot(version));
-  };
-
-  superVersionedState.get = (version) => _get(getRoot(version), EMPTY_PATH);
-
-  superVersionedState.getError = (version) =>
-    getRoot(version).get(RootKey.ERROR);
-
-  superVersionedState.getPromise = (version) => getPromise(getRoot(version));
-
-  superVersionedState.onChange = (version, cb) =>
-    addToSet(getMap(getRoot(version), EMPTY_PATH), cb);
-
-  superVersionedState.onError = (version, cb) => addToSet(getRoot(version), cb);
-
-  superVersionedState.set = (version, value) => {
-    _set(getRoot(version), EMPTY_PATH, value);
-  };
-
-  superVersionedState.setError = (version, error) => {
-    _setError(getRoot(version), error);
-  };
-
-  superVersionedState.suspense = (version, disabled) =>
-    _suspense(getRoot(version), EMPTY_PATH, disabled);
-
-  superVersionedState.use = (version, disabled) =>
-    _use(getRoot(version), EMPTY_PATH, disabled);
-
-  superVersionedState.useError = (version) => _useError(getRoot(version));
-
-  return superVersionedState;
+    (path) => ({
+      get() {
+        return _get(root, path);
+      },
+      set(value) {
+        _set(root, path, value);
+      },
+      onChange(cb) {
+        return addToSet(getMap(root, path), cb);
+      },
+      suspense(disabled) {
+        return _suspense(root, path, disabled);
+      },
+      use(disabled) {
+        return _use(root, path, disabled);
+      },
+    })
+  );
 };
