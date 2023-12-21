@@ -3,9 +3,10 @@ import noop from 'lodash.noop';
 import {
   Key,
   NestedMethods,
-  RootMethods,
+  NoopRecord,
   SuperState,
   VersionedSuperState,
+  _SuperState,
 } from './types';
 
 const SET_KEY = Symbol();
@@ -31,10 +32,14 @@ type Root = Map<RootKey.MAP, CommonMap> &
 
 type StorageMap = Map<Key, Root>;
 
-const safeGet = (value: any, path: Key[]) => {
+type Start = 0 | 1;
+
+type Path = Key[] | [any, ...Key[]];
+
+const safeGet = (value: any, path: Path, i: Start) => {
   const l = path.length;
 
-  for (let i = 0; i < l; i++) {
+  for (; i < l; i++) {
     const k = path[i];
 
     if (value && k in value) {
@@ -293,7 +298,7 @@ const handleNotEqual = (
 const getNewRootValue = (
   prevValue: any,
   nextValue: any,
-  path: Key[],
+  path: Path,
   index: number,
   end: number,
   push: (value: any) => any
@@ -357,12 +362,12 @@ const forEachChild = (storage: NestedMap, fn: (key: Key) => void) => {
   }
 };
 
-const getMap = (root: Root, path: Key[]) => {
+const getMap = (root: Root, path: Path, i: Start) => {
   const l = path.length;
 
   let parent = root.get(RootKey.MAP)!;
 
-  for (let i = 0; i < l; i++) {
+  for (; i < l; i++) {
     const k: Key = path[i];
 
     if (!parent.has(k)) {
@@ -393,13 +398,13 @@ const deleteError = (root: Root) => {
 
 const deleteValue = (root: Root) => {
   if (root.has(RootKey.VALUE)) {
-    safeSet(root, [], undefined);
+    safeSet(root, [], 0, undefined);
 
     root.delete(RootKey.VALUE);
   }
 };
 
-const safeSet = (root: Root, path: Key[], nextValue: any) => {
+const safeSet = (root: Root, path: Key[], start: Start, nextValue: any) => {
   const l = path.length;
 
   const rootMap = root.get(RootKey.MAP)!;
@@ -410,13 +415,17 @@ const safeSet = (root: Root, path: Key[], nextValue: any) => {
 
   const rootValue = root.get(RootKey.VALUE);
 
-  const prevValue = safeGet(rootValue, path);
+  const prevValue = safeGet(rootValue, path, start);
 
   let currentNode: NestedMap | undefined = rootMap;
 
   let isNotUpdated = true;
 
-  for (let i = 0; i < l; i++) {
+  if (typeof nextValue == 'function') {
+    nextValue = nextValue(prevValue);
+  }
+
+  for (let i = start; i < l; i++) {
     const k = path[i] as Key;
 
     if (currentNode.has(k)) {
@@ -437,7 +446,7 @@ const safeSet = (root: Root, path: Key[], nextValue: any) => {
             rootValue,
             nextValue,
             path,
-            0,
+            start,
             l,
             valuesQueue.push.bind(valuesQueue)
           )
@@ -519,30 +528,24 @@ const addToSet = (root: SetMap, cb: (value: unknown) => void) => {
   };
 };
 
-const _set = (root: Root, path: Key[], value: any) => {
+const _set = (root: Root, path: Path, start: Start, value: any) => {
   deleteError(root);
 
-  safeSet(root, path, value);
+  safeSet(root, path, start, value);
 };
 
-const _get = (root: Root, path: Key[]) =>
-  safeGet(root.get(RootKey.VALUE), path);
-
-const _use = (root: Root, path: Key[], disabled?: boolean) => {
-  const isEnabled = disabled ? undefined : true;
-
+const _use = (root: Root, path: Path, start: Start) => {
   const forceRerender = useState<{}>()[1];
 
   useLayoutEffect(
     () =>
-      isEnabled &&
-      addToSet(getMap(root, path), () => {
+      addToSet(getMap(root, path, start), () => {
         forceRerender({});
       }),
-    [root, isEnabled && path.join('.')]
+    path
   );
 
-  return isEnabled && safeGet(root.get(RootKey.VALUE), path);
+  return safeGet(root.get(RootKey.VALUE), path, start);
 };
 
 const _delete = (root: Root) => {
@@ -573,10 +576,8 @@ const _useError = (root: Root) => {
   return root.get(RootKey.ERROR);
 };
 
-const _suspense = (root: Root, path: Key[], disabled?: boolean) => {
-  const isEnabled = !disabled;
-
-  if (isEnabled && root.has(RootKey.VALUE)) {
+const _suspense = (root: Root, path: Path, start: Start) => {
+  if (root.has(RootKey.VALUE)) {
     const t = useState<{}>();
 
     useLayoutEffect(() => {
@@ -586,7 +587,7 @@ const _suspense = (root: Root, path: Key[], disabled?: boolean) => {
         setValue({});
       };
 
-      const valueSet = getMap(root, path).get(SET_KEY)!;
+      const valueSet = getMap(root, path, start).get(SET_KEY)!;
 
       const errorSet = root.get(SET_KEY)!;
 
@@ -599,156 +600,108 @@ const _suspense = (root: Root, path: Key[], disabled?: boolean) => {
 
         errorSet.delete(forceRerender);
       };
-    }, [root, path.join('.')]);
+    }, path);
 
-    return safeGet(root.get(RootKey.VALUE), path);
+    return safeGet(root.get(RootKey.VALUE), path, start);
   }
 
+  throw root.has(RootKey.ERROR) ? root.get(RootKey.ERROR) : getPromise(root);
+};
+
+const useNoop = (args: Path) => {
   useState();
 
-  useLayoutEffect(noop, [0, 0]);
-
-  if (isEnabled) {
-    throw root.has(RootKey.ERROR) ? root.get(RootKey.ERROR) : getPromise(root);
-  }
+  useLayoutEffect(noop, args);
 };
 
-const defineProperties = (target: Function, methods: Record<string, any>) => {
-  for (const key in methods) {
-    Object.defineProperty(target, key, { value: methods[key] });
-  }
+const handleUseNoop = (args: Path) => () => {
+  useNoop(args);
 };
 
-const handleState = <
-  O extends Record<NestedMethods | RootMethods, any> &
-    ((...path: any[]) => Record<NestedMethods, any>),
->(
-  rootMethods: Pick<O, RootMethods>,
-  getNestedMethods: (path: Key[]) => Pick<O, NestedMethods>
-) => {
-  const target = (...path: Key[]) => getNestedMethods(path);
+const handleSuperState = (
+  root: Root,
+  path: Path,
+  start: Start
+): _SuperState | Pick<_SuperState, NestedMethods> => {
+  const nestedMethods: Pick<_SuperState, NestedMethods> = {
+    get() {
+      return safeGet(root.get(RootKey.VALUE), path, start);
+    },
+    set(value) {
+      _set(root, path, start, value);
+    },
+    onChange(cb) {
+      return addToSet(getMap(root, path, start), cb);
+    },
+    suspense(disabled) {
+      return disabled ? useNoop(path) : _suspense(root, path, start);
+    },
+    use(disabled) {
+      return disabled ? useNoop(path) : _use(root, path, start);
+    },
+  };
 
-  defineProperties(target, rootMethods);
-
-  defineProperties(target, getNestedMethods([]));
-
-  return target as O;
+  return path.length > start
+    ? nestedMethods
+    : {
+        ...nestedMethods,
+        clear() {
+          _delete(root);
+        },
+        getError() {
+          return root.get(RootKey.ERROR);
+        },
+        getPromise() {
+          return getPromise(root);
+        },
+        onError(cb) {
+          return addToSet(root, cb);
+        },
+        setError(error) {
+          _setError(root, error);
+        },
+        useError(disabled) {
+          return disabled ? useNoop([root]) : _useError(root);
+        },
+      };
 };
 
 export const createVersionedState = <V, T, E = any>() => {
   const getRoot = handleVersionedStorage();
 
-  return handleState<VersionedSuperState<V, T, E>>(
-    {
-      delete(version) {
-        if (version != null) {
-          _delete(getRoot(version));
-        }
-      },
-      getError(version) {
-        if (version != null) {
-          return getRoot(version).get(RootKey.ERROR);
-        }
-      },
-      getPromise(version) {
-        if (version != null) {
-          return getPromise(getRoot(version)) as any;
-        }
-      },
-      onError(version, cb) {
-        if (version != null) {
-          return addToSet(getRoot(version), cb) as any;
-        }
-      },
-      setError(version, error) {
-        if (version != null) {
-          _setError(getRoot(version), error);
-        }
-      },
-      useError(version) {
-        if (version != null) {
-          return _useError(getRoot(version));
-        }
-      },
-    },
-    (path) => ({
-      get(version) {
-        if (version != null) {
-          return _get(getRoot(version), path);
-        }
-      },
-      set(version, value) {
-        if (version != null) {
-          _set(getRoot(version), path, value);
-        }
-      },
-      onChange(version, cb) {
-        if (version != null) {
-          return addToSet(getMap(getRoot(version), path), cb) as any;
-        }
-      },
-      suspense(version, disabled) {
-        const isNotNill = version != null;
+  return ((...args: [any, ...Key[]]) => {
+    const version = args[0];
 
-        return _suspense(
-          isNotNill && (getRoot(version) as any),
-          path,
-          disabled || !isNotNill
-        );
-      },
-      use(version, disabled) {
-        const isNotNill = version != null;
+    if (version != null) {
+      return handleSuperState(getRoot(version), args, 1);
+    }
 
-        return _use(
-          isNotNill && (getRoot(version) as any),
-          path,
-          disabled || !isNotNill
-        );
-      },
-    })
-  );
+    const useNoop = handleUseNoop(args);
+
+    const nestedMethods = {
+      get: noop,
+      set: noop,
+      onChange: noop,
+      suspense: useNoop,
+      use: useNoop,
+    } as NoopRecord<Pick<_SuperState, NestedMethods>>;
+
+    return args.length > 1
+      ? nestedMethods
+      : ({
+          ...nestedMethods,
+          clear: noop,
+          getError: noop,
+          getPromise: noop,
+          onError: noop,
+          setError: noop,
+          useError: useNoop,
+        } as NoopRecord<_SuperState>);
+  }) as VersionedSuperState<V, T, E>;
 };
 
 export const createSuperState = <T, E = any>() => {
   const root = createRoot();
 
-  return handleState<SuperState<T, E>>(
-    {
-      delete() {
-        _delete(root);
-      },
-      getError() {
-        return root.get(RootKey.ERROR);
-      },
-      getPromise() {
-        return getPromise(root);
-      },
-      onError(cb) {
-        return addToSet(root, cb);
-      },
-      setError(error) {
-        _setError(root, error);
-      },
-      useError() {
-        return _useError(root);
-      },
-    },
-    (path) => ({
-      get() {
-        return _get(root, path);
-      },
-      set(value) {
-        _set(root, path, value);
-      },
-      onChange(cb) {
-        return addToSet(getMap(root, path), cb);
-      },
-      suspense(disabled) {
-        return _suspense(root, path, disabled);
-      },
-      use(disabled) {
-        return _use(root, path, disabled);
-      },
-    })
-  );
+  return ((path: Key[]) => handleSuperState(root, path, 0)) as SuperState<T, E>;
 };

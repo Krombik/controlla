@@ -27,75 +27,78 @@ type Path<O> = O extends any[] | Record<any, any>
   ? NestedPath<Required<O>, O extends any[] ? Indexes<O> : keyof O>
   : [];
 
-// @ts-expect-error
-declare const __getSuperState = <T, E>() =>
-  class SuperState {
-    static get(): T;
-    static set(value: T): void;
-    static delete(): void;
-    static use(disabled?: false): T;
-    static use(disabled: true): undefined;
-    static getPromise(): Promise<T>;
-    static setError(error: E): void;
-    static getError(): E | undefined;
-    static useError(): E | undefined;
-    static onChange(cb: (value: T) => void): () => void;
-    static onError(cb: (error: E) => void): () => void;
-    static suspense(disabled?: false): T;
-    static suspense(disabled: true): undefined;
-  };
-
 type Nill = null | undefined;
 
-// @ts-expect-error
-declare const __getVersionedSuperState = <V, T, E>() =>
-  class SuperVersionedState {
-    static get(version: V): T;
-    static get(version: Nill): undefined;
-    static set(version: V | Nill, value: T): void;
-    static delete(version: V | Nill): void;
-    static use(version: V, disabled?: false): T;
-    static use(version: V, disabled: true): undefined;
-    static use(version: Nill, disabled?: boolean): undefined;
-    static getPromise(version: V): Promise<T>;
-    static getPromise(version: Nill): undefined;
-    static setError(version: V | Nill, error: E): void;
-    static getError(version: V): E | undefined;
-    static getError(version: Nill): undefined;
-    static useError(version: V): E | undefined;
-    static useError(version: Nill): undefined;
-    static onChange(version: V, cb: (value: T) => void): () => void;
-    static onChange(version: Nill, cb: (value: T) => void): void;
-    static onError(version: V, cb: (error: E) => void): () => void;
-    static onError(version: Nill, cb: (error: E) => void): void;
-    static suspense(version: V, disabled?: false): T;
-    static suspense(version: V, disabled: true): undefined;
-    static suspense(version: Nill, disabled?: boolean): undefined;
-  };
+export type _SuperState<T = any, E = any> = {
+  get(): T;
+  set(value: T | ((prevValue: T) => T)): void;
+  clear(): void;
+  use<D extends boolean = false>(disabled?: D): D extends true ? undefined : T;
+  getPromise(): Promise<Exclude<T, undefined>>;
+  setError(error: E): void;
+  getError(): E | undefined;
+  useError(disabled?: boolean): E | undefined;
+  onChange(cb: (value: T) => void): () => void;
+  onError(cb: (error: E) => void): () => void;
+  suspense<D extends boolean = false>(
+    disabled?: D
+  ): D extends true ? undefined : T;
+};
 
 export type NestedMethods = Extract<
-  keyof ReturnType<typeof __getSuperState>,
+  keyof _SuperState,
   'get' | 'set' | 'onChange' | 'suspense' | 'use'
 >;
 
-export type RootMethods = Exclude<
-  keyof ReturnType<typeof __getSuperState>,
-  NestedMethods | 'prototype'
->;
+export type NoopRecord<T extends Record<string, (...args: any[]) => any>> = {
+  [Key in keyof T]: (...args: Parameters<T[Key]>) => undefined;
+};
 
-export interface VersionedSuperState<V, T, E = any>
-  extends ReturnType<typeof __getVersionedSuperState<V, T, E>> {
-  <P extends Path<T>>(
-    ...path: P
-  ): Pick<
-    ReturnType<typeof __getVersionedSuperState<V, Get<T, P>, E>>,
-    NestedMethods
-  >;
-}
+type NoopDecider<V, T extends {}> = [Extract<V, Nill>] extends [never]
+  ? T
+  : [Exclude<V, Nill>] extends [never]
+    ? NoopRecord<T>
+    : T | NoopRecord<T>;
 
-export interface SuperState<T, E = any>
-  extends ReturnType<typeof __getSuperState<T, E>> {
-  <P extends Path<T>>(
+export type VersionedSuperState<Version, Value, Error = any> = {
+  <V extends Version | Nill>(
+    version: V
+  ): NoopDecider<V, _SuperState<Value, Error>>;
+  <V extends Version | Nill, P extends Path<Value>>(
+    version: V,
     ...path: P
-  ): Pick<ReturnType<typeof __getSuperState<Get<T, P>, E>>, NestedMethods>;
-}
+  ): NoopDecider<V, Pick<_SuperState<Get<Value, P>, Error>, NestedMethods>>;
+};
+
+export type SuperState<Value, Error = any> = {
+  (): _SuperState<Value, Error>;
+  <P extends Path<Value>>(
+    ...path: P
+  ): Pick<_SuperState<Get<Value, P>, Error>, NestedMethods>;
+};
+
+type Options<T> = {
+  fetcher(): Promise<T>;
+  refetchOnFocus?: number;
+  refetchOnReconnect?: boolean;
+  fetchWhenHidden?: boolean;
+  pollingInterval?: number | ((prevValue: T, attempt: number) => number);
+  dedupingInterval?: boolean;
+  loadingTimeout?: number;
+  onLoadingSlow?(): void;
+  isPaused?(): boolean;
+};
+
+export type CreateSuperState = {
+  <Value = any, Error = any>(): SuperState<Value | undefined, Error>;
+  <Value, Error = any>(initialValue: Value): SuperState<Value, Error>;
+  <Value, Error = any>(
+    fetcher: () => Promise<Value>,
+    dedupingInterval?: number
+  ): SuperState<Value | undefined, Error>;
+  <Value, Error = any>(
+    fetcher: () => Promise<Value>,
+    dedupingInterval: number,
+    initialValue: Value
+  ): SuperState<Value, Error>;
+};
