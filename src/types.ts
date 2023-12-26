@@ -1,3 +1,5 @@
+import { AsyncState, BaseState, ErrorState } from '.';
+
 /** @internal */
 export type Key = number | string;
 
@@ -29,17 +31,11 @@ type Path<O> = O extends any[] | Record<any, any>
 
 type Nill = null | undefined;
 
-export type _SuperState<T = any, E = any> = {
+export type _SuperState<T = any> = {
   get(): T;
   set(value: T | ((prevValue: T) => T)): void;
-  clear(): void;
   use<D extends boolean = false>(disabled?: D): D extends true ? undefined : T;
-  getPromise(): Promise<Exclude<T, undefined>>;
-  setError(error: E): void;
-  getError(): E | undefined;
-  useError(disabled?: boolean): E | undefined;
   onChange(cb: (value: T) => void): () => void;
-  onError(cb: (error: E) => void): () => void;
   suspense<D extends boolean = false>(
     disabled?: D
   ): D extends true ? undefined : T;
@@ -51,7 +47,9 @@ export type NestedMethods = Extract<
 >;
 
 export type NoopRecord<T extends Record<string, (...args: any[]) => any>> = {
-  [Key in keyof T]: (...args: Parameters<T[Key]>) => undefined;
+  [Key in Extract<keyof T, 'use' | 'suspense'>]: (
+    ...args: Parameters<T[Key]>
+  ) => undefined;
 };
 
 type NoopDecider<V, T extends {}> = [Extract<V, Nill>] extends [never]
@@ -60,33 +58,40 @@ type NoopDecider<V, T extends {}> = [Extract<V, Nill>] extends [never]
     ? NoopRecord<T>
     : T | NoopRecord<T>;
 
-export type VersionedSuperState<Version, Value, Error = any> = {
-  <V extends Version | Nill>(
-    version: V
-  ): NoopDecider<V, _SuperState<Value, Error>>;
+export interface VersionedSuperState<Version, Value, Error = any> {
+  <V extends Version | Nill>(version: V): NoopDecider<V, AsyncState<Value>>;
   <V extends Version | Nill, P extends Path<Value>>(
     version: V,
     ...path: P
-  ): NoopDecider<V, Pick<_SuperState<Get<Value, P>, Error>, NestedMethods>>;
-};
+  ): NoopDecider<V, AsyncState<Get<Value, P>>>;
+  clear(version: NonNullable<Version>): void;
+  error<V extends Version | Nill>(
+    version: V
+  ): NoopDecider<V, ErrorState<Error>>;
+  getPromise(version: NonNullable<Version>): Promise<Exclude<Value, undefined>>;
+  fetch(version: NonNullable<Version>): this;
+  refetch(version: NonNullable<Version>): this;
+  onLoadingSlow(cb: (version: NonNullable<Version>) => void): () => void;
+  isLoaded<V extends Version | Nill>(
+    version: V
+  ): NoopDecider<V, BaseState<boolean>>;
+}
 
 export type SuperState<Value, Error = any> = {
-  (): _SuperState<Value, Error>;
-  <P extends Path<Value>>(
-    ...path: P
-  ): Pick<_SuperState<Get<Value, P>, Error>, NestedMethods>;
+  <P extends Path<Value>>(...path: P): AsyncState<Get<Value, P>>;
+  clear(): void;
+  getPromise(): Promise<Exclude<Value, undefined>>;
+  error: ErrorState<Error>;
 };
 
-type Options<T> = {
-  fetcher(): Promise<T>;
+export type Options<V, T> = {
+  fetcher(version: V, ...args: any[]): Promise<T>;
   refetchOnFocus?: number;
   refetchOnReconnect?: boolean;
   fetchWhenHidden?: boolean;
   pollingInterval?: number | ((prevValue: T, attempt: number) => number);
-  dedupingInterval?: boolean;
+  dedupingInterval?: number;
   loadingTimeout?: number;
-  onLoadingSlow?(): void;
-  isPaused?(): boolean;
 };
 
 export type CreateSuperState = {
