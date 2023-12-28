@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import noop from 'lodash.noop';
 import {
   Key,
@@ -20,8 +20,12 @@ const enum RootKey {
   IS_LOADED_SET,
   IS_BUSY,
   IS_DUPLICATED,
+  IS_RELOAD_ON_FOCUS_PAUSED,
+  RELOAD_ON_FOCUS_LISTENER,
+  RELOAD_ON_RECONNECT_LISTENER,
   DEDUPING_TIMEOUT_ID,
   SLOW_LOADING_TIMEOUT_ID,
+  MOUNTS_COUNT,
 }
 
 type CallbackSet = Set<(value: any) => void>;
@@ -38,9 +42,15 @@ type Root = Map<RootKey.MAP, NestedMap> &
   Map<RootKey.IS_BUSY, boolean> &
   Map<RootKey.IS_DUPLICATED, boolean> &
   Map<RootKey.IS_LOADED, boolean> &
-  Map<RootKey.IS_LOADED_SET, CallbackSet>;
+  Map<RootKey.IS_RELOAD_ON_FOCUS_PAUSED, boolean> &
+  Map<RootKey.RELOAD_ON_FOCUS_LISTENER, () => void> &
+  Map<RootKey.RELOAD_ON_RECONNECT_LISTENER, () => void> &
+  Map<RootKey.IS_LOADED_SET, CallbackSet> &
+  Map<RootKey.MOUNTS_COUNT, number>;
 
 type StorageMap = Map<any, Root>;
+
+const EMPTY_ARR: [] = [];
 
 const safeGet = (value: any, path: Key[]) => {
   const l = path.length;
@@ -72,6 +82,8 @@ const createRoot = () => {
   root.set(RootKey.IS_LOADED_SET, new Set());
 
   root.set(RootKey.IS_LOADED, false);
+
+  root.set(RootKey.MOUNTS_COUNT, 0);
 
   return root;
 };
@@ -410,7 +422,7 @@ const deleteError = (root: Root) => {
 
 const deleteValue = (root: Root) => {
   if (root.has(RootKey.VALUE)) {
-    safeSet(root, [], undefined);
+    safeSet(root, EMPTY_ARR, undefined);
 
     root.delete(RootKey.VALUE);
   }
@@ -685,88 +697,216 @@ export class AsyncState<T> extends State<T> {
   }
 }
 
-const executeFetcher = (
-  root: Root,
-  set: CallbackSet,
-  args: any[],
+const FETCH_METHOD_KEY = Symbol();
+
+const FETCH_KEY = Symbol();
+
+const FETCH_ARGS_KEY = Symbol();
+
+const RELOAD_ON_FOCUS_KEY = Symbol();
+
+const RELOAD_ON_RECONNECT_KEY = Symbol();
+
+class LoadableState<T> extends AsyncState<T> {
+  private readonly [FETCH_KEY]: (root: Root, args: any[]) => Promise<any>;
+
+  private readonly [FETCH_ARGS_KEY]: any[];
+
+  private readonly [RELOAD_ON_FOCUS_KEY]?: number;
+
+  private readonly [RELOAD_ON_RECONNECT_KEY]?: boolean;
+
+  constructor(
+    root: Root,
+    get: (root: Root, path: Key[]) => T,
+    getSet: (root: Root, path: Key[]) => CallbackSet,
+    path: Key[],
+    fetch: (root: Root, args: any[]) => Promise<any>,
+    fetchArgs: any[],
+    reloadOnFocus?: number,
+    reloadOnReconnect?: boolean
+  ) {
+    super(root, get, getSet, path);
+
+    this[FETCH_KEY] = fetch;
+
+    this[FETCH_ARGS_KEY] = fetchArgs;
+
+    this[RELOAD_ON_FOCUS_KEY] = reloadOnFocus;
+
+    this[RELOAD_ON_RECONNECT_KEY] = reloadOnReconnect;
+  }
+
+  private [FETCH_METHOD_KEY](disabled?: boolean) {
+    const root = this[ROOT_KEY];
+    const reloadOnFocus = this[RELOAD_ON_FOCUS_KEY];
+    const reloadOnReconnect = this[RELOAD_ON_RECONNECT_KEY];
+
+    if (!disabled) {
+      this[FETCH_KEY](root, this[FETCH_ARGS_KEY]);
+    }
+
+    if (reloadOnFocus || reloadOnReconnect) {
+      if (disabled) {
+        useEffect(noop, [0]);
+      } else {
+        useEffect(() => {
+          if (reloadOnFocus && !root.has(RootKey.RELOAD_ON_FOCUS_LISTENER)) {
+            const listener = () => {
+              if (!root.get(RootKey.IS_RELOAD_ON_FOCUS_PAUSED)) {
+                root.set(RootKey.IS_RELOAD_ON_FOCUS_PAUSED, true);
+
+                this[FETCH_KEY](root, this[FETCH_ARGS_KEY]).finally(() => {
+                  window.setTimeout(() => {
+                    root.set(RootKey.IS_RELOAD_ON_FOCUS_PAUSED, false);
+                  }, reloadOnFocus);
+                });
+              }
+            };
+
+            root.set(RootKey.RELOAD_ON_FOCUS_LISTENER, listener);
+
+            window.addEventListener('focus', listener);
+          }
+
+          if (
+            reloadOnReconnect &&
+            !root.has(RootKey.RELOAD_ON_RECONNECT_LISTENER)
+          ) {
+            const listener = () => {
+              this[FETCH_KEY](root, this[FETCH_ARGS_KEY]);
+            };
+
+            root.set(RootKey.RELOAD_ON_RECONNECT_LISTENER, listener);
+
+            window.addEventListener('online', listener);
+          }
+
+          root.set(RootKey.MOUNTS_COUNT, root.get(RootKey.MOUNTS_COUNT)! + 1);
+
+          return () => {
+            const activeCount = root.get(RootKey.MOUNTS_COUNT)! - 1;
+
+            root.set(RootKey.MOUNTS_COUNT, activeCount);
+
+            if (!activeCount) {
+              if (reloadOnFocus) {
+                window.removeEventListener(
+                  'focus',
+                  root.get(RootKey.RELOAD_ON_FOCUS_LISTENER)!
+                );
+
+                root.delete(RootKey.RELOAD_ON_FOCUS_LISTENER);
+              }
+
+              if (reloadOnReconnect) {
+                window.removeEventListener(
+                  'online',
+                  root.get(RootKey.RELOAD_ON_RECONNECT_LISTENER)!
+                );
+
+                root.delete(RootKey.RELOAD_ON_RECONNECT_LISTENER);
+              }
+            }
+          };
+        }, [root]);
+      }
+    }
+  }
+
+  useWithLoad<D extends boolean = false>(disabled?: D) {
+    this[FETCH_METHOD_KEY](disabled);
+
+    return this.use(disabled);
+  }
+
+  suspenseWithLoad<D extends boolean = false>(disabled?: D) {
+    this[FETCH_METHOD_KEY](disabled);
+
+    return this.suspense(disabled);
+  }
+}
+
+const handleFetcher = (
+  slowLoadingSet: CallbackSet,
   options: Options<any, any>
-) => {
+): [
+  fetch: (root: Root, args: any[]) => void,
+  refetch: (root: Root, args: any[]) => void,
+] => {
   const { fetcher, dedupingInterval, loadingTimeout, refetchOnFocus } = options;
 
-  const isLoadedSet = root.get(RootKey.IS_LOADED_SET)!;
+  const executeFetcher = (root: Root, args: any[]) => {
+    const isLoadedSet = root.get(RootKey.IS_LOADED_SET)!;
 
-  if (dedupingInterval) {
-    window.clearTimeout(root.get(RootKey.DEDUPING_TIMEOUT_ID));
-  }
+    if (dedupingInterval) {
+      window.clearTimeout(root.get(RootKey.DEDUPING_TIMEOUT_ID));
+    }
 
-  root.set(RootKey.IS_BUSY, true);
+    root.set(RootKey.IS_BUSY, true);
 
-  root.set(RootKey.IS_DUPLICATED, true);
+    root.set(RootKey.IS_DUPLICATED, true);
 
-  // isRefetchOnFocusReady = false;
+    root.set(RootKey.IS_LOADED, false);
 
-  root.set(RootKey.IS_LOADED, false);
+    executeSetters(isLoadedSet, false);
 
-  executeSetters(isLoadedSet, false);
+    if (loadingTimeout) {
+      root.set(
+        RootKey.SLOW_LOADING_TIMEOUT_ID,
+        window.setTimeout(() => {
+          executeSetters(slowLoadingSet, args[0]);
+        }, loadingTimeout)
+      );
+    }
 
-  if (loadingTimeout) {
-    root.set(
-      RootKey.SLOW_LOADING_TIMEOUT_ID,
-      window.setTimeout(() => {
-        executeSetters(set, args[0]);
-      }, loadingTimeout)
-    );
-  }
+    // if (refetchOnFocus) {
+    //   focusTimeoutId = window.setTimeout(() => {
+    //     isRefetchOnFocusReady = true;
+    //   }, refetchOnFocus);
+    // }
 
-  // if (refetchOnFocus) {
-  //   focusTimeoutId = window.setTimeout(() => {
-  //     isRefetchOnFocusReady = true;
-  //   }, refetchOnFocus);
-  // }
+    return (fetcher.apply(null, args) as ReturnType<typeof fetcher>)
+      .finally(() => {
+        window.clearTimeout(root.get(RootKey.SLOW_LOADING_TIMEOUT_ID));
 
-  return (fetcher.apply(null, args) as ReturnType<typeof fetcher>)
-    .finally(() => {
-      window.clearTimeout(root.get(RootKey.SLOW_LOADING_TIMEOUT_ID));
+        root.set(RootKey.IS_BUSY, false);
 
-      root.set(RootKey.IS_BUSY, false);
+        root.set(RootKey.IS_LOADED, true);
 
-      root.set(RootKey.IS_LOADED, true);
+        executeSetters(isLoadedSet, true);
 
-      executeSetters(isLoadedSet, true);
+        if (dedupingInterval) {
+          root.set(
+            RootKey.DEDUPING_TIMEOUT_ID,
+            window.setTimeout(() => {
+              root.set(RootKey.IS_DUPLICATED, false);
+            }, dedupingInterval)
+          );
+        }
 
-      if (dedupingInterval) {
-        root.set(
-          RootKey.DEDUPING_TIMEOUT_ID,
+        if (refetchOnFocus) {
           window.setTimeout(() => {
-            root.set(RootKey.IS_DUPLICATED, false);
-          }, dedupingInterval)
-        );
+            root.set(RootKey.IS_RELOAD_ON_FOCUS_PAUSED, false);
+          }, refetchOnFocus);
+        }
+      })
+      .then(_set.bind(null, root, EMPTY_ARR))
+      .catch(_setError.bind(null, root));
+  };
+
+  return [
+    (root, args) => {
+      if (!root.get(RootKey.IS_BUSY) && !root.get(RootKey.IS_DUPLICATED)) {
+        executeFetcher(root, args);
       }
-    })
-    .then(_set.bind(null, root, []))
-    .catch(_setError.bind(null, root));
-};
-
-const _fetch = (
-  root: Root,
-  set: CallbackSet,
-  args: any[],
-  options: Options<any, any>
-) => {
-  if (!root.get(RootKey.IS_BUSY) && !root.get(RootKey.IS_DUPLICATED)) {
-    executeFetcher(root, set, args, options);
-  }
-};
-
-const _refetch = (
-  root: Root,
-  set: CallbackSet,
-  args: any[],
-  options: Options<any, any>
-) => {
-  if (!root.get(RootKey.IS_BUSY)) {
-    executeFetcher(root, set, args, options);
-  }
+    },
+    (root, args) => {
+      if (!root.get(RootKey.IS_BUSY)) {
+        executeFetcher(root, args);
+      }
+    },
+  ];
 };
 
 const useNoop = () => {
@@ -796,7 +936,14 @@ export const createVersionedState = <V, T, E = any>(options: Options<V, T>) => {
 
   const fn = ((version: V, ...path: Key[]) =>
     version != null
-      ? new AsyncState(getRoot(version), getNestedValue, getNestedSet, path)
+      ? new LoadableState(
+          getRoot(version),
+          getNestedValue,
+          getNestedSet,
+          path,
+          _fetch,
+          [version]
+        )
       : { use: useNoop, suspense: useNoop }) as VersionedSuperState<V, T, E>;
 
   fn.clear = (version) => {
@@ -823,14 +970,16 @@ export const createVersionedState = <V, T, E = any>(options: Options<V, T>) => {
   //   });
   // }
 
+  const [_fetch, _refetch] = handleFetcher(loadingSlowSet, options);
+
   fn.fetch = (...args) => {
-    _fetch(getRoot(args[0]), loadingSlowSet, args, options);
+    _fetch(getRoot(args[0]), args);
 
     return fn;
   };
 
   fn.refetch = (...args) => {
-    _refetch(getRoot(args[0]), loadingSlowSet, args, options);
+    _refetch(getRoot(args[0]), args);
 
     return fn;
   };
