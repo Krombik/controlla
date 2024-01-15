@@ -26,6 +26,11 @@ const enum RootKey {
   DEDUPING_TIMEOUT_ID,
   SLOW_LOADING_TIMEOUT_ID,
   MOUNTS_COUNT,
+  POLLING_STOP,
+  POLLING_RESUME,
+  POLLING_GET_PAUSE,
+  POLLING_PROMISE,
+  POLLING_RESOLVE,
 }
 
 type CallbackSet = Set<(value: any) => void>;
@@ -46,7 +51,12 @@ type Root = Map<RootKey.MAP, NestedMap> &
   Map<RootKey.RELOAD_ON_FOCUS_LISTENER, () => void> &
   Map<RootKey.RELOAD_ON_RECONNECT_LISTENER, () => void> &
   Map<RootKey.IS_LOADED_SET, CallbackSet> &
-  Map<RootKey.MOUNTS_COUNT, number>;
+  Map<RootKey.MOUNTS_COUNT, number> &
+  Map<RootKey.POLLING_STOP, () => void> &
+  Map<RootKey.POLLING_RESUME, () => void> &
+  Map<RootKey.POLLING_GET_PAUSE, () => Promise<void>> &
+  Map<RootKey.POLLING_PROMISE, Promise<any>> &
+  Map<RootKey.POLLING_RESOLVE, () => void>;
 
 type StorageMap = Map<any, Root>;
 
@@ -701,116 +711,35 @@ const FETCH_METHOD_KEY = Symbol();
 
 const FETCH_KEY = Symbol();
 
-const FETCH_ARGS_KEY = Symbol();
-
-const RELOAD_ON_FOCUS_KEY = Symbol();
-
-const RELOAD_ON_RECONNECT_KEY = Symbol();
+const FETCH_ARG_KEY = Symbol();
 
 class LoadableState<T> extends AsyncState<T> {
-  private readonly [FETCH_KEY]: (root: Root, args: any[]) => Promise<any>;
+  private readonly [FETCH_KEY]: ReturnType<typeof createRegisterableLoader>;
 
-  private readonly [FETCH_ARGS_KEY]: any[];
-
-  private readonly [RELOAD_ON_FOCUS_KEY]?: number;
-
-  private readonly [RELOAD_ON_RECONNECT_KEY]?: boolean;
+  private readonly [FETCH_ARG_KEY]: any;
 
   constructor(
     root: Root,
     get: (root: Root, path: Key[]) => T,
     getSet: (root: Root, path: Key[]) => CallbackSet,
     path: Key[],
-    fetch: (root: Root, args: any[]) => Promise<any>,
-    fetchArgs: any[],
-    reloadOnFocus?: number,
-    reloadOnReconnect?: boolean
+    fetch: ReturnType<typeof createRegisterableLoader>,
+    fetchArg?: any
   ) {
     super(root, get, getSet, path);
 
     this[FETCH_KEY] = fetch;
 
-    this[FETCH_ARGS_KEY] = fetchArgs;
-
-    this[RELOAD_ON_FOCUS_KEY] = reloadOnFocus;
-
-    this[RELOAD_ON_RECONNECT_KEY] = reloadOnReconnect;
+    this[FETCH_ARG_KEY] = fetchArg;
   }
 
   private [FETCH_METHOD_KEY](disabled?: boolean) {
-    const root = this[ROOT_KEY];
-    const reloadOnFocus = this[RELOAD_ON_FOCUS_KEY];
-    const reloadOnReconnect = this[RELOAD_ON_RECONNECT_KEY];
+    if (disabled) {
+      useEffect(noop, [0]);
+    } else {
+      const root = this[ROOT_KEY];
 
-    if (!disabled) {
-      this[FETCH_KEY](root, this[FETCH_ARGS_KEY]);
-    }
-
-    if (reloadOnFocus || reloadOnReconnect) {
-      if (disabled) {
-        useEffect(noop, [0]);
-      } else {
-        useEffect(() => {
-          if (reloadOnFocus && !root.has(RootKey.RELOAD_ON_FOCUS_LISTENER)) {
-            const listener = () => {
-              if (!root.get(RootKey.IS_RELOAD_ON_FOCUS_PAUSED)) {
-                root.set(RootKey.IS_RELOAD_ON_FOCUS_PAUSED, true);
-
-                this[FETCH_KEY](root, this[FETCH_ARGS_KEY]).finally(() => {
-                  window.setTimeout(() => {
-                    root.set(RootKey.IS_RELOAD_ON_FOCUS_PAUSED, false);
-                  }, reloadOnFocus);
-                });
-              }
-            };
-
-            root.set(RootKey.RELOAD_ON_FOCUS_LISTENER, listener);
-
-            window.addEventListener('focus', listener);
-          }
-
-          if (
-            reloadOnReconnect &&
-            !root.has(RootKey.RELOAD_ON_RECONNECT_LISTENER)
-          ) {
-            const listener = () => {
-              this[FETCH_KEY](root, this[FETCH_ARGS_KEY]);
-            };
-
-            root.set(RootKey.RELOAD_ON_RECONNECT_LISTENER, listener);
-
-            window.addEventListener('online', listener);
-          }
-
-          root.set(RootKey.MOUNTS_COUNT, root.get(RootKey.MOUNTS_COUNT)! + 1);
-
-          return () => {
-            const activeCount = root.get(RootKey.MOUNTS_COUNT)! - 1;
-
-            root.set(RootKey.MOUNTS_COUNT, activeCount);
-
-            if (!activeCount) {
-              if (reloadOnFocus) {
-                window.removeEventListener(
-                  'focus',
-                  root.get(RootKey.RELOAD_ON_FOCUS_LISTENER)!
-                );
-
-                root.delete(RootKey.RELOAD_ON_FOCUS_LISTENER);
-              }
-
-              if (reloadOnReconnect) {
-                window.removeEventListener(
-                  'online',
-                  root.get(RootKey.RELOAD_ON_RECONNECT_LISTENER)!
-                );
-
-                root.delete(RootKey.RELOAD_ON_RECONNECT_LISTENER);
-              }
-            }
-          };
-        }, [root]);
-      }
+      useEffect(this[FETCH_KEY](root, this[FETCH_ARG_KEY]), [root]);
     }
   }
 
@@ -827,86 +756,336 @@ class LoadableState<T> extends AsyncState<T> {
   }
 }
 
-const handleFetcher = (
+const createLoader = (
   slowLoadingSet: CallbackSet,
   options: Options<any, any>
-): [
-  fetch: (root: Root, args: any[]) => void,
-  refetch: (root: Root, args: any[]) => void,
-] => {
-  const { fetcher, dedupingInterval, loadingTimeout, refetchOnFocus } = options;
+) => {
+  const { fetcher, dedupingInterval, loadingTimeout } = options;
 
-  const executeFetcher = (root: Root, args: any[]) => {
-    const isLoadedSet = root.get(RootKey.IS_LOADED_SET)!;
+  return (root: Root, arg?: any, onLoad?: () => void) => {
+    if (!root.get(RootKey.IS_BUSY)) {
+      beforeLoad(root, dedupingInterval);
 
-    if (dedupingInterval) {
-      window.clearTimeout(root.get(RootKey.DEDUPING_TIMEOUT_ID));
-    }
+      executeFetcher(fetcher, arg, root, slowLoadingSet, loadingTimeout).then(
+        () => {
+          (onLoad || noop)();
 
-    root.set(RootKey.IS_BUSY, true);
+          afterLoad(root, dedupingInterval);
 
-    root.set(RootKey.IS_DUPLICATED, true);
-
-    root.set(RootKey.IS_LOADED, false);
-
-    executeSetters(isLoadedSet, false);
-
-    if (loadingTimeout) {
-      root.set(
-        RootKey.SLOW_LOADING_TIMEOUT_ID,
-        window.setTimeout(() => {
-          executeSetters(slowLoadingSet, args[0]);
-        }, loadingTimeout)
+          root.set(RootKey.IS_BUSY, false);
+        }
       );
     }
+  };
+};
 
-    // if (refetchOnFocus) {
-    //   focusTimeoutId = window.setTimeout(() => {
-    //     isRefetchOnFocusReady = true;
-    //   }, refetchOnFocus);
-    // }
+const becomingOnline: {
+  (): Promise<void>;
+  _?: Promise<void>;
+} = () =>
+  navigator.onLine
+    ? Promise.resolve()
+    : becomingOnline._ ||
+      (becomingOnline._ = new Promise<void>((res) => {
+        window.addEventListener(
+          'online',
+          () => {
+            becomingOnline._ = undefined;
 
-    return (fetcher.apply(null, args) as ReturnType<typeof fetcher>)
-      .finally(() => {
-        window.clearTimeout(root.get(RootKey.SLOW_LOADING_TIMEOUT_ID));
+            res();
+          },
+          { once: true }
+        );
+      }));
 
+const handlePause = (root: Root) => {
+  let pausePromise: Promise<void> | undefined;
+
+  let resume: () => void;
+
+  root.set(RootKey.POLLING_STOP, () => {
+    if (!pausePromise) {
+      pausePromise = new Promise((res) => {
+        resume = res;
+      });
+    }
+  });
+
+  root.set(RootKey.POLLING_RESUME, () => {
+    if (pausePromise) {
+      pausePromise = undefined;
+
+      resume();
+    }
+  });
+
+  root.set(RootKey.POLLING_GET_PAUSE, () =>
+    pausePromise ? pausePromise : Promise.resolve()
+  );
+};
+
+const executeFetcher = async (
+  fetcher: (arg?: any) => Promise<any>,
+  arg: any,
+  root: Root,
+  slowLoadingSet: CallbackSet,
+  loadingTimeout: number | undefined
+) => {
+  if (loadingTimeout) {
+    root.set(
+      RootKey.SLOW_LOADING_TIMEOUT_ID,
+      window.setTimeout(() => {
+        executeSetters(slowLoadingSet, arg);
+      }, loadingTimeout)
+    );
+  }
+
+  await fetcher(arg)
+    .then(_set.bind(null, root, EMPTY_ARR))
+    .catch(_setError.bind(null, root));
+
+  if (loadingTimeout) {
+    window.clearTimeout(root.get(RootKey.SLOW_LOADING_TIMEOUT_ID));
+  }
+};
+
+const beforeLoad = (root: Root, dedupingInterval: number | undefined) => {
+  if (dedupingInterval) {
+    window.clearTimeout(root.get(RootKey.DEDUPING_TIMEOUT_ID));
+  }
+
+  root.set(RootKey.IS_BUSY, true);
+
+  root.set(RootKey.IS_DUPLICATED, true);
+
+  root.set(RootKey.IS_LOADED, false);
+
+  executeSetters(root.get(RootKey.IS_LOADED_SET)!, false);
+};
+
+const afterLoad = (root: Root, dedupingInterval: number | undefined) => {
+  root.set(RootKey.IS_LOADED, true);
+
+  executeSetters(root.get(RootKey.IS_LOADED_SET)!, true);
+
+  if (dedupingInterval) {
+    root.set(
+      RootKey.DEDUPING_TIMEOUT_ID,
+      window.setTimeout(() => {
+        root.set(RootKey.IS_DUPLICATED, false);
+      }, dedupingInterval)
+    );
+  }
+};
+
+const startPolling = async (
+  fetcher: (arg?: any) => Promise<any>,
+  arg: any,
+  root: Root,
+  slowLoadingSet: CallbackSet,
+  loadingTimeout: number | undefined,
+  getPause: () => Promise<void>,
+  sleep: (root: Root) => Promise<void>
+) => {
+  while (root.get(RootKey.IS_BUSY)) {
+    await becomingOnline();
+
+    await getPause();
+
+    if (root.get(RootKey.IS_BUSY)) {
+      await executeFetcher(fetcher, arg, root, slowLoadingSet, loadingTimeout);
+    } else {
+      break;
+    }
+
+    if (!root.get(RootKey.IS_BUSY)) {
+      break;
+    }
+
+    await sleep(root);
+  }
+};
+
+const handleGetInterval = (interval: number | ((value: any) => number)) =>
+  typeof interval == 'number'
+    ? () => interval
+    : (root: Root) => interval(root.get(RootKey.VALUE));
+
+const createPoller = (
+  slowLoadingSet: CallbackSet,
+  options: Options<any, any>
+) => {
+  const {
+    fetcher,
+    dedupingInterval,
+    loadingTimeout,
+    pollingInterval,
+    pollingWhenHidden,
+  } = options;
+
+  const getVisibleInterval = handleGetInterval(pollingInterval);
+
+  const getHiddenInterval =
+    pollingWhenHidden == null
+      ? getVisibleInterval
+      : handleGetInterval(pollingWhenHidden);
+
+  const getInterval = (root: Root) =>
+    (document.hidden ? getHiddenInterval : getVisibleInterval)(root);
+
+  const sleep = (root: Root) =>
+    new Promise<void>((res) => {
+      const listener = () => {
+        window.clearTimeout(timeoutId);
+
+        const delay = getInterval(root);
+
+        if (delay > 0) {
+          const now = performance.now();
+
+          const diff = now - start - delay;
+
+          start = now;
+
+          if (diff > 0) {
+            timeoutId = window.setTimeout(resolve, diff);
+          } else {
+            resolve();
+          }
+        } else {
+          timeoutId = undefined;
+        }
+      };
+
+      const resolve = () => {
+        document.removeEventListener('visibilitychange', listener);
+
+        timeoutId = undefined;
+
+        res();
+      };
+
+      const delay = getInterval(root);
+
+      let timeoutId: number | undefined;
+
+      let start = performance.now();
+
+      document.addEventListener('visibilitychange', listener);
+
+      if (delay > 0) {
+        timeoutId = window.setTimeout(resolve, delay);
+      }
+    });
+
+  return (root: Root, arg?: any, onLoad?: () => void) => {
+    if (!root.get(RootKey.IS_BUSY)) {
+      beforeLoad(root, dedupingInterval);
+
+      root.set(RootKey.POLLING_RESOLVE, () => {
         root.set(RootKey.IS_BUSY, false);
 
-        root.set(RootKey.IS_LOADED, true);
+        root.set(RootKey.POLLING_RESOLVE, noop);
 
-        executeSetters(isLoadedSet, true);
+        if (root.get(RootKey.MOUNTS_COUNT)) {
+          (onLoad || noop)();
 
-        if (dedupingInterval) {
-          root.set(
-            RootKey.DEDUPING_TIMEOUT_ID,
-            window.setTimeout(() => {
-              root.set(RootKey.IS_DUPLICATED, false);
-            }, dedupingInterval)
-          );
+          afterLoad(root, dedupingInterval);
+        } else {
+          root.set(RootKey.IS_DUPLICATED, false);
         }
+      });
 
-        if (refetchOnFocus) {
-          window.setTimeout(() => {
-            root.set(RootKey.IS_RELOAD_ON_FOCUS_PAUSED, false);
-          }, refetchOnFocus);
-        }
-      })
-      .then(_set.bind(null, root, EMPTY_ARR))
-      .catch(_setError.bind(null, root));
+      startPolling(
+        fetcher,
+        arg,
+        root,
+        slowLoadingSet,
+        loadingTimeout,
+        root.get(RootKey.POLLING_GET_PAUSE)!,
+        sleep
+      );
+    }
   };
+};
 
-  return [
-    (root, args) => {
-      if (!root.get(RootKey.IS_BUSY) && !root.get(RootKey.IS_DUPLICATED)) {
-        executeFetcher(root, args);
+const createRegisterableLoader = (
+  load: (root: Root, arg: any, onLoad?: () => void) => void,
+  options: Options<any, any>,
+  onUnregister?: (root: Root) => void
+) => {
+  const { reloadOnFocus, reloadOnReconnect } = options;
+
+  onUnregister ||= noop;
+
+  return (root: Root, arg: any) => {
+    if (!root.get(RootKey.IS_DUPLICATED)) {
+      load(root, arg);
+    }
+
+    return () => {
+      if (reloadOnFocus && !root.has(RootKey.RELOAD_ON_FOCUS_LISTENER)) {
+        const listener = () => {
+          if (!root.get(RootKey.IS_RELOAD_ON_FOCUS_PAUSED)) {
+            root.set(RootKey.IS_RELOAD_ON_FOCUS_PAUSED, true);
+
+            load(root, arg, () => {
+              window.setTimeout(() => {
+                root.set(RootKey.IS_RELOAD_ON_FOCUS_PAUSED, false);
+              }, reloadOnFocus);
+            });
+          }
+        };
+
+        root.set(RootKey.RELOAD_ON_FOCUS_LISTENER, listener);
+
+        document.addEventListener('visibilitychange', listener);
       }
-    },
-    (root, args) => {
-      if (!root.get(RootKey.IS_BUSY)) {
-        executeFetcher(root, args);
+
+      if (
+        reloadOnReconnect &&
+        !root.has(RootKey.RELOAD_ON_RECONNECT_LISTENER)
+      ) {
+        const listener = () => {
+          load(root, arg);
+        };
+
+        root.set(RootKey.RELOAD_ON_RECONNECT_LISTENER, listener);
+
+        window.addEventListener('online', listener);
       }
-    },
-  ];
+
+      root.set(RootKey.MOUNTS_COUNT, root.get(RootKey.MOUNTS_COUNT)! + 1);
+
+      return () => {
+        const activeCount = root.get(RootKey.MOUNTS_COUNT)! - 1;
+
+        root.set(RootKey.MOUNTS_COUNT, activeCount);
+
+        if (!activeCount) {
+          if (reloadOnFocus) {
+            document.removeEventListener(
+              'visibilitychange',
+              root.get(RootKey.RELOAD_ON_FOCUS_LISTENER)!
+            );
+
+            root.delete(RootKey.RELOAD_ON_FOCUS_LISTENER);
+          }
+
+          if (reloadOnReconnect) {
+            window.removeEventListener(
+              'online',
+              root.get(RootKey.RELOAD_ON_RECONNECT_LISTENER)!
+            );
+
+            root.delete(RootKey.RELOAD_ON_RECONNECT_LISTENER);
+          }
+
+          onUnregister!(root);
+        }
+      };
+    };
+  };
 };
 
 const useNoop = () => {
@@ -941,8 +1120,8 @@ export const createVersionedState = <V, T, E = any>(options: Options<V, T>) => {
           getNestedValue,
           getNestedSet,
           path,
-          _fetch,
-          [version]
+          kek,
+          version
         )
       : { use: useNoop, suspense: useNoop }) as VersionedSuperState<V, T, E>;
 
@@ -960,26 +1139,24 @@ export const createVersionedState = <V, T, E = any>(options: Options<V, T>) => {
 
   fn.getPromise = (version) => getPromise(getRoot(version));
 
-  // let focusTimeoutId: number;
+  const load = createLoader(loadingSlowSet, options);
 
-  // if (refetchOnFocus) {
-  //   window.addEventListener('focus', () => {
-  //     if (isRefetchOnFocusReady && isFree) {
-  //       _fetch(vers);
-  //     }
-  //   });
-  // }
+  const kek = createRegisterableLoader(load, options, (root) => {
+    root.get(RootKey.POLLING_RESOLVE)!();
+  });
 
-  const [_fetch, _refetch] = handleFetcher(loadingSlowSet, options);
+  fn.fetch = (version) => {
+    const root = getRoot(version);
 
-  fn.fetch = (...args) => {
-    _fetch(getRoot(args[0]), args);
+    if (!root.get(RootKey.IS_DUPLICATED)) {
+      load(root, version);
+    }
 
     return fn;
   };
 
-  fn.refetch = (...args) => {
-    _refetch(getRoot(args[0]), args);
+  fn.refetch = (version) => {
+    load(getRoot(version), version);
 
     return fn;
   };

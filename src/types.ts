@@ -86,10 +86,10 @@ export type SuperState<Value, Error = any> = {
 
 export type Options<V, T> = {
   fetcher(version: V, ...args: any[]): Promise<T>;
-  refetchOnFocus?: number;
-  refetchOnReconnect?: boolean;
-  fetchWhenHidden?: boolean;
-  pollingInterval?: number | ((prevValue: T, attempt: number) => number);
+  reloadOnFocus?: number;
+  reloadOnReconnect?: boolean;
+  pollingWhenHidden?: number | ((prevValue: T) => number);
+  pollingInterval: number | ((prevValue: T) => number);
   dedupingInterval?: number;
   loadingTimeout?: number;
 };
