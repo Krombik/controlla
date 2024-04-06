@@ -1,62 +1,31 @@
 import { useEffect, useLayoutEffect, useState } from 'react';
 import noop from 'lodash.noop';
 import {
+  AsyncRoot,
+  CallbackSet,
   Key,
+  LoadableRoot,
+  NestedMap,
   Options,
-  SuperState,
-  VersionedSuperState,
-  _SuperState,
+  Root,
+  RootKey,
+  VersionedNestedState,
+  State,
+  AsyncState,
+  NestedState,
+  NestedAsyncState,
+  SetKey,
+  ValueKey,
+  _SimplifiedState,
+  PollableRoot,
+  Falsy,
+  PollableState,
+  AnyState,
+  AnyAsyncState,
+  Listener,
+  AnyPollableState,
 } from './types';
-
-const SET_KEY = Symbol();
-
-const enum RootKey {
-  MAP,
-  VALUE,
-  ERROR,
-  ERROR_SET,
-  PROMISE,
-  IS_LOADED,
-  IS_LOADED_SET,
-  IS_BUSY,
-  IS_DUPLICATED,
-  IS_RELOAD_ON_FOCUS_PAUSED,
-  RELOAD_ON_FOCUS_LISTENER,
-  RELOAD_ON_RECONNECT_LISTENER,
-  DEDUPING_TIMEOUT_ID,
-  SLOW_LOADING_TIMEOUT_ID,
-  MOUNTS_COUNT,
-  POLLING_STOP,
-  POLLING_RESUME,
-  POLLING_GET_PAUSE,
-  POLLING_PROMISE,
-  POLLING_RESOLVE,
-}
-
-type CallbackSet = Set<(value: any) => void>;
-
-type NestedMap = Map<typeof SET_KEY, CallbackSet> & Map<Key, NestedMap>;
-
-type Root = Map<RootKey.MAP, NestedMap> &
-  Map<RootKey.VALUE, any> &
-  Map<RootKey.ERROR, any> &
-  Map<RootKey.ERROR_SET, CallbackSet> &
-  Map<RootKey.PROMISE, Promise<any>> &
-  Map<RootKey.DEDUPING_TIMEOUT_ID, number> &
-  Map<RootKey.SLOW_LOADING_TIMEOUT_ID, number> &
-  Map<RootKey.IS_BUSY, boolean> &
-  Map<RootKey.IS_DUPLICATED, boolean> &
-  Map<RootKey.IS_LOADED, boolean> &
-  Map<RootKey.IS_RELOAD_ON_FOCUS_PAUSED, boolean> &
-  Map<RootKey.RELOAD_ON_FOCUS_LISTENER, () => void> &
-  Map<RootKey.RELOAD_ON_RECONNECT_LISTENER, () => void> &
-  Map<RootKey.IS_LOADED_SET, CallbackSet> &
-  Map<RootKey.MOUNTS_COUNT, number> &
-  Map<RootKey.POLLING_STOP, () => void> &
-  Map<RootKey.POLLING_RESUME, () => void> &
-  Map<RootKey.POLLING_GET_PAUSE, () => Promise<void>> &
-  Map<RootKey.POLLING_PROMISE, Promise<any>> &
-  Map<RootKey.POLLING_RESOLVE, () => void>;
+import identity from 'lodash.identity';
 
 type StorageMap = Map<any, Root>;
 
@@ -65,44 +34,521 @@ const EMPTY_ARR: [] = [];
 const safeGet = (value: any, path: Key[]) => {
   const l = path.length;
 
-  for (let i = 0; i < l; i++) {
-    const k = path[i];
-
-    if (value && k in value) {
-      value = value[k];
-    } else {
-      return;
-    }
-  }
+  for (
+    let i = 0;
+    i < l && (value = value ? value[path[i]] : undefined) !== undefined;
+    i++
+  ) {}
 
   return value;
 };
 
 const createRoot = () => {
-  const rootMap: NestedMap = new Map();
-
-  rootMap.set(SET_KEY, new Set());
-
   const root: Root = new Map();
 
-  root.set(RootKey.MAP, rootMap);
+  const rootMap: NestedMap = new Map();
 
-  root.set(RootKey.ERROR_SET, new Set());
+  rootMap.set(EMPTY_ARR, new Set());
 
-  root.set(RootKey.IS_LOADED_SET, new Set());
+  root.set(RootKey.VALUE_GET_CALLBACK_SET, (path) => {
+    const l = path.length;
 
-  root.set(RootKey.IS_LOADED, false);
+    let parent = rootMap;
 
-  root.set(RootKey.MOUNTS_COUNT, 0);
+    for (let i = 0; i < l; i++) {
+      const k = path[i];
+
+      if (!parent.has(k)) {
+        let set: CallbackSet;
+
+        for (; i < l; i++) {
+          const child: NestedMap = new Map();
+
+          child.set(EMPTY_ARR, (set = new Set()));
+
+          parent.set(path[i], child);
+
+          parent = child;
+        }
+
+        return set!;
+      }
+
+      parent = parent.get(k)!;
+    }
+
+    return parent.get(EMPTY_ARR)!;
+  });
+
+  root.set(RootKey.VALUE_GET, safeGet);
+
+  root.set(RootKey.VALUE_SET, (nextValue, rootValue, isSet, path) => {
+    const l = path.length;
+
+    const nodesQueue: NestedMap[] = [rootMap];
+
+    let currentNode: NestedMap | false = rootMap;
+
+    for (let i = 0; i < l; i++) {
+      const k = path[i];
+
+      if (currentNode.has(k)) {
+        currentNode = currentNode.get(k)!;
+
+        nodesQueue.push(currentNode);
+      } else {
+        currentNode = false;
+
+        break;
+      }
+    }
+
+    if (handleNotEqual(safeGet(rootValue, path), nextValue, currentNode)) {
+      const valuesQueue: any[] = [];
+
+      if (isSet) {
+        if (l) {
+          const lastIndex = l - 1;
+
+          let newValue =
+            rootValue && typeof rootValue == 'object'
+              ? Array.isArray(rootValue)
+                ? rootValue.slice()
+                : { ...rootValue }
+              : typeof path[0] == 'string'
+                ? {}
+                : [];
+
+          root.set(RootKey.VALUE, newValue);
+
+          valuesQueue.push(newValue);
+
+          for (let i = 0; i < lastIndex; i++) {
+            const key = path[i];
+
+            const original = newValue[key];
+
+            const copy =
+              original && typeof original == 'object'
+                ? Array.isArray(original)
+                  ? original.slice()
+                  : { ...original }
+                : typeof key == 'string'
+                  ? {}
+                  : [];
+
+            newValue[key] = copy;
+
+            newValue = copy;
+
+            valuesQueue.push(copy);
+          }
+
+          newValue[path[lastIndex]] = nextValue;
+        } else {
+          root.set(RootKey.VALUE, nextValue);
+        }
+
+        valuesQueue.push(nextValue);
+      }
+
+      for (let i = nodesQueue.length; i--; ) {
+        executeSetters(nodesQueue[i].get(EMPTY_ARR)!, valuesQueue[i]);
+      }
+    }
+  });
 
   return root;
 };
 
-const toKey = (value: any) => {
-  if (value && Object.getPrototypeOf(value) == Object.prototype) {
-    const keys = Object.keys(value).sort();
+const createPrimitiveRoot = () => {
+  const root: Root = new Map();
 
-    let str = '';
+  const valueSet: CallbackSet = new Set();
+
+  root.set(RootKey.VALUE_GET_CALLBACK_SET, () => valueSet);
+
+  root.set(RootKey.VALUE_GET, identity);
+
+  root.set(RootKey.VALUE_SET, (value, prevValue, isSet) => {
+    if (prevValue !== value) {
+      if (isSet) {
+        root.set(RootKey.VALUE, value);
+      }
+
+      executeSetters(valueSet, value);
+    }
+  });
+
+  return root;
+};
+
+const createPrimitiveSetter =
+  (valueKey: ValueKey, setKey: SetKey) =>
+  (state: _SimplifiedState, value: any) => {
+    const root = state.r;
+
+    if (root.get(valueKey)! !== value) {
+      root.set(valueKey, value);
+
+      executeSetters(root.get(setKey), value);
+    }
+
+    return state;
+  };
+
+const injectAsync = (prev: Root, listeners?: Listener[]) => {
+  const root = prev as AsyncRoot;
+
+  root.set(RootKey.ERROR_CALLBACK_SET, new Set());
+
+  root.set(RootKey.IS_LOADED_CALLBACK_SET, new Set());
+
+  root.set(RootKey.IS_LOADED, false);
+
+  if (listeners && listeners.length) {
+    let unlisteners: (() => void)[];
+
+    let count = 0;
+
+    root.set(RootKey.HANDLE_LISTENERS, (state) => {
+      if (!count++) {
+        unlisteners = [];
+
+        for (let i = 0; i < listeners.length; i++) {
+          const unlisten = listeners[i](state);
+
+          if (unlisten) {
+            unlisteners.push(unlisten);
+          }
+        }
+      }
+
+      return () => {
+        if (!--count) {
+          for (let i = 0; i < unlisteners.length; i++) {
+            unlisteners[i]();
+          }
+        }
+      };
+    });
+  }
+
+  return root;
+};
+
+const injectLoadable = (
+  prev: Root,
+  fetcher: (arg: any) => Promise<any>,
+  loadingTimeout?: number
+) => {
+  const root = injectAsync(prev) as LoadableRoot;
+
+  let isFree = true;
+
+  let cancel: () => void = noop;
+
+  const slowLoadingSet = (loadingTimeout && new Set()) as CallbackSet;
+
+  const _setValue = root.get(RootKey.VALUE_SET)!;
+
+  root.set(RootKey.VALUE_SET, (nextValue, rootValue, isSet, path, isError) => {
+    const isLoaded = isSet || isError;
+
+    _setValue(nextValue, rootValue, isSet, path, isError);
+
+    setLoad({ r: root }, isLoaded);
+
+    if (isLoaded) {
+      cancel();
+    }
+  });
+
+  root.set(RootKey.IS_LOAD_AVAILABLE, true);
+
+  root.set(RootKey.LOAD, async (arg) => {
+    if (isFree) {
+      isFree = false;
+
+      let isRunning = true;
+
+      const cancelPromise = new Promise<void>((res) => {
+        cancel = () => {
+          isFree = true;
+
+          isRunning = false;
+
+          cancel = noop;
+
+          res();
+        };
+      });
+
+      setLoad({ r: root }, isFree);
+
+      root.set(RootKey.IS_LOAD_AVAILABLE, false);
+
+      await Promise.any([becomingOnline(), cancelPromise]);
+
+      if (isRunning) {
+        const promise = Promise.any([
+          fetcher(arg)
+            .then((value) => {
+              if (isRunning) {
+                setValue({ r: root, p: EMPTY_ARR }, value);
+              }
+            })
+            .catch((err) => {
+              if (isRunning) {
+                setError({ r: root }, err);
+              }
+            }),
+          cancelPromise,
+        ]);
+
+        loadingTimeout
+          ? withSlowLoading(promise, loadingTimeout, slowLoadingSet)
+          : promise;
+      }
+    }
+  });
+};
+
+const infectPollable = (
+  prev: Root,
+  fetcher: (arg: any) => Promise<any>,
+  until: (value: any) => boolean,
+  interval: number | ((value: any) => number),
+  hiddenInterval?: number | ((value: any) => number),
+  loadingTimeout?: number
+) => {
+  let sleep: (getInterval: () => number) => Promise<void>;
+
+  let getInterval: () => number;
+
+  let pausePromise: Promise<void> | undefined | false;
+
+  let cancel: () => void = noop;
+
+  let isPolling = false;
+
+  let isDone = false;
+
+  let isLoadable = true;
+
+  let sleepPromise = RESOLVED_PROMISE;
+
+  let resume: () => void;
+
+  const root = injectAsync(prev) as PollableRoot;
+
+  const state: AnyPollableState = { r: root, p: EMPTY_ARR };
+
+  const _setValue = root.get(RootKey.VALUE_SET)!;
+
+  const slowLoadingSet = (loadingTimeout && new Set()) as CallbackSet;
+
+  const getVisibleInterval = handleGetInterval(interval, root);
+
+  const load = async (arg: any) => {
+    if (!isPolling) {
+      isPolling = true;
+
+      isLoadable = false;
+
+      const cancelPromise = new Promise<void>((res) => {
+        cancel = () => {
+          isPolling = false;
+
+          cancel = noop;
+
+          res();
+        };
+      });
+
+      setLoad(state, false);
+
+      do {
+        do {
+          await Promise.any([
+            Promise.all([sleepPromise, pausePromise, becomingOnline()]),
+            cancelPromise,
+          ]);
+        } while (isPolling && (pausePromise || !navigator.onLine));
+
+        if (isPolling) {
+          const promise = Promise.any([
+            fetcher(arg)
+              .then((value) => {
+                setValue(state, value);
+
+                sleepPromise = sleep(getInterval);
+              })
+              .catch((err) => {
+                setError(state, err);
+              }),
+            cancelPromise,
+          ]);
+
+          await (loadingTimeout
+            ? withSlowLoading(promise, loadingTimeout, slowLoadingSet)
+            : promise);
+        }
+      } while (isPolling);
+    }
+  };
+
+  const handleLoad = (arg: any) => {
+    if (isLoadable) {
+      load(arg);
+
+      return () => {
+        if (!isDone) {
+          isLoadable = true;
+        }
+
+        cancel();
+      };
+    }
+  };
+
+  if (hiddenInterval == null) {
+    sleep = commonSleep;
+
+    getInterval = getVisibleInterval;
+  } else {
+    const getHiddenInterval = handleGetInterval(hiddenInterval, root);
+
+    getInterval = () =>
+      (document.hidden ? getHiddenInterval : getVisibleInterval)();
+
+    sleep = changingSleep;
+  }
+
+  root.set(RootKey.POLLING_PAUSE, () => {
+    if (!pausePromise) {
+      pausePromise = new Promise((res) => {
+        resume = res;
+      });
+    }
+  });
+
+  root.set(RootKey.POLLING_RESUME, () => {
+    if (pausePromise) {
+      pausePromise = false;
+
+      resume();
+    }
+  });
+
+  root.set(RootKey.VALUE_SET, (nextValue, rootValue, isSet, path, isError) => {
+    _setValue(nextValue, rootValue, isSet, path, isError);
+
+    if (isSet) {
+      isDone = until(root.get(RootKey.VALUE));
+
+      if (isDone) {
+        cancel();
+
+        setLoad(state, true);
+      } else if (!isPolling) {
+        isLoadable = true;
+      }
+    } else {
+      isDone = isError;
+
+      if (isDone) {
+        cancel();
+      } else if (!isPolling) {
+        isLoadable = true;
+      }
+
+      setLoad(state, isError);
+    }
+  });
+
+  root.set(RootKey.LOAD, handleLoad);
+};
+
+const commonSleep = (getInterval: () => number) =>
+  new Promise<void>((res) => {
+    setTimeout(res, getInterval());
+  });
+
+const changingSleep = (getInterval: () => number) =>
+  new Promise<void>((res) => {
+    const listener = () => {
+      window.clearTimeout(timeoutId);
+
+      const delay = getInterval();
+
+      if (delay > 0) {
+        const now = performance.now();
+
+        const diff = now - start - delay;
+
+        start = now;
+
+        if (diff > 0) {
+          timeoutId = window.setTimeout(resolve, diff);
+        } else {
+          resolve();
+        }
+      } else {
+        timeoutId = undefined;
+      }
+    };
+
+    const resolve = () => {
+      document.removeEventListener('visibilitychange', listener);
+
+      timeoutId = undefined;
+
+      res();
+    };
+
+    const delay = getInterval();
+
+    let timeoutId: number | undefined;
+
+    let start = performance.now();
+
+    document.addEventListener('visibilitychange', listener);
+
+    if (delay > 0) {
+      timeoutId = window.setTimeout(resolve, delay);
+    }
+  });
+
+const withSlowLoading = async (
+  promise: Promise<any>,
+  loadingTimeout: number,
+  slowLoadingSet: CallbackSet
+) => {
+  let slowLoadingTimeoutId = window.setTimeout(() => {
+    executeSetters(slowLoadingSet);
+  }, loadingTimeout);
+
+  await promise;
+
+  window.clearTimeout(slowLoadingTimeoutId);
+};
+
+const toKey = (value: any) => {
+  if (value instanceof Date) {
+    return value.getDate();
+  }
+
+  let str = '\v';
+
+  if (Array.isArray(value)) {
+    for (let i = value.length; i--; ) {
+      const child = value[i];
+
+      str = `${str}${child && typeof child == 'object' ? toKey(child) : child},`;
+    }
+  } else {
+    const keys = Object.keys(value).sort();
 
     for (let i = keys.length; i--; ) {
       const key = keys[i];
@@ -110,47 +556,41 @@ const toKey = (value: any) => {
       const child = value[key];
 
       if (child !== undefined) {
-        str += `${key}\v${toKey(child)}\f`;
+        str = `${str}${key}:${child && typeof child == 'object' ? toKey(child) : child};`;
       }
     }
-
-    return str;
   }
 
-  return '' + value;
+  return str + '\f';
 };
 
 const handleVersionedStorage = () => {
   const storage: StorageMap = new Map();
 
-  const keyStorage = new Map<string, any>();
+  const versionStorage = new Map<Key, any>();
 
   return (version: any) => {
-    if (version == null) {
-      throw new Error(`${version} is not allowed as version`);
-    }
-
     if (storage.has(version)) {
       return storage.get(version)!;
     }
 
-    if (version && typeof version == 'object') {
-      const strKey = toKey(version);
+    if (typeof version == 'object') {
+      const stringifiedVersion = toKey(version);
 
-      if (keyStorage.has(strKey)) {
-        const prevKey = keyStorage.get(strKey)!;
+      if (versionStorage.has(stringifiedVersion)) {
+        const prevVersion = versionStorage.get(stringifiedVersion)!;
 
-        if (storage.has(prevKey)) {
-          const root = storage.get(version)!;
+        if (storage.has(prevVersion)) {
+          const root = storage.get(prevVersion)!;
 
-          storage.delete(prevKey);
+          storage.delete(prevVersion);
 
           storage.set(version, root);
 
           return root;
         }
       } else {
-        keyStorage.set(strKey, version);
+        versionStorage.set(stringifiedVersion, version);
       }
     }
 
@@ -167,34 +607,33 @@ const alwaysFalse = () => false as const;
 const handleMandatoryCheck = (
   prevValue: any,
   nextValue: any,
-  storage: NestedMap | undefined | false,
-  setFn: () => true
+  storage: NestedMap | undefined | false
 ): ((key: Key) => boolean) | false => {
-  if (!storage || storage.size < 2) {
-    return alwaysFalse;
+  if (storage && storage.size > 1) {
+    let equalList: Set<Key> | false = new Set();
+
+    forEachChild(storage, (key) => {
+      const child = storage.get(key)!;
+
+      const newValue = nextValue[key];
+
+      if (handleNotEqual(prevValue[key], newValue, child)) {
+        equalList = false;
+
+        executeSetters(child.get(EMPTY_ARR)!, newValue);
+      } else if (equalList) {
+        equalList.add(key);
+      }
+    });
+
+    return equalList && equalList.has.bind(equalList);
   }
 
-  let equalList: Set<Key> | false = new Set();
-
-  forEachChild(storage, (key) => {
-    const child = storage.get(key)!;
-
-    const newValue = nextValue[key];
-
-    if (handleNotEqual(prevValue[key], newValue, child, setFn)) {
-      equalList = false;
-
-      executeSetters(child.get(SET_KEY)!, newValue);
-    } else if (equalList) {
-      equalList.add(key);
-    }
-  });
-
-  return equalList && equalList.has.bind(equalList);
+  return alwaysFalse;
 };
 
 const handleNil = (prevValue: any, nextValue: any, storage: NestedMap) => {
-  executeSetters(storage.get(SET_KEY)!, nextValue);
+  executeSetters(storage.get(EMPTY_ARR)!, nextValue);
 
   if (prevValue != nextValue && storage.size > 1) {
     forEachChild(
@@ -221,16 +660,13 @@ const handleNil = (prevValue: any, nextValue: any, storage: NestedMap) => {
 const handleNotEqual = (
   prevValue: any,
   nextValue: any,
-  storage: NestedMap | undefined | false,
-  setFn: () => true
+  storage: NestedMap | undefined | false
 ) => {
   if (prevValue === nextValue) {
     return false;
   }
 
   if (prevValue == null || nextValue == null) {
-    setFn();
-
     if (storage) {
       handleNil(prevValue, nextValue, storage);
     }
@@ -241,24 +677,17 @@ const handleNotEqual = (
   const aPrototype = Object.getPrototypeOf(prevValue);
 
   if (aPrototype != Object.getPrototypeOf(nextValue)) {
-    setFn();
-
     if (storage) {
-      executeSetters(storage.get(SET_KEY)!, nextValue);
+      executeSetters(storage.get(EMPTY_ARR)!, nextValue);
 
-      handleMandatoryCheck(prevValue, nextValue, storage, setFn);
+      handleMandatoryCheck(prevValue, nextValue, storage);
     }
 
     return true;
   }
 
   if (aPrototype == Object.prototype) {
-    const isChecked = handleMandatoryCheck(
-      prevValue,
-      nextValue,
-      storage,
-      setFn
-    );
+    const isChecked = handleMandatoryCheck(prevValue, nextValue, storage);
 
     if (!isChecked) {
       return true;
@@ -269,7 +698,7 @@ const handleNotEqual = (
     let i = aKeys.length;
 
     if (i != Object.keys(nextValue).length) {
-      return setFn();
+      return true;
     }
 
     const getStorage = storage
@@ -281,7 +710,7 @@ const handleNotEqual = (
 
       if (
         !isChecked(key) &&
-        handleNotEqual(prevValue[key], nextValue[key], getStorage(key), setFn)
+        handleNotEqual(prevValue[key], nextValue[key], getStorage(key))
       ) {
         return true;
       }
@@ -291,12 +720,7 @@ const handleNotEqual = (
   }
 
   if (Array.isArray(prevValue)) {
-    const isChecked = handleMandatoryCheck(
-      prevValue,
-      nextValue,
-      storage,
-      setFn
-    );
+    const isChecked = handleMandatoryCheck(prevValue, nextValue, storage);
 
     if (!isChecked) {
       return true;
@@ -305,7 +729,7 @@ const handleNotEqual = (
     const l = prevValue.length;
 
     if (l != nextValue.length) {
-      return setFn();
+      return true;
     }
 
     const getStorage = storage
@@ -315,7 +739,7 @@ const handleNotEqual = (
     for (let i = 0; i < l; i++) {
       if (
         !isChecked(i) &&
-        handleNotEqual(prevValue[i], nextValue[i], getStorage(i), setFn)
+        handleNotEqual(prevValue[i], nextValue[i], getStorage(i))
       ) {
         return true;
       }
@@ -325,56 +749,13 @@ const handleNotEqual = (
   }
 
   if (prevValue instanceof Date) {
-    return prevValue.getTime() != nextValue.getTime() && setFn();
+    return prevValue.getTime() != nextValue.getTime();
   }
 
-  return setFn();
+  return true;
 };
 
-const getNewRootValue = (
-  prevValue: any,
-  nextValue: any,
-  path: Key[],
-  index: number,
-  end: number,
-  push: (value: any) => any
-): any => {
-  let newValue;
-
-  if (index < end) {
-    const k = path[index++] as Key;
-
-    if (prevValue == null || typeof prevValue != 'object') {
-      prevValue = typeof k == 'string' ? {} : [];
-    }
-
-    if (Array.isArray(prevValue)) {
-      newValue = prevValue.slice();
-
-      newValue[k as number] = getNewRootValue(
-        prevValue[k as number],
-        nextValue,
-        path,
-        index,
-        end,
-        push
-      );
-    } else {
-      newValue = {
-        ...prevValue,
-        [k]: getNewRootValue(prevValue[k], nextValue, path, index, end, push),
-      };
-    }
-  } else {
-    newValue = nextValue;
-  }
-
-  push(newValue);
-
-  return newValue;
-};
-
-const executeSetters = (set: CallbackSet, value: unknown) => {
+const executeSetters = (set: CallbackSet, value?: unknown) => {
   const it = set.values();
 
   const next = it.next.bind(it);
@@ -396,163 +777,99 @@ const forEachChild = (storage: NestedMap, fn: (key: Key) => void) => {
   }
 };
 
-const getMap = (root: Root, path: Key[]) => {
-  const l = path.length;
-
-  let parent = root.get(RootKey.MAP)!;
-
-  for (let i = 0; i < l; i++) {
-    const k: Key = path[i];
-
-    if (!parent.has(k)) {
-      for (; i < l; i++) {
-        const child: NestedMap = new Map();
-
-        child.set(SET_KEY, new Set());
-
-        parent.set(path[i], child);
-
-        parent = child;
-      }
-
-      return parent;
-    }
-
-    parent = parent.get(k)!;
-  }
-
-  return parent;
-};
-
-const deleteError = (root: Root) => {
+const deleteError = (root: AsyncRoot) => {
   if (root.delete(RootKey.ERROR)) {
-    executeSetters(root.get(RootKey.ERROR_SET)!, undefined);
+    executeSetters(root.get(RootKey.ERROR_CALLBACK_SET)!, undefined);
   }
 };
 
-const deleteValue = (root: Root) => {
+const deleteValue = (root: Root, isError: boolean) => {
   if (root.has(RootKey.VALUE)) {
-    safeSet(root, EMPTY_ARR, undefined);
+    const rootValue = root.get(RootKey.VALUE)!;
 
     root.delete(RootKey.VALUE);
+
+    root.get(RootKey.VALUE_SET)!(
+      undefined,
+      rootValue,
+      false,
+      EMPTY_ARR,
+      isError
+    );
   }
 };
 
-const safeSet = (root: Root, path: Key[], nextValue: any) => {
-  const l = path.length;
+const createUseValueOf =
+  (
+    onValueChanged: ReturnType<typeof createOnValueOfChange>,
+    getValue: ReturnType<typeof createGetValueOf>
+  ) =>
+  (state: _SimplifiedState | Falsy) => {
+    if (state) {
+      const t = useState<{}>();
 
-  const rootMap = root.get(RootKey.MAP)!;
+      useLayoutEffect(() => {
+        const forceRerender = t[1];
 
-  const nodesQueue: NestedMap[] = [rootMap];
+        return onValueChanged(state, () => {
+          forceRerender({});
+        });
+      }, [state.r, 0]);
 
-  const valuesQueue: any[] = [];
+      return getValue(state);
+    }
+
+    useNoop();
+  };
+
+const createGetValueOf = (valueKey: ValueKey) => (state: _SimplifiedState) =>
+  state.r.get(valueKey);
+
+const createOnValueOfChange =
+  (setKey: Exclude<SetKey, RootKey.VALUE_GET_CALLBACK_SET>) =>
+  (state: _SimplifiedState, cb: (value: any) => void) => {
+    const set = state.r.get(setKey)!;
+
+    set.add(cb);
+
+    return () => {
+      set.delete(cb);
+    };
+  };
+
+export const setValue = <S extends AnyState>(
+  state: S,
+  value: S extends AnyState<infer T> ? T : never
+) => {
+  const root = state.r;
 
   const rootValue = root.get(RootKey.VALUE);
 
-  const prevValue = safeGet(rootValue, path);
+  root.get(RootKey.VALUE_SET)!(
+    typeof value != 'function' ? value : value(rootValue),
+    rootValue,
+    true,
+    state.p!,
+    false
+  );
 
-  let currentNode: NestedMap | undefined = rootMap;
+  deleteError(root as AsyncRoot);
 
-  let isNotUpdated = true;
-
-  if (typeof nextValue == 'function') {
-    nextValue = nextValue(prevValue);
-  }
-
-  for (let i = 0; i < l; i++) {
-    const k = path[i] as Key;
-
-    if (currentNode.has(k)) {
-      nodesQueue.push((currentNode = currentNode.get(k)!));
-    } else {
-      currentNode = undefined;
-
-      break;
-    }
-  }
-
-  if (
-    handleNotEqual(prevValue, nextValue, currentNode, (): true => {
-      if (isNotUpdated) {
-        root.set(
-          RootKey.VALUE,
-          getNewRootValue(
-            rootValue,
-            nextValue,
-            path,
-            0,
-            l,
-            valuesQueue.push.bind(valuesQueue)
-          )
-        );
-
-        isNotUpdated = false;
-      }
-
-      return true;
-    })
-  ) {
-    for (let i = nodesQueue.length; i--; ) {
-      executeSetters(nodesQueue[i].get(SET_KEY)!, valuesQueue[i]);
-    }
-  }
+  return state;
 };
 
-const getPromise = (root: Root) => {
-  if (root.has(RootKey.PROMISE)) {
-    return root.get(RootKey.PROMISE)!;
-  }
+export const getValue = <T>(state: AnyState<T>): T => {
+  const root = state.r;
 
-  const valueSet = root.get(RootKey.MAP)!.get(SET_KEY)!;
-
-  const errorSet = root.get(RootKey.ERROR_SET)!;
-
-  const promise = (
-    root.has(RootKey.VALUE)
-      ? Promise.resolve(root.get(RootKey.VALUE)!)
-      : root.has(RootKey.ERROR)
-        ? Promise.reject(root.get(RootKey.ERROR))
-        : new Promise((res, rej) => {
-            const resolve = (value: unknown) => {
-              valueSet.delete(resolve);
-
-              errorSet.delete(reject);
-
-              res(value);
-            };
-
-            const reject = (error: unknown) => {
-              valueSet.delete(resolve);
-
-              errorSet.delete(reject);
-
-              rej(error);
-            };
-
-            valueSet.add(resolve);
-
-            errorSet.add(reject);
-          })
-  ).finally(() => {
-    const cleanup = () => {
-      valueSet.delete(cleanup);
-
-      errorSet.delete(cleanup);
-
-      root.delete(RootKey.PROMISE);
-    };
-
-    valueSet.add(cleanup);
-
-    errorSet.add(cleanup);
-  });
-
-  root.set(RootKey.PROMISE, promise);
-
-  return promise;
+  return root.get(RootKey.VALUE_GET)!(root.get(RootKey.VALUE), state.p!);
 };
 
-const addToSet = (set: CallbackSet, cb: (value: unknown) => void) => {
+export const onValueChange = <T>(
+  state: AnyState<T>,
+  cb: (value: T) => void
+) => {
+  const set = state.r.get(RootKey.VALUE_GET_CALLBACK_SET)!(state.p!);
+
   set.add(cb);
 
   return () => {
@@ -560,120 +877,50 @@ const addToSet = (set: CallbackSet, cb: (value: unknown) => void) => {
   };
 };
 
-const _set = (root: Root, path: Key[], value: any) => {
-  deleteError(root);
+export const useValue = ((state: AnyAsyncState | Falsy) => {
+  if (state) {
+    const root = state.r;
 
-  safeSet(root, path, value);
+    const t = useState<{}>();
+
+    useLayoutEffect(() => {
+      const forceRerender = t[1];
+
+      const unlistenValue = onValueChange(state, () => {
+        forceRerender({});
+      });
+
+      if (root.has(RootKey.HANDLE_LISTENERS)) {
+        const unlistenListeners = root.get(RootKey.HANDLE_LISTENERS)!({
+          ...state,
+          p: EMPTY_ARR,
+        });
+
+        return () => {
+          unlistenValue();
+
+          unlistenListeners();
+        };
+      }
+
+      return unlistenValue;
+    }, [root, state.p && state.p.join('.')]);
+
+    return getValue(state);
+  }
+
+  useNoop();
+}) as {
+  <S extends AnyState | Falsy>(
+    state: S
+  ): S extends AnyState<infer T> ? T : undefined;
 };
 
-const _delete = (root: Root) => {
-  deleteError(root);
-
-  deleteValue(root);
-};
-
-const _setError = (root: Root, error: any) => {
-  deleteValue(root);
-
-  root.set(RootKey.ERROR, error);
-
-  executeSetters(root.get(RootKey.ERROR_SET)!, error);
-};
-
-const GET_SET_KEY = Symbol();
-
-const ROOT_KEY = Symbol();
-
-const PATH_KEY = Symbol();
-
-export class BaseState<T> {
-  get: () => T;
-
-  protected readonly [GET_SET_KEY]: (root: Root, path?: Key[]) => CallbackSet;
-  protected readonly [ROOT_KEY]: Root;
-  protected readonly [PATH_KEY]?: Key[];
-
-  constructor(
-    root: Root,
-    get: (root: Root) => T,
-    getSet: (root: Root) => CallbackSet
-  );
-
-  constructor(
-    root: Root,
-    get: (root: Root, path: Key[]) => T,
-    getSet: (root: Root, path: Key[]) => CallbackSet,
-    path: Key[]
-  );
-
-  constructor(
-    root: Root,
-    get: (...args: any[]) => T,
-    getSet: (...args: any[]) => CallbackSet,
-    path?: any
-  ) {
-    this.get = get.bind(null, root, path);
-
-    this[GET_SET_KEY] = getSet;
-
-    this[ROOT_KEY] = root;
-
-    this[PATH_KEY] = path;
-  }
-
-  use<D extends boolean = false>(disabled?: D): D extends true ? undefined : T;
-  use(disabled?: boolean) {
-    if (!disabled) {
-      const root = this[ROOT_KEY];
-      const path = this[PATH_KEY];
-
-      const forceRerender = useState<{}>()[1];
-
-      useLayoutEffect(
-        () =>
-          addToSet(this[GET_SET_KEY](root, path), () => {
-            forceRerender({});
-          }),
-        [root, path && path.join('.')]
-      );
-
-      return this.get();
-    }
-
-    useNoop();
-  }
-
-  onChange(cb: (value: T) => void) {
-    return addToSet(this[GET_SET_KEY](this[ROOT_KEY], this[PATH_KEY]), cb);
-  }
-}
-
-export class State<T> extends BaseState<T> {
-  set(value: T | ((prevValue: T) => T)) {
-    _set(this[ROOT_KEY], this[PATH_KEY]!, value);
-  }
-}
-
-export class ErrorState<T> extends BaseState<T | undefined> {
-  set(error: T) {
-    _setError(this[ROOT_KEY], error);
-  }
-}
-
-export class AsyncState<T> extends State<T> {
-  suspense<D extends boolean = false>(
-    disabled?: D
-  ): D extends true ? undefined : T;
-  suspense(disabled?: boolean) {
-    if (disabled) {
-      return useNoop();
-    }
-
-    const root = this[ROOT_KEY];
+export const use = ((state: AnyAsyncState | Falsy) => {
+  if (state) {
+    const root = state.r;
 
     if (root.has(RootKey.VALUE)) {
-      const path = this[PATH_KEY]!;
-
       const t = useState<{}>();
 
       useLayoutEffect(() => {
@@ -683,78 +930,235 @@ export class AsyncState<T> extends State<T> {
           setValue({});
         };
 
-        const unlistenValue = addToSet(
-          this[GET_SET_KEY](root, path),
-          forceRerender
-        );
+        const unlistenValue = onValueChange(state, forceRerender);
 
-        const unlistenError = addToSet(
-          root.get(RootKey.ERROR_SET)!,
-          forceRerender
-        );
+        const unlistenError = onError(state, forceRerender);
+
+        const unlistenListeners = root.has(RootKey.HANDLE_LISTENERS)
+          ? root.get(RootKey.HANDLE_LISTENERS)!({ ...state, p: EMPTY_ARR })
+          : noop;
+
+        return () => {
+          unlistenValue();
+
+          unlistenError();
+
+          unlistenListeners();
+        };
+      }, [root, state.p && state.p.join('.')]);
+
+      return getValue(state);
+    }
+
+    if (root.has(RootKey.ERROR)) {
+      throw root.get(RootKey.ERROR);
+    }
+
+    throw getPromise({ r: root, p: EMPTY_ARR }).finally(
+      root.get(RootKey.LOAD)!(state.v)!
+    );
+  }
+
+  useNoop();
+}) as {
+  <S extends AnyAsyncState | Falsy>(
+    state: S
+  ): S extends AnyAsyncState<infer T> ? T : undefined;
+};
+
+const RESOLVED_PROMISE = Promise.resolve();
+
+export const useAll = ((...states: (AnyAsyncState | Falsy)[]) => {
+  const l = states.length;
+
+  const values: any[] = [];
+
+  const setValue = useState<{}>()[1];
+
+  const forceRerender = () => {
+    setValue({});
+  };
+
+  for (let i = 0; i < l; i++) {
+    const state = states[i];
+
+    if (state) {
+      const root = state.r;
+
+      if (root.has(RootKey.ERROR)) {
+        throw root.get(RootKey.ERROR)!;
+      }
+
+      if (!root.has(RootKey.VALUE)) {
+        const promises = [getPromise(state)];
+
+        for (++i; i < l; i++) {
+          const state = states[i];
+
+          if (state) {
+            const root = state.r;
+
+            if (root.has(RootKey.ERROR)) {
+              throw root.get(RootKey.ERROR);
+            }
+
+            if (!root.has(RootKey.VALUE)) {
+              promises.push(getPromise(state));
+            }
+          }
+        }
+
+        throw Promise.all(promises);
+      }
+
+      useLayoutEffect(() => {
+        const unlistenValue = onValueChange(state, forceRerender);
+
+        const unlistenError = onError(state, forceRerender);
 
         return () => {
           unlistenValue();
 
           unlistenError();
         };
-      }, [root, path.join('.')]);
+      }, [root, state.p && state.p.join('.')]);
 
-      return this.get();
-    }
-
-    throw root.has(RootKey.ERROR) ? root.get(RootKey.ERROR) : getPromise(root);
-  }
-}
-
-const FETCH_METHOD_KEY = Symbol();
-
-const FETCH_KEY = Symbol();
-
-const FETCH_ARG_KEY = Symbol();
-
-class LoadableState<T> extends AsyncState<T> {
-  private readonly [FETCH_KEY]: ReturnType<typeof createRegisterableLoader>;
-
-  private readonly [FETCH_ARG_KEY]: any;
-
-  constructor(
-    root: Root,
-    get: (root: Root, path: Key[]) => T,
-    getSet: (root: Root, path: Key[]) => CallbackSet,
-    path: Key[],
-    fetch: ReturnType<typeof createRegisterableLoader>,
-    fetchArg?: any
-  ) {
-    super(root, get, getSet, path);
-
-    this[FETCH_KEY] = fetch;
-
-    this[FETCH_ARG_KEY] = fetchArg;
-  }
-
-  private [FETCH_METHOD_KEY](disabled?: boolean) {
-    if (disabled) {
-      useEffect(noop, [0]);
+      values.push(getValue(state));
     } else {
-      const root = this[ROOT_KEY];
-
-      useEffect(this[FETCH_KEY](root, this[FETCH_ARG_KEY]), [root]);
+      values.push(useLayoutEffect(noop, [0, 0]));
     }
   }
 
-  useWithLoad<D extends boolean = false>(disabled?: D) {
-    this[FETCH_METHOD_KEY](disabled);
+  return values;
+}) as {
+  <S extends (AnyAsyncState | Falsy)[]>(...states: S): ValuesOf<S>;
+};
 
-    return this.use(disabled);
+type ValuesOf<T> = T extends [infer Head, ...infer Tail]
+  ? [Head extends AnyAsyncState<infer K> ? K : undefined, ...ValuesOf<Tail>]
+  : [];
+
+export const getPromise = <T>(state: AnyAsyncState<T>): Promise<T> => {
+  const root = state.r;
+
+  const path = state.p;
+
+  let promise: Promise<any>;
+
+  if (root.has(RootKey.PROMISE)) {
+    promise = root.get(RootKey.PROMISE)!;
+  } else {
+    const valueSet = root.get(RootKey.VALUE_GET_CALLBACK_SET)!(EMPTY_ARR);
+
+    const errorSet = root.get(RootKey.ERROR_CALLBACK_SET)!;
+
+    promise = (
+      root.has(RootKey.VALUE)
+        ? Promise.resolve(root.get(RootKey.VALUE)!)
+        : root.has(RootKey.ERROR)
+          ? Promise.reject(root.get(RootKey.ERROR))
+          : new Promise<any>((res, rej) => {
+              const resolve = (value: unknown) => {
+                valueSet.delete(resolve);
+
+                errorSet.delete(reject);
+
+                res(value);
+              };
+
+              const reject = (error: unknown) => {
+                valueSet.delete(resolve);
+
+                errorSet.delete(reject);
+
+                rej(error);
+              };
+
+              valueSet.add(resolve);
+
+              errorSet.add(reject);
+            })
+    ).finally(() => {
+      const cleanup = () => {
+        valueSet.delete(cleanup);
+
+        errorSet.delete(cleanup);
+
+        root.delete(RootKey.PROMISE);
+      };
+
+      valueSet.add(cleanup);
+
+      errorSet.add(cleanup);
+    });
+
+    root.set(RootKey.PROMISE, promise);
   }
 
-  suspenseWithLoad<D extends boolean = false>(disabled?: D) {
-    this[FETCH_METHOD_KEY](disabled);
+  return path && path.length
+    ? promise.then((value) => root.get(RootKey.VALUE_GET)!(value, path))
+    : promise;
+};
 
-    return this.suspense(disabled);
+export const setLoad = createPrimitiveSetter(
+  RootKey.IS_LOADED,
+  RootKey.IS_LOADED_CALLBACK_SET
+) as {
+  <S extends AnyAsyncState>(state: S, isLoaded: boolean): S;
+};
+
+export const isLoaded = createGetValueOf(RootKey.IS_LOADED) as {
+  (state: AnyAsyncState): boolean;
+};
+
+export const onLoad = createOnValueOfChange(RootKey.IS_LOADED_CALLBACK_SET) as {
+  (state: AnyAsyncState, cb: (isLoaded: boolean) => void): () => void;
+};
+
+export const useIsLoaded = createUseValueOf(onLoad, isLoaded) as {
+  <S extends AnyAsyncState | Falsy>(
+    state: S
+  ): S extends AnyAsyncState ? boolean : undefined;
+};
+
+export const setError = <S extends AnyAsyncState>(
+  state: S,
+  error: S extends AnyAsyncState<any, infer E> ? E : never
+) => {
+  const root = state.r;
+
+  deleteValue(root, true);
+
+  if (!root.has(RootKey.ERROR) || root.get(RootKey.ERROR)! !== error) {
+    root.set(RootKey.ERROR, error);
+
+    executeSetters(root.get(RootKey.ERROR_CALLBACK_SET)!, error);
   }
-}
+
+  return state;
+};
+
+export const getError = createGetValueOf(RootKey.ERROR) as {
+  <E>(state: AnyAsyncState<any, E>): E;
+};
+
+export const onError = createOnValueOfChange(RootKey.ERROR_CALLBACK_SET) as {
+  <E>(state: AnyAsyncState<any, E>, cb: (error: E) => void): () => void;
+};
+
+export const useError = createUseValueOf(onError, getError) as {
+  <S extends AnyAsyncState | Falsy>(
+    state: S
+  ): S extends AnyAsyncState<any, infer E> ? E : undefined;
+};
+
+export const clear = <S extends AnyAsyncState>(state: S) => {
+  deleteValue(state.r, false);
+
+  deleteError(state.r);
+
+  return state;
+};
 
 const createLoader = (
   slowLoadingSet: CallbackSet,
@@ -779,18 +1183,17 @@ const createLoader = (
   };
 };
 
-const becomingOnline: {
-  (): Promise<void>;
-  _?: Promise<void>;
-} = () =>
+let becomeOnlinePromise: Promise<void> | undefined | false;
+
+const becomingOnline = () =>
   navigator.onLine
-    ? Promise.resolve()
-    : becomingOnline._ ||
-      (becomingOnline._ = new Promise<void>((res) => {
+    ? RESOLVED_PROMISE
+    : becomeOnlinePromise ||
+      (becomeOnlinePromise = new Promise<void>((res) => {
         window.addEventListener(
           'online',
           () => {
-            becomingOnline._ = undefined;
+            becomeOnlinePromise = false;
 
             res();
           },
@@ -798,72 +1201,56 @@ const becomingOnline: {
         );
       }));
 
-const handlePause = (root: Root) => {
-  let pausePromise: Promise<void> | undefined;
-
-  let resume: () => void;
-
-  root.set(RootKey.POLLING_STOP, () => {
-    if (!pausePromise) {
-      pausePromise = new Promise((res) => {
-        resume = res;
-      });
-    }
-  });
-
-  root.set(RootKey.POLLING_RESUME, () => {
-    if (pausePromise) {
-      pausePromise = undefined;
-
-      resume();
-    }
-  });
-
-  root.set(RootKey.POLLING_GET_PAUSE, () =>
-    pausePromise ? pausePromise : Promise.resolve()
-  );
-};
-
 const executeFetcher = async (
   fetcher: (arg?: any) => Promise<any>,
   arg: any,
-  root: Root,
+  root: LoadableRoot,
   slowLoadingSet: CallbackSet,
   loadingTimeout: number | undefined
 ) => {
-  if (loadingTimeout) {
-    root.set(
-      RootKey.SLOW_LOADING_TIMEOUT_ID,
-      window.setTimeout(() => {
-        executeSetters(slowLoadingSet, arg);
-      }, loadingTimeout)
-    );
-  }
-
-  await fetcher(arg)
-    .then(_set.bind(null, root, EMPTY_ARR))
-    .catch(_setError.bind(null, root));
+  let slowLoadingTimeoutId: number | undefined;
 
   if (loadingTimeout) {
-    window.clearTimeout(root.get(RootKey.SLOW_LOADING_TIMEOUT_ID));
+    slowLoadingTimeoutId = window.setTimeout(() => {
+      executeSetters(slowLoadingSet);
+    }, loadingTimeout);
   }
+
+  return fetcher(arg)
+    .then((value) => {
+      setValue({ r: root, p: EMPTY_ARR }, value);
+    })
+    .catch((err) => {
+      setError({ r: root }, err);
+    })
+    .then(() => {
+      if (loadingTimeout) {
+        window.clearTimeout(slowLoadingTimeoutId);
+      }
+    });
 };
 
-const beforeLoad = (root: Root, dedupingInterval: number | undefined) => {
+const beforeLoad = (
+  root: LoadableRoot,
+  dedupingInterval: number | undefined
+) => {
   if (dedupingInterval) {
     window.clearTimeout(root.get(RootKey.DEDUPING_TIMEOUT_ID));
   }
 
-  root.set(RootKey.IS_BUSY, true);
+  root.set(RootKey.IS_FREE, false);
 
-  root.set(RootKey.IS_DUPLICATED, true);
+  root.set(RootKey.IS_DEDUPLICATED, false);
 
   root.set(RootKey.IS_LOADED, false);
 
   executeSetters(root.get(RootKey.IS_LOADED_SET)!, false);
 };
 
-const afterLoad = (root: Root, dedupingInterval: number | undefined) => {
+const afterLoad = (
+  root: LoadableRoot,
+  dedupingInterval: number | undefined
+) => {
   root.set(RootKey.IS_LOADED, true);
 
   executeSetters(root.get(RootKey.IS_LOADED_SET)!, true);
@@ -881,16 +1268,16 @@ const afterLoad = (root: Root, dedupingInterval: number | undefined) => {
 const startPolling = async (
   fetcher: (arg?: any) => Promise<any>,
   arg: any,
-  root: Root,
+  root: PollableRoot,
   slowLoadingSet: CallbackSet,
   loadingTimeout: number | undefined,
   getPause: () => Promise<void>,
   sleep: (root: Root) => Promise<void>
 ) => {
   while (root.get(RootKey.IS_BUSY)) {
-    await becomingOnline();
-
     await getPause();
+
+    await becomingOnline();
 
     if (root.get(RootKey.IS_BUSY)) {
       await executeFetcher(fetcher, arg, root, slowLoadingSet, loadingTimeout);
@@ -906,10 +1293,13 @@ const startPolling = async (
   }
 };
 
-const handleGetInterval = (interval: number | ((value: any) => number)) =>
+const handleGetInterval = (
+  interval: number | ((value: any) => number),
+  root: Root
+) =>
   typeof interval == 'number'
     ? () => interval
-    : (root: Root) => interval(root.get(RootKey.VALUE));
+    : () => interval(root.get(RootKey.VALUE));
 
 const createPoller = (
   slowLoadingSet: CallbackSet,
@@ -1097,18 +1487,49 @@ const useNoop = () => {
 const getNestedValue = (root: Root, path: Key[]) =>
   safeGet(root.get(RootKey.VALUE), path);
 
-const getNestedSet = (root: Root, path: Key[]) =>
-  getMap(root, path).get(SET_KEY)!;
-
-const getError = (root: Root) => root.get(RootKey.ERROR)!;
-
-const getErrorSet = (root: Root) => root.get(RootKey.ERROR_SET)!;
-
-const getIsLoaded = (root: Root) => root.get(RootKey.IS_LOADED)!;
+const getIsLoaded = (root: AsyncRoot) => root.get(RootKey.IS_LOADED)!;
 
 const getIsLoadedSet = (root: Root) => root.get(RootKey.IS_LOADED_SET)!;
 
-export const createVersionedState = <V, T, E = any>(options: Options<V, T>) => {
+function path<T extends NestedState | VersionedNestedState<any>>(
+  this: T,
+  ...path: any[]
+): T {
+  const prevPath = this.p;
+
+  return path.length
+    ? { ...this, p: prevPath.length ? prevPath.concat(...path) : path }
+    : this;
+}
+
+export const createState = <T>(): State<T> => ({ r: createPrimitiveRoot() });
+
+export const createNestedState = <T>(): NestedState<T> => ({
+  r: createRoot(),
+  p: EMPTY_ARR,
+  path,
+});
+
+export const createVersionedNestedState = <V, T>(): VersionedNestedState<
+  V,
+  T
+> => {
+  const getRoot = handleVersionedStorage();
+
+  return {
+    p: EMPTY_ARR,
+    path,
+    of(version): any {
+      if (version != null) {
+        return { ...this, r: getRoot(version), v: version };
+      }
+    },
+  };
+};
+
+export const createVersionedStateaw = <V, T, E = any>(
+  options: Options<V, T>
+) => {
   const getRoot = handleVersionedStorage();
 
   const loadingSlowSet: CallbackSet = new Set();
@@ -1170,24 +1591,6 @@ export const createVersionedState = <V, T, E = any>(options: Options<V, T>) => {
 
     return { use: useNoop } as any;
   };
-
-  return fn;
-};
-
-export const createSuperState = <T, E = any>() => {
-  const root = createRoot();
-
-  const fn = ((...path: Key[]) =>
-    new AsyncState(root, getNestedValue, getNestedSet, path)) as SuperState<
-    T,
-    E
-  >;
-
-  fn.clear = _delete.bind(null, root);
-
-  fn.error = new ErrorState(root, getError, getErrorSet);
-
-  fn.getPromise = getPromise.bind(null, root);
 
   return fn;
 };
