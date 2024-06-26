@@ -18,7 +18,9 @@
     "node": ">=10"
   },
   "scripts": {
-    "build": "node --loader ts-node/esm ./scripts/build.ts"
+    "build": "tsup",
+    "watch": "tsup --watch",
+    "release": "tsup && npm publish ./build"
   },
   "peerDependencies": {
     "@types/react": ">=16.8.0",
@@ -32,16 +34,16 @@
   "devDependencies": {
     "@types/lodash.identity": "^3.0.9",
     "@types/lodash.noop": "^3.0.9",
-    "@types/node": "^20.9.4",
-    "@types/react": "^18.2.38",
-    "prettier": "^3.1.0",
-    "ts-node": "^10.9.1",
-    "tsup": "^8.0.1",
-    "typescript": "^5.3.2"
+    "@types/node": "^20.14.8",
+    "@types/react": "^18.3.3",
+    "prettier": "^3.3.2",
+    "tsup": "^8.1.0",
+    "typescript": "^5.5.2"
   },
   "keywords": [],
   "sideEffects": false,
   "dependencies": {
+    "keyweaver": "^1.0.0",
     "lodash.identity": "^3.0.0",
     "lodash.noop": "^3.0.1"
   }

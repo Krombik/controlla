@@ -1,7 +1,6 @@
-/** @internal */
 export type Key = number | string;
 
-type Get<O, Path> = Path extends [infer Key, ...infer Rest]
+export type Get<O, Path> = Path extends [infer Key, ...infer Rest]
   ? Key extends keyof NonNullable<O>
     ? Get<
         | NonNullable<O>[Key]
@@ -23,7 +22,7 @@ type NestedPath<O, K extends keyof O> = [] extends O
       [Key in K]: Partial<[Key, ...Path<O[Key]>]>;
     }[K];
 
-type Path<O> = O extends any[] | Record<any, any>
+export type Path<O> = O extends any[] | Record<any, any>
   ? NestedPath<Required<O>, O extends any[] ? Indexes<O> : keyof O>
   : [];
 
@@ -51,17 +50,17 @@ export const enum RootKey {
   PROMISE,
   IS_LOADED,
   IS_LOADED_CALLBACK_SET,
-  HANDLE_LISTENERS,
   LOAD,
-  IS_LOAD_AVAILABLE,
-  POLLING_PAUSE,
-  POLLING_RESUME,
+  SLOW_LOADING_CALLBACK_SET,
+  PAUSE,
+  RESUME,
 }
 
 /** @internal */
 export type SetKey =
   | RootKey.ERROR_CALLBACK_SET
-  | RootKey.IS_LOADED_CALLBACK_SET;
+  | RootKey.IS_LOADED_CALLBACK_SET
+  | RootKey.SLOW_LOADING_CALLBACK_SET;
 
 /** @internal */
 export type ValueKey = RootKey.VALUE | RootKey.ERROR | RootKey.IS_LOADED;
@@ -75,13 +74,9 @@ export type _SimplifiedState = Partial<BasePath> &
       ? CallbackSet
       : K extends RootKey.VALUE_GET_CALLBACK_SET
         ? (path: Key[]) => CallbackSet
-        : K extends RootKey.HANDLE_LISTENERS
-          ? Listener | undefined
-          : K extends RootKey.IS_LOAD_AVAILABLE
-            ? boolean | undefined
-            : K extends RootKey.LOAD
-              ? (arg: any) => Promise<any>
-              : any;
+        : K extends RootKey.LOAD
+          ? (arg: any) => Promise<any>
+          : any;
     set(key: ValueKey, value: any): void;
     has(key: RootKey): boolean;
   }>;
@@ -108,26 +103,23 @@ export type Root<Value = any> = Map<
 /** @internal */
 export type Listener = (state: AnyAsyncState) => void | (() => void);
 
-type HandleListeners = (state: AnyAsyncState) => () => void;
-
 export type AsyncRoot<Value = any, Error = any> = Root<Value> &
-  Map<RootKey.LOAD, Listener> &
   Map<RootKey.ERROR, Error> &
   Map<RootKey.ERROR_CALLBACK_SET, CallbackSet> &
   Map<RootKey.IS_LOADED, boolean> &
   Map<RootKey.IS_LOADED_CALLBACK_SET, CallbackSet> &
-  Map<RootKey.PROMISE, Promise<Value>> &
-  Map<RootKey.HANDLE_LISTENERS, HandleListeners>;
+  Map<RootKey.PROMISE, Promise<Value>>;
 
 export type LoadableRoot<Value = any, Error = any> = AsyncRoot<Value, Error> &
-  Map<RootKey.IS_LOAD_AVAILABLE, boolean>;
+  Map<RootKey.LOAD, (arg: any, force?: boolean) => () => void> &
+  Map<RootKey.SLOW_LOADING_CALLBACK_SET, Set<() => void>>;
 
-export type PollableRoot<Value = any, Error = any> = LoadableRoot<
+export type PausableRoot<Value = any, Error = any> = LoadableRoot<
   Value,
   Error
 > &
-  Map<RootKey.POLLING_PAUSE, () => void> &
-  Map<RootKey.POLLING_RESUME, () => void>;
+  Map<RootKey.PAUSE, () => void> &
+  Map<RootKey.RESUME, () => void>;
 
 type BaseState<R> = {
   /** root */
@@ -138,24 +130,20 @@ type BaseState<R> = {
 type InnerState<R> = BaseState<R> & Partial<BasePath>;
 
 export type AnyState<Value = any> = InnerState<
-  Root<Value> | AsyncRoot<Value> | LoadableRoot<Value> | PollableRoot<Value>
+  Root<Value> | AsyncRoot<Value> | LoadableRoot<Value> | PausableRoot<Value>
 >;
 
 export type AnyAsyncState<Value = any, Error = any> = InnerState<
   | AsyncRoot<Value, Error>
   | LoadableRoot<Value, Error>
-  | PollableRoot<Value, Error>
+  | PausableRoot<Value, Error>
 >;
 
-export type AnyLoadableState<Value = any, Error = any> = InnerState<
-  LoadableRoot<Value, Error> | PollableRoot<Value, Error>
+export type AnyLoadableAsyncState<Value = any, Error = any> = InnerState<
+  LoadableRoot<Value, Error> | PausableRoot<Value, Error>
 >;
 
-export type AnyPollableState<Value = any, Error = any> = InnerState<
-  PollableRoot<Value, Error>
->;
-
-type BasePath = {
+export type BasePath = {
   /** path */
   readonly p: Key[];
 };
@@ -166,12 +154,12 @@ export type AsyncState<Value = any, Error = any> = BaseState<
   AsyncRoot<Value, Error>
 >;
 
-export type LoadableState<Value = any, Error = any> = BaseState<
+export type LoadableAsyncState<Value = any, Error = any> = BaseState<
   LoadableRoot<Value, Error>
 >;
 
-export type PollableState<Value = any, Error = any> = BaseState<
-  PollableRoot<Value, Error>
+export type PausableLoadableAsyncState<Value = any, Error = any> = BaseState<
+  PausableRoot<Value, Error>
 >;
 
 export type NestedState<Value = any> = BasePath &
@@ -179,25 +167,28 @@ export type NestedState<Value = any> = BasePath &
     path<P extends Path<Value>>(...path: P): NestedState<Get<Value, P>>;
   };
 
-export type NestedAsyncState<Value = any, Error = any> = BasePath &
+export type AsyncNestedState<Value = any, Error = any> = BasePath &
   BaseState<AsyncRoot<Value, Error>> & {
     path<P extends Path<Value>>(
       ...path: P
-    ): NestedAsyncState<Get<Value, P>, Error>;
+    ): AsyncNestedState<Get<Value, P>, Error>;
   };
 
-export type NestedLoadableState<Value = any, Error = any> = BasePath &
+export type LoadableAsyncNestedState<Value = any, Error = any> = BasePath &
   BaseState<LoadableRoot<Value, Error>> & {
     path<P extends Path<Value>>(
       ...path: P
-    ): NestedLoadableState<Get<Value, P>, Error>;
+    ): LoadableAsyncNestedState<Get<Value, P>, Error>;
   };
 
-export type NestedPollableState<Value = any, Error = any> = BasePath &
-  BaseState<PollableRoot<Value, Error>> & {
+export type PausableLoadableAsyncNestedState<
+  Value = any,
+  Error = any,
+> = BasePath &
+  BaseState<PausableRoot<Value, Error>> & {
     path<P extends Path<Value>>(
       ...path: P
-    ): NestedPollableState<Get<Value, P>, Error>;
+    ): PausableLoadableAsyncNestedState<Get<Value, P>, Error>;
   };
 
 export type VersionedState<Version, Value = any> = {
@@ -213,13 +204,13 @@ export type VersionedAsyncState<Version, Value = any, Error = any> = {
 export type VersionedLoadableState<Version, Value = any, Error = any> = {
   of<V extends Version | Nill>(
     version: V
-  ): NillChecker<V, LoadableState<Value, Error>>;
+  ): NillChecker<V, LoadableAsyncState<Value, Error>>;
 };
 
-export type VersionedPollableState<Version, Value = any, Error = any> = {
+export type VersionedPausableAsyncState<Version, Value = any, Error = any> = {
   of<V extends Version | Nill>(
     version: V
-  ): NillChecker<V, PollableState<Value, Error>>;
+  ): NillChecker<V, PausableLoadableAsyncState<Value, Error>>;
 };
 
 export type VersionedNestedState<Version, Value = any> = BasePath & {
@@ -236,7 +227,7 @@ export type VersionedNestedAsyncState<
 > = BasePath & {
   of<V extends Version | Nill>(
     version: V
-  ): NillChecker<V, NestedAsyncState<Value, Error>>;
+  ): NillChecker<V, AsyncNestedState<Value, Error>>;
   path<P extends Path<Value>>(
     ...path: P
   ): VersionedNestedAsyncState<Version, Get<Value, P>, Error>;
@@ -249,7 +240,7 @@ export type VersionedNestedLoadableState<
 > = BasePath & {
   of<V extends Version | Nill>(
     version: V
-  ): NillChecker<V, NestedLoadableState<Value, Error>>;
+  ): NillChecker<V, LoadableAsyncNestedState<Value, Error>>;
   path<P extends Path<Value>>(
     ...path: P
   ): VersionedNestedLoadableState<Version, Get<Value, P>, Error>;
@@ -262,19 +253,42 @@ export type VersionedNestedPollableState<
 > = BasePath & {
   of<V extends Version | Nill>(
     version: V
-  ): NillChecker<V, NestedPollableState<Value, Error>>;
+  ): NillChecker<V, PausableLoadableAsyncNestedState<Value, Error>>;
   path<P extends Path<Value>>(
     ...path: P
   ): VersionedNestedPollableState<Version, Get<Value, P>, Error>;
 };
 
-export type Options<V, T> = {
-  fetcher(version: V, ...args: any[]): Promise<T>;
-  reloadOnFocus?: number;
-  reloadOnReconnect?: boolean;
-  pollingWhenHidden?: number | ((prevValue: T) => number);
-  pollingInterval: number | ((prevValue: T) => number);
-  isDone(prevValue: T): boolean;
-  dedupingInterval?: number;
+export type ValuesOf<T> = T extends [infer Head, ...infer Tail]
+  ? [Head extends AnyAsyncState<infer K> ? K : undefined, ...ValuesOf<Tail>]
+  : [];
+
+export type AsyncStateOptions<T> = {
+  value?: T;
+  isLoaded?(value: T, prevValue: T): boolean;
+};
+
+export type LoadableAsyncStateOptions<T> = AsyncStateOptions<T> & {
+  load(state: AnyLoadableAsyncState): void | (() => void);
   loadingTimeout?: number;
 };
+
+export type PausableLoadableAsyncStateOptions<T> =
+  LoadableAsyncStateOptions<T> & {
+    pause(): void;
+    resume(): void;
+  };
+
+export type RequestableStateOptions<T, E = any> = Pick<
+  LoadableAsyncStateOptions<T>,
+  'value' | 'loadingTimeout'
+> & {
+  fetcher(): Promise<T>;
+  shouldRetryOnError?(err: E, attempt: number): number;
+};
+
+export type PollableStateOptions<T, E = any> = RequestableStateOptions<T, E> &
+  Pick<AsyncStateOptions<T>, 'isLoaded'> & {
+    interval: number;
+    hiddenInterval?: number;
+  };
