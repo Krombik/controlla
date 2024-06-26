@@ -1,6 +1,6 @@
 export type Key = number | string;
 
-export type Get<O, Path> = Path extends [infer Key, ...infer Rest]
+type Get<O, Path> = Path extends [infer Key, ...infer Rest]
   ? Key extends keyof NonNullable<O>
     ? Get<
         | NonNullable<O>[Key]
@@ -22,7 +22,7 @@ type NestedPath<O, K extends keyof O> = [] extends O
       [Key in K]: Partial<[Key, ...Path<O[Key]>]>;
     }[K];
 
-export type Path<O> = O extends any[] | Record<any, any>
+type Path<O> = O extends any[] | Record<any, any>
   ? NestedPath<Required<O>, O extends any[] ? Indexes<O> : keyof O>
   : [];
 
@@ -36,10 +36,8 @@ type NillChecker<V, T> = [Extract<V, Nill>] extends [never]
     ? undefined
     : T | undefined;
 
-/** @internal */
 export type CallbackSet = Set<(value: any) => void>;
 
-/** @internal */
 export const enum RootKey {
   VALUE,
   VALUE_GET,
@@ -56,16 +54,13 @@ export const enum RootKey {
   RESUME,
 }
 
-/** @internal */
 export type SetKey =
   | RootKey.ERROR_CALLBACK_SET
   | RootKey.IS_LOADED_CALLBACK_SET
   | RootKey.SLOW_LOADING_CALLBACK_SET;
 
-/** @internal */
 export type ValueKey = RootKey.VALUE | RootKey.ERROR | RootKey.IS_LOADED;
 
-/** @internal */
 export type _SimplifiedState = Partial<BasePath> &
   BaseState<{
     get<K extends RootKey>(
@@ -100,9 +95,6 @@ export type Root<Value = any> = Map<
   Map<RootKey.VALUE_GET_CALLBACK_SET, (path: Key[]) => CallbackSet> &
   Map<RootKey.VALUE, any>;
 
-/** @internal */
-export type Listener = (state: AnyAsyncState) => void | (() => void);
-
 export type AsyncRoot<Value = any, Error = any> = Root<Value> &
   Map<RootKey.ERROR, Error> &
   Map<RootKey.ERROR_CALLBACK_SET, CallbackSet> &
@@ -132,6 +124,12 @@ type InnerState<R> = BaseState<R> & Partial<BasePath>;
 export type AnyState<Value = any> = InnerState<
   Root<Value> | AsyncRoot<Value> | LoadableRoot<Value> | PausableRoot<Value>
 >;
+
+type AnyNestedState<T> =
+  | NestedState<T>
+  | AsyncNestedState<T>
+  | LoadableAsyncNestedState<T>
+  | PausableLoadableAsyncNestedState<T>;
 
 export type AnyAsyncState<Value = any, Error = any> = InnerState<
   | AsyncRoot<Value, Error>
@@ -292,3 +290,53 @@ export type PollableStateOptions<T, E = any> = RequestableStateOptions<T, E> &
     interval: number;
     hiddenInterval?: number;
   };
+
+type KeysOfStorage<T, Acc extends any[] = []> =
+  T extends StateStorage<infer Key, infer Item>
+    ? KeysOfStorage<Item, [...Acc, Key]>
+    : Acc;
+
+type GetChild<T, Keys extends any[]> = Keys extends [infer Head, ...infer Tail]
+  ? T extends StateStorage<Head, infer Item>
+    ? GetChild<Item, Tail>
+    : T
+  : T;
+
+type GetNestedStateValue<T> = T extends AnyNestedState<infer V> ? V : never;
+
+type GetState<T> =
+  T extends StateStorage<any, infer Child> ? GetState<Child> : T;
+
+type RebuildChildren<Keys extends any[], V> = Keys extends [
+  ...infer Head,
+  infer Tail,
+]
+  ? RebuildChildren<Head, StateStorage<Tail, V>>
+  : V;
+
+export type StateStorage<K, T> = {
+  get<Keys extends Partial<KeysOfStorage<T>>>(
+    key: K,
+    ...keys: Keys
+  ): GetChild<T, Keys>;
+  path<P extends Path<GetNestedStateValue<GetState<T>>>>(
+    ...path: P
+  ): StateStorage<
+    K,
+    RebuildChildren<
+      KeysOfStorage<T>,
+      GetState<T> extends NestedState<infer V>
+        ? NestedState<Get<V, P>>
+        : GetState<T> extends AsyncNestedState<infer V, infer E>
+          ? AsyncNestedState<Get<V, P>, E>
+          : GetState<T> extends LoadableAsyncNestedState<infer V, infer E>
+            ? LoadableAsyncNestedState<Get<V, P>, E>
+            : GetState<T> extends PausableLoadableAsyncNestedState<
+                  infer V,
+                  infer E
+                >
+              ? PausableLoadableAsyncNestedState<Get<V, P>, E>
+              : never
+    >
+  >;
+};
