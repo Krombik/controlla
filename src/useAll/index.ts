@@ -65,7 +65,7 @@ const useAll = ((...states: (AnyLoadableAsyncState | Falsy)[]) => {
           promises.push(getPromise({ r: root }));
 
           if (root.has(RootKey.LOAD) && !ctx.has(root)) {
-            ctx.set(root, root.get(RootKey.LOAD)!(state.v));
+            ctx.set(root, root.get(RootKey.LOAD)!(state));
           }
         }
 
@@ -85,7 +85,7 @@ const useAll = ((...states: (AnyLoadableAsyncState | Falsy)[]) => {
 
             ctx.delete(root);
           } else {
-            unregister = root.get(RootKey.LOAD)!(state.v);
+            unregister = root.get(RootKey.LOAD)!(state);
           }
         }
 
@@ -106,7 +106,7 @@ const useAll = ((...states: (AnyLoadableAsyncState | Falsy)[]) => {
 
   return values;
 }) as {
-  <S extends (AnyAsyncState | Falsy)[]>(...states: S): ValuesOf<S>;
+  <const S extends (AnyAsyncState | Falsy)[]>(...states: S): ValuesOf<S>;
 };
 
 export default useAll;

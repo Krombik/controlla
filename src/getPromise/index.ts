@@ -1,7 +1,9 @@
-import { AnyAsyncState, RootKey } from '../types';
+import { AnyAsyncState, NOT_LOADED, RootKey } from '../types';
 import { EMPTY_ARR } from '../utils/constants';
 
-const getPromise = <T>(state: AnyAsyncState<T>): Promise<T> => {
+const getPromise = <T>(
+  state: AnyAsyncState<T>
+): Promise<Exclude<T, typeof NOT_LOADED>> => {
   const root = state.r;
 
   const path = state.p;

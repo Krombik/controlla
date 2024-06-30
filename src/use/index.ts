@@ -1,5 +1,11 @@
 import { useContext, useLayoutEffect, useState } from 'react';
-import { AnyAsyncState, AnyLoadableAsyncState, Falsy, RootKey } from '../types';
+import {
+  AnyAsyncState,
+  AnyLoadableAsyncState,
+  Falsy,
+  RootKey,
+  NOT_LOADED,
+} from '../types';
 import useNoop from '../utils/useNoop';
 import UseContext from '../utils/UseContext';
 import onValueChange from '../onValueChange';
@@ -35,7 +41,7 @@ const use = ((state: AnyLoadableAsyncState | Falsy) => {
 
             ctx.delete(root);
           } else {
-            unregister = root.get(RootKey.LOAD)!(state.v);
+            unregister = root.get(RootKey.LOAD)!(state);
           }
         }
 
@@ -56,7 +62,7 @@ const use = ((state: AnyLoadableAsyncState | Falsy) => {
     }
 
     if (root.has(RootKey.LOAD) && !ctx.has(root)) {
-      ctx.set(root, root.get(RootKey.LOAD)!(state.v));
+      ctx.set(root, root.get(RootKey.LOAD)!(state));
     }
 
     throw getPromise({ r: root });
@@ -66,7 +72,9 @@ const use = ((state: AnyLoadableAsyncState | Falsy) => {
 }) as {
   <S extends AnyAsyncState | Falsy>(
     state: S
-  ): S extends AnyAsyncState<infer T> ? T : undefined;
+  ): S extends AnyAsyncState<infer T>
+    ? Exclude<T, typeof NOT_LOADED>
+    : undefined;
 };
 
 export default use;

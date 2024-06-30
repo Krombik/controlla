@@ -1,19 +1,18 @@
 import setError from '../setError';
 import setValue from '../setValue';
-import { AnyLoadableAsyncState } from '../types';
+import { LoadableAsyncStateOptions } from '../types';
 import becomingOnline from './becomingOnline';
-import { EMPTY_ARR, RESOLVED_PROMISE } from './constants';
+import { RESOLVED_PROMISE } from './constants';
 
-const createFetcher =
-  (
-    fetcher: (arg: any) => Promise<any>,
-    shouldRetry: ((err: any, attempt: number) => number) | undefined,
-    load: (
-      cancelPromise: Promise<void>,
-      fetch: () => Promise<boolean | void>
-    ) => void | Promise<void>
-  ) =>
-  (state: AnyLoadableAsyncState) => {
+const createFetcher = (
+  fetcher: (...args: any[]) => Promise<any>,
+  shouldRetry: ((err: any, attempt: number) => number) | undefined,
+  load: (
+    cancelPromise: Promise<void>,
+    fetch: () => Promise<boolean | void>
+  ) => void | Promise<void>
+): LoadableAsyncStateOptions<any>['load'] =>
+  function (...args: any[]) {
     let attempt = 0;
 
     let isRunning = true;
@@ -22,11 +21,11 @@ const createFetcher =
 
     const retriableFetcher = (): Promise<boolean | void> =>
       isRunning
-        ? fetcher(state.v).then(
+        ? fetcher(...args).then(
             (value) => {
               attempt = 0;
 
-              setValue({ r: state.r, p: EMPTY_ARR }, value);
+              setValue(this, value);
 
               return isRunning;
             },
@@ -48,7 +47,7 @@ const createFetcher =
                   }
                 }
 
-                setError(state, err);
+                setError(this, err);
               }
             }
           )

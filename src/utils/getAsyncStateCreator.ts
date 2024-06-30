@@ -6,6 +6,7 @@ import {
   RootKey,
   State,
 } from '../types';
+import { EMPTY_ARR } from './constants';
 import executeSetters from './executeSetters';
 import setIsLoaded from './setIsLoaded';
 
@@ -18,7 +19,7 @@ const getAsyncStateCreator =
     pause,
     resume,
     loadingTimeout,
-  }: Partial<PausableLoadableAsyncStateOptions<any>>) => {
+  }: Partial<PausableLoadableAsyncStateOptions<any, any, any[]>>) => {
     const state = createState(value) as AnyAsyncState;
 
     const root = state.r as PausableRoot;
@@ -66,7 +67,7 @@ const getAsyncStateCreator =
 
         _setValue(nextValue, rootValue, isSet, path, isError);
 
-        setIsLoaded(state, isLoaded);
+        setIsLoaded({ r: root } as AnyAsyncState, isLoaded);
       }
     );
 
@@ -83,7 +84,7 @@ const getAsyncStateCreator =
         }
       };
 
-      root.set(RootKey.LOAD, (arg, force) => {
+      root.set(RootKey.LOAD, (state, force) => {
         if (isFree && (force || !isLoaded)) {
           setIsLoaded(state, (isLoaded = isFree = false));
 
@@ -93,7 +94,10 @@ const getAsyncStateCreator =
             }, loadingTimeout);
           }
 
-          unlisten = load(arg);
+          unlisten = load.apply(
+            { ...state, p: EMPTY_ARR },
+            state.a || EMPTY_ARR
+          );
         }
 
         count++;

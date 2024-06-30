@@ -1,6 +1,9 @@
 export type Key = number | string;
 
-type Get<O, Path> = Path extends [infer Key, ...infer Rest]
+type Get<K, Path, O = Exclude<K, typeof NOT_LOADED>> = Path extends [
+  infer Key,
+  ...infer Rest,
+]
   ? Key extends keyof NonNullable<O>
     ? Get<
         | NonNullable<O>[Key]
@@ -22,19 +25,15 @@ type NestedPath<O, K extends keyof O> = [] extends O
       [Key in K]: Partial<[Key, ...Path<O[Key]>]>;
     }[K];
 
-type Path<O> = O extends any[] | Record<any, any>
+type Path<K, O = Exclude<K, typeof NOT_LOADED>> = O extends
+  | any[]
+  | Record<any, any>
   ? NestedPath<Required<O>, O extends any[] ? Indexes<O> : keyof O>
   : [];
 
 type Nill = null | undefined;
 
 export type Falsy = Nill | false | 0 | '';
-
-type NillChecker<V, T> = [Extract<V, Nill>] extends [never]
-  ? T
-  : [Exclude<V, Nill>] extends [never]
-    ? undefined
-    : T | undefined;
 
 export type CallbackSet = Set<(value: any) => void>;
 
@@ -80,7 +79,7 @@ export type NestedMap = Map<[], CallbackSet> & Map<Key, NestedMap>;
 
 export type Root<Value = any> = Map<
   RootKey.VALUE_GET,
-  (rootValue: any, path: Key[]) => Value
+  (rootValue: any, path: Key[]) => Exclude<Value, typeof NOT_LOADED>
 > &
   Map<
     RootKey.VALUE_SET,
@@ -95,7 +94,9 @@ export type Root<Value = any> = Map<
   Map<RootKey.VALUE_GET_CALLBACK_SET, (path: Key[]) => CallbackSet> &
   Map<RootKey.VALUE, any>;
 
-export type AsyncRoot<Value = any, Error = any> = Root<Value> &
+export type AsyncRoot<Value = any, Error = any> = Root<
+  Value | typeof NOT_LOADED
+> &
   Map<RootKey.ERROR, Error> &
   Map<RootKey.ERROR_CALLBACK_SET, CallbackSet> &
   Map<RootKey.IS_LOADED, boolean> &
@@ -103,7 +104,13 @@ export type AsyncRoot<Value = any, Error = any> = Root<Value> &
   Map<RootKey.PROMISE, Promise<Value>>;
 
 export type LoadableRoot<Value = any, Error = any> = AsyncRoot<Value, Error> &
-  Map<RootKey.LOAD, (arg: any, force?: boolean) => () => void> &
+  Map<
+    RootKey.LOAD,
+    (
+      state: InnerState<LoadableRoot<Value, Error>> & Partial<Arguments<any[]>>,
+      force?: boolean
+    ) => () => void
+  > &
   Map<RootKey.SLOW_LOADING_CALLBACK_SET, Set<() => void>>;
 
 export type PausableRoot<Value = any, Error = any> = LoadableRoot<
@@ -113,11 +120,14 @@ export type PausableRoot<Value = any, Error = any> = LoadableRoot<
   Map<RootKey.PAUSE, () => void> &
   Map<RootKey.RESUME, () => void>;
 
-type BaseState<R> = {
+type Arguments<Keys extends any[]> = {
+  readonly a: Keys;
+};
+
+type BaseState<R, K extends any[] = []> = {
   /** root */
   readonly r: R;
-  readonly v?: any;
-};
+} & (K['length'] extends 0 ? {} : Arguments<K>);
 
 type InnerState<R> = BaseState<R> & Partial<BasePath>;
 
@@ -125,11 +135,7 @@ export type AnyState<Value = any> = InnerState<
   Root<Value> | AsyncRoot<Value> | LoadableRoot<Value> | PausableRoot<Value>
 >;
 
-type AnyNestedState<T> =
-  | NestedState<T>
-  | AsyncNestedState<T>
-  | LoadableAsyncNestedState<T>
-  | PausableLoadableAsyncNestedState<T>;
+type AnyNestedState<T = any> = AnyState<T> & BasePath;
 
 export type AnyAsyncState<Value = any, Error = any> = InnerState<
   | AsyncRoot<Value, Error>
@@ -146,119 +152,76 @@ export type BasePath = {
   readonly p: Key[];
 };
 
-export type State<Value = any> = BaseState<Root<Value>>;
-
-export type AsyncState<Value = any, Error = any> = BaseState<
-  AsyncRoot<Value, Error>
+export type State<Value = any, Keys extends any[] = []> = BaseState<
+  Root<Value>,
+  Keys
 >;
 
-export type LoadableAsyncState<Value = any, Error = any> = BaseState<
-  LoadableRoot<Value, Error>
->;
+export type AsyncState<
+  Value = any,
+  Error = any,
+  Keys extends any[] = [],
+> = BaseState<AsyncRoot<Value | typeof NOT_LOADED, Error>, Keys>;
 
-export type PausableLoadableAsyncState<Value = any, Error = any> = BaseState<
-  PausableRoot<Value, Error>
->;
+export type LoadableAsyncState<
+  Value = any,
+  Error = any,
+  Keys extends any[] = [],
+> = BaseState<LoadableRoot<Value | typeof NOT_LOADED, Error>, Keys>;
 
-export type NestedState<Value = any> = BasePath &
-  BaseState<Root<Value>> & {
-    path<P extends Path<Value>>(...path: P): NestedState<Get<Value, P>>;
+export type PausableLoadableAsyncState<
+  Value = any,
+  Error = any,
+  Keys extends any[] = [],
+> = BaseState<PausableRoot<Value | typeof NOT_LOADED, Error>, Keys>;
+
+export type NestedState<Value = any, Keys extends any[] = []> = BasePath &
+  BaseState<Root<Value>, Keys> & {
+    path<P extends Path<Value>>(...path: P): NestedState<Get<Value, P>, Keys>;
   };
 
-export type AsyncNestedState<Value = any, Error = any> = BasePath &
-  BaseState<AsyncRoot<Value, Error>> & {
+export declare const NOT_LOADED: unique symbol;
+
+export type AsyncNestedState<
+  Value = any,
+  Error = any,
+  Keys extends any[] = [],
+> = BasePath &
+  BaseState<AsyncRoot<Value | typeof NOT_LOADED, Error>, Keys> & {
     path<P extends Path<Value>>(
       ...path: P
-    ): AsyncNestedState<Get<Value, P>, Error>;
+    ): AsyncNestedState<Get<Value, P>, Error, Keys>;
   };
 
-export type LoadableAsyncNestedState<Value = any, Error = any> = BasePath &
-  BaseState<LoadableRoot<Value, Error>> & {
+export type LoadableAsyncNestedState<
+  Value = any,
+  Error = any,
+  Keys extends any[] = [],
+> = BasePath &
+  BaseState<LoadableRoot<Value | typeof NOT_LOADED, Error>, Keys> & {
     path<P extends Path<Value>>(
       ...path: P
-    ): LoadableAsyncNestedState<Get<Value, P>, Error>;
+    ): LoadableAsyncNestedState<Get<Value, P>, Error, Keys>;
   };
 
 export type PausableLoadableAsyncNestedState<
   Value = any,
   Error = any,
+  Keys extends any[] = [],
 > = BasePath &
-  BaseState<PausableRoot<Value, Error>> & {
+  BaseState<PausableRoot<Value | typeof NOT_LOADED, Error>, Keys> & {
     path<P extends Path<Value>>(
       ...path: P
-    ): PausableLoadableAsyncNestedState<Get<Value, P>, Error>;
+    ): PausableLoadableAsyncNestedState<Get<Value, P>, Error, Keys>;
   };
 
-export type VersionedState<Version, Value = any> = {
-  of<V extends Version | Nill>(version: V): NillChecker<V, State<Value>>;
-};
-
-export type VersionedAsyncState<Version, Value = any, Error = any> = {
-  of<V extends Version | Nill>(
-    version: V
-  ): NillChecker<V, AsyncState<Value, Error>>;
-};
-
-export type VersionedLoadableState<Version, Value = any, Error = any> = {
-  of<V extends Version | Nill>(
-    version: V
-  ): NillChecker<V, LoadableAsyncState<Value, Error>>;
-};
-
-export type VersionedPausableAsyncState<Version, Value = any, Error = any> = {
-  of<V extends Version | Nill>(
-    version: V
-  ): NillChecker<V, PausableLoadableAsyncState<Value, Error>>;
-};
-
-export type VersionedNestedState<Version, Value = any> = BasePath & {
-  of<V extends Version | Nill>(version: V): NillChecker<V, NestedState<Value>>;
-  path<P extends Path<Value>>(
-    ...path: P
-  ): VersionedNestedState<Version, Get<Value, P>>;
-};
-
-export type VersionedNestedAsyncState<
-  Version,
-  Value = any,
-  Error = any,
-> = BasePath & {
-  of<V extends Version | Nill>(
-    version: V
-  ): NillChecker<V, AsyncNestedState<Value, Error>>;
-  path<P extends Path<Value>>(
-    ...path: P
-  ): VersionedNestedAsyncState<Version, Get<Value, P>, Error>;
-};
-
-export type VersionedNestedLoadableState<
-  Version,
-  Value = any,
-  Error = any,
-> = BasePath & {
-  of<V extends Version | Nill>(
-    version: V
-  ): NillChecker<V, LoadableAsyncNestedState<Value, Error>>;
-  path<P extends Path<Value>>(
-    ...path: P
-  ): VersionedNestedLoadableState<Version, Get<Value, P>, Error>;
-};
-
-export type VersionedNestedPollableState<
-  Version,
-  Value = any,
-  Error = any,
-> = BasePath & {
-  of<V extends Version | Nill>(
-    version: V
-  ): NillChecker<V, PausableLoadableAsyncNestedState<Value, Error>>;
-  path<P extends Path<Value>>(
-    ...path: P
-  ): VersionedNestedPollableState<Version, Get<Value, P>, Error>;
-};
-
 export type ValuesOf<T> = T extends [infer Head, ...infer Tail]
-  ? [Head extends AnyAsyncState<infer K> ? K : undefined, ...ValuesOf<Tail>]
+  ? [
+      Head extends AnyAsyncState<infer K>
+        ? Exclude<K, typeof NOT_LOADED>
+        : undefined,
+      ...ValuesOf<Tail>,
+    ]
   : [];
 
 export type AsyncStateOptions<T> = {
@@ -266,26 +229,37 @@ export type AsyncStateOptions<T> = {
   isLoaded?(value: T, prevValue: T): boolean;
 };
 
-export type LoadableAsyncStateOptions<T> = AsyncStateOptions<T> & {
-  load(state: AnyLoadableAsyncState): void | (() => void);
+export type LoadableAsyncStateOptions<
+  T,
+  E = any,
+  Keys extends any[] = [],
+> = AsyncStateOptions<T> & {
+  load(this: AnyLoadableAsyncState<T, E>, ...keys: Keys): void | (() => void);
   loadingTimeout?: number;
 };
 
-export type PausableLoadableAsyncStateOptions<T> =
-  LoadableAsyncStateOptions<T> & {
-    pause(): void;
-    resume(): void;
-  };
+export type PausableLoadableAsyncStateOptions<
+  T,
+  E = any,
+  Keys extends any[] = [],
+> = LoadableAsyncStateOptions<T, E, Keys> & {
+  pause(): void;
+  resume(): void;
+};
 
-export type RequestableStateOptions<T, E = any> = Pick<
+export type RequestableStateOptions<T, E = any, Keys extends any[] = []> = Pick<
   LoadableAsyncStateOptions<T>,
   'value' | 'loadingTimeout'
 > & {
-  fetcher(): Promise<T>;
+  load(...args: Keys): Promise<T>;
   shouldRetryOnError?(err: E, attempt: number): number;
 };
 
-export type PollableStateOptions<T, E = any> = RequestableStateOptions<T, E> &
+export type PollableStateOptions<
+  T,
+  E = any,
+  Keys extends any[] = [],
+> = RequestableStateOptions<T, E, Keys> &
   Pick<AsyncStateOptions<T>, 'isLoaded'> & {
     interval: number;
     hiddenInterval?: number;
@@ -307,36 +281,38 @@ type GetNestedStateValue<T> = T extends AnyNestedState<infer V> ? V : never;
 type GetState<T> =
   T extends StateStorage<any, infer Child> ? GetState<Child> : T;
 
-type RebuildChildren<Keys extends any[], V> = Keys extends [
+export type NestedStateStorage<Keys extends any[], V> = Keys extends [
   ...infer Head,
   infer Tail,
 ]
-  ? RebuildChildren<Head, StateStorage<Tail, V>>
+  ? NestedStateStorage<Head, StateStorage<Tail, V, Head>>
   : V;
 
-export type StateStorage<K, T> = {
-  get<Keys extends Partial<KeysOfStorage<T>>>(
-    key: K,
-    ...keys: Keys
-  ): GetChild<T, Keys>;
-  path<P extends Path<GetNestedStateValue<GetState<T>>>>(
-    ...path: P
-  ): StateStorage<
-    K,
-    RebuildChildren<
-      KeysOfStorage<T>,
-      GetState<T> extends NestedState<infer V>
-        ? NestedState<Get<V, P>>
-        : GetState<T> extends AsyncNestedState<infer V, infer E>
-          ? AsyncNestedState<Get<V, P>, E>
-          : GetState<T> extends LoadableAsyncNestedState<infer V, infer E>
-            ? LoadableAsyncNestedState<Get<V, P>, E>
-            : GetState<T> extends PausableLoadableAsyncNestedState<
-                  infer V,
-                  infer E
-                >
-              ? PausableLoadableAsyncNestedState<Get<V, P>, E>
-              : never
-    >
-  >;
-};
+export type StateStorage<K, T, Keys extends any[] = any[]> = BasePath &
+  Arguments<Keys> & {
+    get<Keys extends Partial<KeysOfStorage<T>>>(
+      key: K,
+      ...keys: Keys
+    ): GetChild<T, Keys>;
+    path<P extends Path<GetNestedStateValue<GetState<T>>>>(
+      ...path: P
+    ): StateStorage<
+      K,
+      NestedStateStorage<
+        KeysOfStorage<T>,
+        GetState<T> extends NestedState<infer V>
+          ? NestedState<Get<V, P>>
+          : GetState<T> extends AsyncNestedState<infer V, infer E>
+            ? AsyncNestedState<Get<V, P>, E>
+            : GetState<T> extends LoadableAsyncNestedState<infer V, infer E>
+              ? LoadableAsyncNestedState<Get<V, P>, E>
+              : GetState<T> extends PausableLoadableAsyncNestedState<
+                    infer V,
+                    infer E
+                  >
+                ? PausableLoadableAsyncNestedState<Get<V, P>, E>
+                : never
+      >,
+      Keys
+    >;
+  };

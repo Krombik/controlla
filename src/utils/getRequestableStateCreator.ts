@@ -5,11 +5,11 @@ import type getAsyncStateCreator from './getAsyncStateCreator';
 
 const getRequestableStateCreator =
   (createAsyncState: ReturnType<typeof getAsyncStateCreator>) =>
-  (options: RequestableStateOptions<any>) =>
+  (options: RequestableStateOptions<any, any>) =>
     createAsyncState({
       ...options,
       load: createFetcher(
-        options.fetcher,
+        options.load,
         options.shouldRetryOnError,
         (cancelPromise, load) => {
           Promise.any([becomingOnline(), cancelPromise]).then(load);

@@ -1,9 +1,9 @@
-import { AnyState, AsyncRoot, RootKey } from '../types';
+import { AnyState, AsyncRoot, RootKey, NOT_LOADED } from '../types';
 import deleteError from '../utils/deleteError';
 
 const setValue = <S extends AnyState>(
   state: S,
-  value: S extends AnyState<infer T> ? T : never
+  value: S extends AnyState<infer T> ? Exclude<T, typeof NOT_LOADED> : never
 ) => {
   const root = state.r;
 

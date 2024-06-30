@@ -1,5 +1,12 @@
 import { useLayoutEffect, useState } from 'react';
-import { AnyLoadableAsyncState, AnyState, Falsy, RootKey } from '../types';
+import {
+  AnyAsyncState,
+  AnyLoadableAsyncState,
+  AnyState,
+  Falsy,
+  RootKey,
+  NOT_LOADED,
+} from '../types';
 import onValueChange from '../onValueChange';
 import getValue from '../getValue';
 import useNoop from '../utils/useNoop';
@@ -18,7 +25,7 @@ const useValue = ((state: AnyLoadableAsyncState | Falsy) => {
       });
 
       if (root.has(RootKey.LOAD)) {
-        const unregister = root.get(RootKey.LOAD)!(state.v);
+        const unregister = root.get(RootKey.LOAD)!(state);
 
         return () => {
           unlistenValue();
@@ -37,7 +44,11 @@ const useValue = ((state: AnyLoadableAsyncState | Falsy) => {
 }) as {
   <S extends AnyState | Falsy>(
     state: S
-  ): S extends AnyState<infer T> ? T : undefined;
+  ): S extends AnyAsyncState<infer T>
+    ? [Extract<T, typeof NOT_LOADED>] extends [never]
+      ? T
+      : Exclude<T, typeof NOT_LOADED> | undefined
+    : undefined;
 };
 
 export default useValue;

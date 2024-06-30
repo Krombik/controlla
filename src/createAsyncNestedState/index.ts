@@ -10,14 +10,13 @@ import {
 import getAsyncStateCreator from '../utils/getAsyncStateCreator';
 
 const createAsyncNestedState = getAsyncStateCreator(createNestedState) as {
-  (options: {
-    [key in keyof PausableLoadableAsyncStateOptions<any>]: never;
-  }): never;
-  <T>(options?: AsyncStateOptions<T>): AsyncNestedState<T>;
-  <T>(options: LoadableAsyncStateOptions<T>): LoadableAsyncNestedState<T>;
-  <T>(
-    options: PausableLoadableAsyncStateOptions<T>
-  ): PausableLoadableAsyncNestedState<T>;
+  <T, E = any>(options?: AsyncStateOptions<T>): AsyncNestedState<T, E>;
+  <T, E = any>(
+    options: LoadableAsyncStateOptions<T, E>
+  ): LoadableAsyncNestedState<T, E>;
+  <T, E = any>(
+    options: PausableLoadableAsyncStateOptions<T, E>
+  ): PausableLoadableAsyncNestedState<T, E>;
 };
 
 export default createAsyncNestedState;

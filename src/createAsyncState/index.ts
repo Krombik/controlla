@@ -10,14 +10,13 @@ import {
 import getAsyncStateCreator from '../utils/getAsyncStateCreator';
 
 const createAsyncState = getAsyncStateCreator(createState) as {
-  (options: {
-    [key in keyof PausableLoadableAsyncStateOptions<any>]: never;
-  }): never;
-  <T>(options?: AsyncStateOptions<T>): AsyncState<T>;
-  <T>(options: LoadableAsyncStateOptions<T>): LoadableAsyncState<T>;
-  <T>(
-    options: PausableLoadableAsyncStateOptions<T>
-  ): PausableLoadableAsyncState<T>;
+  <T, E = any>(options?: AsyncStateOptions<T>): AsyncState<T, E>;
+  <T, E = any>(
+    options: PausableLoadableAsyncStateOptions<T, E>
+  ): PausableLoadableAsyncState<T, E>;
+  <T, E = any>(
+    options: LoadableAsyncStateOptions<T, E>
+  ): LoadableAsyncState<T, E>;
 };
 
 export default createAsyncState;

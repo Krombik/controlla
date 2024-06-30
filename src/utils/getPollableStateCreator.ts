@@ -6,7 +6,7 @@ import { changingSleep, commonSleep, handleGetInterval } from './interval';
 
 const getPollableStateCreator =
   (createAsyncState: ReturnType<typeof getAsyncStateCreator>) =>
-  (options: PollableStateOptions<any>) => {
+  (options: PollableStateOptions<any, any, any[]>) => {
     let sleep: (getInterval: () => number) => Promise<void>;
 
     let getInterval: () => number;
@@ -20,7 +20,7 @@ const getPollableStateCreator =
     const state = createAsyncState({
       ...options,
       load: createFetcher(
-        options.fetcher,
+        options.load,
         options.shouldRetryOnError,
         async (cancelPromise, load) => {
           do {
