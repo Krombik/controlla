@@ -1,3 +1,19 @@
 export const EMPTY_ARR: [] = [];
 
 export const RESOLVED_PROMISE = Promise.resolve();
+
+export const enum RootKey {
+  VALUE,
+  VALUE_GET,
+  VALUE_SET,
+  VALUE_GET_CALLBACK_SET,
+  ERROR,
+  ERROR_CALLBACK_SET,
+  PROMISE,
+  IS_LOADED,
+  IS_LOADED_CALLBACK_SET,
+  LOAD,
+  SLOW_LOADING_CALLBACK_SET,
+  PAUSE,
+  RESUME,
+}

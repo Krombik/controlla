@@ -1,4 +1,5 @@
-import { AnyState, AsyncRoot, RootKey, NOT_LOADED } from '../types';
+import type { AnyState, AsyncRoot, NOT_LOADED } from '../types';
+import { RootKey } from '../utils/constants';
 import deleteError from '../utils/deleteError';
 
 const setValue = <S extends AnyState>(
@@ -13,7 +14,7 @@ const setValue = <S extends AnyState>(
     typeof value != 'function' ? value : value(rootValue),
     rootValue,
     true,
-    state.p!,
+    state._p!,
     false
   );
 

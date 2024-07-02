@@ -1,4 +1,4 @@
-import { Component, ContextType } from 'react';
+import { Component, type ContextType } from 'react';
 import UseContext from '../utils/UseContext';
 
 const ORIGINAL_RENDER = Symbol();

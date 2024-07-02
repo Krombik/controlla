@@ -1,5 +1,8 @@
 import createAsyncState from '../createAsyncState';
-import { PausableLoadableAsyncState, PollableStateOptions } from '../types';
+import type {
+  PausableLoadableAsyncState,
+  PollableStateOptions,
+} from '../types';
 import getPollableStateCreator from '../utils/getPollableStateCreator';
 
 const createPollableState = getPollableStateCreator(createAsyncState) as {

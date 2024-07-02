@@ -1,5 +1,5 @@
 import createNestedState from '../createNestedState';
-import {
+import type {
   AsyncNestedState,
   AsyncStateOptions,
   LoadableAsyncNestedState,

@@ -1,4 +1,4 @@
-import { RequestableStateOptions } from '../types';
+import type { RequestableStateOptions } from '../types';
 import becomingOnline from './becomingOnline';
 import createFetcher from './createFetcher';
 import type getAsyncStateCreator from './getAsyncStateCreator';

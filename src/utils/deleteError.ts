@@ -1,4 +1,5 @@
-import { AsyncRoot, RootKey } from '../types';
+import type { AsyncRoot } from '../types';
+import { RootKey } from './constants';
 import executeSetters from './executeSetters';
 
 const deleteError = (root: AsyncRoot) => {

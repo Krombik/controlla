@@ -1,4 +1,4 @@
-import { Key, NestedMap } from '../types';
+import type { Key, NestedMap } from '../types';
 import alwaysFalse from './alwaysFalse';
 import { EMPTY_ARR } from './constants';
 import executeSetters from './executeSetters';

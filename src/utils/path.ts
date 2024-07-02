@@ -1,10 +1,10 @@
-import { BasePath } from '../types';
+import type { BasePath } from '../types';
 
 function path<T extends BasePath>(this: T, ...path: any[]): T {
-  const prevPath = this.p;
+  const prevPath = this._p;
 
   return path.length
-    ? { ...this, p: prevPath.length ? prevPath.concat(...path) : path }
+    ? { ...this, _p: prevPath.length ? prevPath.concat(...path) : path }
     : this;
 }
 

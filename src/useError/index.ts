@@ -1,6 +1,6 @@
 import getError from '../getError';
 import onError from '../onError';
-import { AnyAsyncState, Falsy } from '../types';
+import type { AnyAsyncState, Falsy } from '../types';
 import createUseValueOf from '../utils/createUseValueOf';
 
 const useError = createUseValueOf(onError, getError) as {

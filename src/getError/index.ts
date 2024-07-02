@@ -1,4 +1,5 @@
-import { AnyAsyncState, RootKey } from '../types';
+import type { AnyAsyncState } from '../types';
+import { RootKey } from '../utils/constants';
 import createGetValueOf from '../utils/createGetValueOf';
 
 const getError = createGetValueOf(RootKey.ERROR) as {

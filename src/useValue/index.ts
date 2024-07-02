@@ -1,15 +1,15 @@
 import { useLayoutEffect, useState } from 'react';
-import {
+import type {
   AnyAsyncState,
   AnyLoadableAsyncState,
   AnyState,
   Falsy,
-  RootKey,
   NOT_LOADED,
 } from '../types';
 import onValueChange from '../onValueChange';
 import getValue from '../getValue';
 import useNoop from '../utils/useNoop';
+import { RootKey } from '../utils/constants';
 
 const useValue = ((state: AnyLoadableAsyncState | Falsy) => {
   if (state) {
@@ -35,7 +35,7 @@ const useValue = ((state: AnyLoadableAsyncState | Falsy) => {
       }
 
       return unlistenValue;
-    }, [root, state.p && state.p.join('.')]);
+    }, [root, state._p && state._p.join('.')]);
 
     return getValue(state);
   }

@@ -1,3 +1,6 @@
+import type { PrimitiveOrNested } from 'keyweaver';
+import type { RootKey } from './utils/constants';
+
 export type Key = number | string;
 
 type Get<K, Path, O = Exclude<K, typeof NOT_LOADED>> = Path extends [
@@ -36,22 +39,6 @@ type Nill = null | undefined;
 export type Falsy = Nill | false | 0 | '';
 
 export type CallbackSet = Set<(value: any) => void>;
-
-export const enum RootKey {
-  VALUE,
-  VALUE_GET,
-  VALUE_SET,
-  VALUE_GET_CALLBACK_SET,
-  ERROR,
-  ERROR_CALLBACK_SET,
-  PROMISE,
-  IS_LOADED,
-  IS_LOADED_CALLBACK_SET,
-  LOAD,
-  SLOW_LOADING_CALLBACK_SET,
-  PAUSE,
-  RESUME,
-}
 
 export type SetKey =
   | RootKey.ERROR_CALLBACK_SET
@@ -120,7 +107,7 @@ export type PausableRoot<Value = any, Error = any> = LoadableRoot<
   Map<RootKey.PAUSE, () => void> &
   Map<RootKey.RESUME, () => void>;
 
-type Arguments<Keys extends any[]> = {
+type Arguments<Keys extends PrimitiveOrNested[]> = {
   readonly a: Keys;
 };
 
@@ -135,8 +122,6 @@ export type AnyState<Value = any> = InnerState<
   Root<Value> | AsyncRoot<Value> | LoadableRoot<Value> | PausableRoot<Value>
 >;
 
-type AnyNestedState<T = any> = AnyState<T> & BasePath;
-
 export type AnyAsyncState<Value = any, Error = any> = InnerState<
   | AsyncRoot<Value, Error>
   | LoadableRoot<Value, Error>
@@ -148,8 +133,8 @@ export type AnyLoadableAsyncState<Value = any, Error = any> = InnerState<
 >;
 
 export type BasePath = {
-  /** path */
-  readonly p: Key[];
+  /** @internal */
+  readonly _p: Key[];
 };
 
 export type State<Value = any, Keys extends any[] = []> = BaseState<
@@ -225,94 +210,100 @@ export type ValuesOf<T> = T extends [infer Head, ...infer Tail]
   : [];
 
 export type AsyncStateOptions<T> = {
-  value?: T;
-  isLoaded?(value: T, prevValue: T): boolean;
+  value?: T | (() => T);
+  isLoaded?(value: T, prevValue: T | undefined): boolean;
 };
 
-export type LoadableAsyncStateOptions<
-  T,
-  E = any,
-  Keys extends any[] = [],
-> = AsyncStateOptions<T> & {
-  load(this: AnyLoadableAsyncState<T, E>, ...keys: Keys): void | (() => void);
+export type LoadableAsyncStateOptions<T, E = any> = AsyncStateOptions<T> & {
+  load(this: AnyLoadableAsyncState<T, E>): void | (() => void);
   loadingTimeout?: number;
 };
 
 export type PausableLoadableAsyncStateOptions<
   T,
   E = any,
-  Keys extends any[] = [],
-> = LoadableAsyncStateOptions<T, E, Keys> & {
+> = LoadableAsyncStateOptions<T, E> & {
   pause(): void;
   resume(): void;
 };
 
-export type RequestableStateOptions<T, E = any, Keys extends any[] = []> = Pick<
+export type RequestableStateOptions<T, E = any> = Pick<
   LoadableAsyncStateOptions<T>,
   'value' | 'loadingTimeout'
 > & {
-  load(...args: Keys): Promise<T>;
+  load(): Promise<T>;
   shouldRetryOnError?(err: E, attempt: number): number;
 };
 
-export type PollableStateOptions<
-  T,
-  E = any,
-  Keys extends any[] = [],
-> = RequestableStateOptions<T, E, Keys> &
+export type PollableStateOptions<T, E = any> = RequestableStateOptions<T, E> &
   Pick<AsyncStateOptions<T>, 'isLoaded'> & {
     interval: number;
     hiddenInterval?: number;
   };
 
-type KeysOfStorage<T, Acc extends any[] = []> =
-  T extends StateStorage<infer Key, infer Item>
+type KeysOfStorage<T, Acc extends PrimitiveOrNested[] = []> =
+  T extends StateStorage<infer Key extends PrimitiveOrNested, infer Item>
     ? KeysOfStorage<Item, [...Acc, Key]>
     : Acc;
 
-type GetChild<T, Keys extends any[]> = Keys extends [infer Head, ...infer Tail]
+type GetChild<T, Keys extends any[]> = Keys extends [
+  infer Head extends PrimitiveOrNested,
+  ...infer Tail,
+]
   ? T extends StateStorage<Head, infer Item>
     ? GetChild<Item, Tail>
     : T
   : T;
 
-type GetNestedStateValue<T> = T extends AnyNestedState<infer V> ? V : never;
+type GetNestedStateValue<T> = T extends AnyState<infer V> ? V : never;
 
 type GetState<T> =
   T extends StateStorage<any, infer Child> ? GetState<Child> : T;
 
-export type NestedStateStorage<Keys extends any[], V> = Keys extends [
-  ...infer Head,
-  infer Tail,
+export type NestedStateStorage<
+  Keys extends PrimitiveOrNested[],
+  T,
+> = Keys extends [
+  ...infer Head extends PrimitiveOrNested[],
+  infer Tail extends PrimitiveOrNested,
 ]
-  ? NestedStateStorage<Head, StateStorage<Tail, V, Head>>
-  : V;
+  ? NestedStateStorage<Head, StateStorage<Tail, T, Head>>
+  : T;
 
-export type StateStorage<K, T, Keys extends any[] = any[]> = BasePath &
+export type StateStorage<
+  K extends PrimitiveOrNested,
+  T,
+  Keys extends PrimitiveOrNested[] = [],
+> = BasePath &
   Arguments<Keys> & {
+    /** @internal */
+    _get(keys: any[], index: number): GetChild<T, [any]>;
     get<Keys extends Partial<KeysOfStorage<T>>>(
       key: K,
       ...keys: Keys
     ): GetChild<T, Keys>;
-    path<P extends Path<GetNestedStateValue<GetState<T>>>>(
-      ...path: P
-    ): StateStorage<
-      K,
-      NestedStateStorage<
-        KeysOfStorage<T>,
-        GetState<T> extends NestedState<infer V>
-          ? NestedState<Get<V, P>>
-          : GetState<T> extends AsyncNestedState<infer V, infer E>
-            ? AsyncNestedState<Get<V, P>, E>
-            : GetState<T> extends LoadableAsyncNestedState<infer V, infer E>
-              ? LoadableAsyncNestedState<Get<V, P>, E>
-              : GetState<T> extends PausableLoadableAsyncNestedState<
-                    infer V,
-                    infer E
-                  >
-                ? PausableLoadableAsyncNestedState<Get<V, P>, E>
-                : never
-      >,
-      Keys
-    >;
-  };
+  } & (T extends { path: any }
+    ? {
+        path<P extends Path<GetNestedStateValue<GetState<T>>>>(
+          ...path: P
+        ): StateStorage<
+          K,
+          NestedStateStorage<
+            KeysOfStorage<T>,
+            GetState<T> extends NestedState<infer V>
+              ? NestedState<Get<V, P>>
+              : GetState<T> extends AsyncNestedState<infer V, infer E>
+                ? AsyncNestedState<Get<V, P>, E>
+                : GetState<T> extends LoadableAsyncNestedState<infer V, infer E>
+                  ? LoadableAsyncNestedState<Get<V, P>, E>
+                  : GetState<T> extends PausableLoadableAsyncNestedState<
+                        infer V,
+                        infer E
+                      >
+                    ? PausableLoadableAsyncNestedState<Get<V, P>, E>
+                    : never
+          >,
+          Keys
+        >;
+      }
+    : {});

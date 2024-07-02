@@ -1,4 +1,5 @@
-import { RootKey, SetKey, _SimplifiedState } from '../types';
+import type { SetKey, _SimplifiedState } from '../types';
+import { RootKey } from './constants';
 
 const createOnValueOfChange =
   (setKey: Exclude<SetKey, RootKey.VALUE_GET_CALLBACK_SET>) =>

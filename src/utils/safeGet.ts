@@ -1,4 +1,4 @@
-import { Key } from '../types';
+import type { Key } from '../types';
 
 const safeGet = (value: any, path: Key[]) => {
   const l = path.length;

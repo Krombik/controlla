@@ -1,4 +1,4 @@
-import { AnyAsyncState } from '../types';
+import type { AnyAsyncState } from '../types';
 import deleteError from '../utils/deleteError';
 import deleteValue from '../utils/deleteValue';
 

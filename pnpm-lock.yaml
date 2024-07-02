@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       keyweaver:
-        specifier: ^1.0.0
-        version: 1.0.0
+        specifier: ^1.0.1
+        version: 1.0.1
       lodash.identity:
         specifier: ^3.0.0
         version: 3.0.0
@@ -484,8 +484,8 @@ packages:
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
 
-  keyweaver@1.0.0:
-    resolution: {integrity: sha512-YMBacuj6PVk43ceqsxQTMZ4kDhfojgnJN1u5LyFtu0pHbsnmsM1L4ogJD4SlGaj1zRPQ1rnzrWcsLgrhwegz+g==}
+  keyweaver@1.0.1:
+    resolution: {integrity: sha512-YalXKPsg2sIb3eAj3+mB3ecDN//jKEyiWHrdBL2ImqS6FIlKfsf1oWxe30vqsebUS7XlMsklXdIJFKx4dIINug==}
     engines: {node: '>=10'}
 
   lilconfig@3.0.0:
@@ -1120,7 +1120,7 @@ snapshots:
 
   js-tokens@4.0.0: {}
 
-  keyweaver@1.0.0: {}
+  keyweaver@1.0.1: {}
 
   lilconfig@3.0.0: {}
 

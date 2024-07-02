@@ -1,4 +1,5 @@
-import { AnyLoadableAsyncState, RootKey } from '../types';
+import type { AnyLoadableAsyncState } from '../types';
+import { RootKey } from '../utils/constants';
 import createOnValueOfChange from '../utils/createOnValueOfChange';
 
 const onSlowLoading = createOnValueOfChange(

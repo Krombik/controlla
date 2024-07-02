@@ -1,5 +1,5 @@
 import createAsyncState from '../createAsyncState';
-import { LoadableAsyncState, RequestableStateOptions } from '../types';
+import type { LoadableAsyncState, RequestableStateOptions } from '../types';
 import getRequestableStateCreator from '../utils/getRequestableStateCreator';
 
 const createRequestableState = getRequestableStateCreator(createAsyncState) as {

@@ -1,4 +1,5 @@
-import { Root, RootKey } from '../types';
+import type { Root } from '../types';
+import { RootKey } from './constants';
 
 export const handleGetInterval = (
   interval: number | ((value: any) => number),

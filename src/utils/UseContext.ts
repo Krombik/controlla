@@ -1,5 +1,5 @@
 import { createContext } from 'react';
-import { AsyncRoot } from '../types';
+import type { AsyncRoot } from '../types';
 
 const UseContext = createContext<Map<AsyncRoot, () => void>>(null!);
 

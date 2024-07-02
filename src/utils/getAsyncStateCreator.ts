@@ -1,12 +1,11 @@
-import {
+import type {
   AnyAsyncState,
   NestedState,
   PausableLoadableAsyncStateOptions,
   PausableRoot,
-  RootKey,
   State,
 } from '../types';
-import { EMPTY_ARR } from './constants';
+import { EMPTY_ARR, RootKey } from './constants';
 import executeSetters from './executeSetters';
 import setIsLoaded from './setIsLoaded';
 
@@ -19,7 +18,7 @@ const getAsyncStateCreator =
     pause,
     resume,
     loadingTimeout,
-  }: Partial<PausableLoadableAsyncStateOptions<any, any, any[]>>) => {
+  }: Partial<PausableLoadableAsyncStateOptions<any>>) => {
     const state = createState(value) as AnyAsyncState;
 
     const root = state.r as PausableRoot;
@@ -95,7 +94,7 @@ const getAsyncStateCreator =
           }
 
           unlisten = load.apply(
-            { ...state, p: EMPTY_ARR },
+            { ...state, _p: EMPTY_ARR },
             state.a || EMPTY_ARR
           );
         }

@@ -1,5 +1,5 @@
-import { Root, RootKey } from '../types';
-import { EMPTY_ARR } from './constants';
+import type { Root } from '../types';
+import { EMPTY_ARR, RootKey } from './constants';
 
 const deleteValue = (root: Root, isError: boolean) => {
   if (root.has(RootKey.VALUE)) {

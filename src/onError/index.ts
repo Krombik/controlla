@@ -1,4 +1,5 @@
-import { AnyAsyncState, RootKey } from '../types';
+import type { AnyAsyncState } from '../types';
+import { RootKey } from '../utils/constants';
 import createOnValueOfChange from '../utils/createOnValueOfChange';
 
 const onError = createOnValueOfChange(RootKey.ERROR_CALLBACK_SET) as {

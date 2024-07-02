@@ -1,6 +1,5 @@
 import createAsyncNestedState from '../createAsyncNestedState';
-
-import {
+import type {
   PausableLoadableAsyncNestedState,
   PollableStateOptions,
 } from '../types';

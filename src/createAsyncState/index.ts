@@ -1,5 +1,5 @@
 import createState from '../createState';
-import {
+import type {
   AsyncState,
   AsyncStateOptions,
   LoadableAsyncState,

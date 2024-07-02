@@ -1,9 +1,8 @@
 import { useContext, useLayoutEffect, useState } from 'react';
-import {
+import type {
   AnyAsyncState,
   AnyLoadableAsyncState,
   Falsy,
-  RootKey,
   NOT_LOADED,
 } from '../types';
 import useNoop from '../utils/useNoop';
@@ -12,6 +11,7 @@ import onValueChange from '../onValueChange';
 import onError from '../onError';
 import getValue from '../getValue';
 import getPromise from '../getPromise';
+import { RootKey } from '../utils/constants';
 
 const use = ((state: AnyLoadableAsyncState | Falsy) => {
   const ctx = useContext(UseContext);
@@ -52,7 +52,7 @@ const use = ((state: AnyLoadableAsyncState | Falsy) => {
 
           unregister && unregister();
         };
-      }, [root, state.p && state.p.join('.')]);
+      }, [root, state._p && state._p.join('.')]);
 
       return getValue(state);
     }

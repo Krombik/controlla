@@ -1,6 +1,6 @@
 import isLoaded from '../isLoaded';
 import onIsLoadedChange from '../onIsLoadedChange';
-import { AnyAsyncState, Falsy } from '../types';
+import type { AnyAsyncState, Falsy } from '../types';
 import createUseValueOf from '../utils/createUseValueOf';
 
 const useIsLoaded = createUseValueOf(onIsLoadedChange, isLoaded) as {

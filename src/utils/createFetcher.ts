@@ -1,6 +1,6 @@
 import setError from '../setError';
 import setValue from '../setValue';
-import { LoadableAsyncStateOptions } from '../types';
+import type { LoadableAsyncStateOptions } from '../types';
 import becomingOnline from './becomingOnline';
 import { RESOLVED_PROMISE } from './constants';
 

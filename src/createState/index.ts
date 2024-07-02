@@ -1,11 +1,9 @@
 import identity from 'lodash.identity';
-import { CallbackSet, Root, RootKey, State } from '../types';
+import type { CallbackSet, Root, State } from '../types';
 import executeSetters from '../utils/executeSetters';
+import { RootKey } from '../utils/constants';
 
-const createState: {
-  <T>(defaultValue: T): State<T>;
-  <T>(): State<T | undefined>;
-} = <T>(defaultValue?: T) => {
+const createState = <T>(value?: T | (() => T)): State<T> => {
   const root: Root = new Map();
 
   const valueSet: CallbackSet = new Set();
@@ -24,8 +22,12 @@ const createState: {
     }
   });
 
-  if (defaultValue !== undefined) {
-    root.set(RootKey.VALUE, defaultValue);
+  if (typeof value == 'function') {
+    value = (value as () => T)();
+  }
+
+  if (value !== undefined) {
+    root.set(RootKey.VALUE, value);
   }
 
   return { r: root };

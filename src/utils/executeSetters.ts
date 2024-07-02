@@ -1,4 +1,4 @@
-import { CallbackSet } from '../types';
+import type { CallbackSet } from '../types';
 
 const executeSetters = (set: CallbackSet, value?: unknown) => {
   const it = set.values();

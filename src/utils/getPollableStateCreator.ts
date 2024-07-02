@@ -1,4 +1,4 @@
-import { PollableStateOptions } from '../types';
+import type { PollableStateOptions } from '../types';
 import becomingOnline from './becomingOnline';
 import createFetcher from './createFetcher';
 import type getAsyncStateCreator from './getAsyncStateCreator';
@@ -6,7 +6,7 @@ import { changingSleep, commonSleep, handleGetInterval } from './interval';
 
 const getPollableStateCreator =
   (createAsyncState: ReturnType<typeof getAsyncStateCreator>) =>
-  (options: PollableStateOptions<any, any, any[]>) => {
+  (options: PollableStateOptions<any, any>) => {
     let sleep: (getInterval: () => number) => Promise<void>;
 
     let getInterval: () => number;

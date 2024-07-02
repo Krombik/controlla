@@ -1,14 +1,15 @@
-import { CallbackSet, NestedMap, Root, RootKey, NestedState } from '../types';
-import { EMPTY_ARR } from '../utils/constants';
+import type { CallbackSet, NestedMap, Root, NestedState } from '../types';
+import { EMPTY_ARR, RootKey } from '../utils/constants';
 import executeSetters from '../utils/executeSetters';
 import handleNotEqual from '../utils/handleNotEqual';
 import path from '../utils/path';
 import safeGet from '../utils/safeGet';
 
 const createNestedState: {
-  <T>(defaultValue: T): NestedState<T>;
+  <T>(value: T): NestedState<T>;
+  <T>(getValue: () => T): NestedState<T>;
   <T>(): NestedState<T | undefined>;
-} = <T>(defaultValue?: T) => {
+} = <T>(value?: T | (() => T)) => {
   const root: Root = new Map();
 
   const rootMap: NestedMap = new Map();
@@ -123,11 +124,15 @@ const createNestedState: {
     }
   });
 
-  if (defaultValue !== undefined) {
-    root.set(RootKey.VALUE, defaultValue);
+  if (typeof value == 'function') {
+    value = (value as () => T)();
   }
 
-  return { r: root, path, p: EMPTY_ARR };
+  if (value !== undefined) {
+    root.set(RootKey.VALUE, value);
+  }
+
+  return { r: root, path, _p: EMPTY_ARR };
 };
 
 export default createNestedState;

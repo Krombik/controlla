@@ -1,9 +1,8 @@
 import { useContext, useLayoutEffect, useState } from 'react';
-import {
+import type {
   AnyAsyncState,
   AnyLoadableAsyncState,
   Falsy,
-  RootKey,
   ValuesOf,
 } from '../types';
 import getPromise from '../getPromise';
@@ -12,6 +11,7 @@ import onError from '../onError';
 import getValue from '../getValue';
 import noop from 'lodash.noop';
 import UseContext from '../utils/UseContext';
+import { RootKey } from '../utils/constants';
 
 const useAll = ((...states: (AnyLoadableAsyncState | Falsy)[]) => {
   const l = states.length;
@@ -96,7 +96,7 @@ const useAll = ((...states: (AnyLoadableAsyncState | Falsy)[]) => {
 
           unregister && unregister();
         };
-      }, [root, state.p && state.p.join('.')]);
+      }, [root, state._p && state._p.join('.')]);
 
       values.push(getValue(state));
     } else {
