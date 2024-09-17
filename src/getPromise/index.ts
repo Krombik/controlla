@@ -1,67 +1,39 @@
-import type { AnyAsyncState, NOT_LOADED } from '../types';
-import { EMPTY_ARR, RootKey } from '../utils/constants';
+import getValue from '../getValue';
+import type { AsyncState, Pending } from '../types';
+import { RootKey } from '../utils/constants';
 
-const getPromise = <T>(
-  state: AnyAsyncState<T>
-): Promise<Exclude<T, typeof NOT_LOADED>> => {
-  const root = state.r;
+const getPromise: {
+  <T>(state: AsyncState<T>): Promise<Exclude<T, Pending>>;
+  /** @internal */
+  (state: AsyncState<any>, isRoot: true): Promise<any>;
+} = (state: AsyncState<any>, isRoot?: true) => {
+  const utils = state._internal;
 
-  const path = state._p;
+  const data = utils._data;
+
+  const path = state._path;
 
   let promise: Promise<any>;
 
-  if (root.has(RootKey.PROMISE)) {
-    promise = root.get(RootKey.PROMISE)!;
+  if (data.has(RootKey.PROMISE)) {
+    promise = data.get(RootKey.PROMISE)!;
+  } else if (getValue(state.isLoaded)) {
+    promise = data.has(RootKey.VALUE)
+      ? Promise.resolve(data.get(RootKey.VALUE)!)
+      : Promise.reject(getValue(state.error));
   } else {
-    const valueSet = root.get(RootKey.VALUE_GET_CALLBACK_SET)!(EMPTY_ARR);
+    data.set(
+      RootKey.PROMISE,
+      (promise = new Promise((res, rej) => {
+        data.set(RootKey.PROMISE_RESOLVE, res);
 
-    const errorSet = root.get(RootKey.ERROR_CALLBACK_SET)!;
-
-    promise = (
-      root.has(RootKey.VALUE)
-        ? Promise.resolve(root.get(RootKey.VALUE)!)
-        : root.has(RootKey.ERROR)
-          ? Promise.reject(root.get(RootKey.ERROR))
-          : new Promise<any>((res, rej) => {
-              const resolve = (value: unknown) => {
-                valueSet.delete(resolve);
-
-                errorSet.delete(reject);
-
-                res(value);
-              };
-
-              const reject = (error: unknown) => {
-                valueSet.delete(resolve);
-
-                errorSet.delete(reject);
-
-                rej(error);
-              };
-
-              valueSet.add(resolve);
-
-              errorSet.add(reject);
-            })
-    ).finally(() => {
-      const cleanup = () => {
-        valueSet.delete(cleanup);
-
-        errorSet.delete(cleanup);
-
-        root.delete(RootKey.PROMISE);
-      };
-
-      valueSet.add(cleanup);
-
-      errorSet.add(cleanup);
-    });
-
-    root.set(RootKey.PROMISE, promise);
+        data.set(RootKey.PROMISE_REJECT, rej);
+      }))
+    );
   }
 
-  return path && path.length
-    ? promise.then((value) => root.get(RootKey.VALUE_GET)!(value, path))
+  return path && path.length && !isRoot
+    ? promise.then((value) => utils._get(value, path))
     : promise;
 };
 

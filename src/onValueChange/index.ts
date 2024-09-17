@@ -1,11 +1,10 @@
-import type { AnyState, NOT_LOADED } from '../types';
-import { RootKey } from '../utils/constants';
+import type { Pending, State } from '../types';
 
 const onValueChange = <T>(
-  state: AnyState<T>,
-  cb: (value: Exclude<T, typeof NOT_LOADED>) => void
+  state: State<T>,
+  cb: (value: Exclude<T, Pending>) => void
 ) => {
-  const set = state.r.get(RootKey.VALUE_GET_CALLBACK_SET)!(state._p!);
+  const set = state._internal._getValueChangeCallbackSet(state._path!);
 
   set.add(cb);
 

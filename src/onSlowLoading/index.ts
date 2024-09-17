@@ -1,11 +1,13 @@
-import type { AnyLoadableAsyncState } from '../types';
-import { RootKey } from '../utils/constants';
-import createOnValueOfChange from '../utils/createOnValueOfChange';
+import type { LoadableState } from '../types';
 
-const onSlowLoading = createOnValueOfChange(
-  RootKey.SLOW_LOADING_CALLBACK_SET
-) as {
-  (state: AnyLoadableAsyncState, cb: () => void): () => void;
+const onSlowLoading = (state: LoadableState<any>, cb: () => void) => {
+  const set = state._internal._slowLoadingCallbackSet!;
+
+  set.add(cb);
+
+  return () => {
+    set.delete(cb);
+  };
 };
 
 export default onSlowLoading;

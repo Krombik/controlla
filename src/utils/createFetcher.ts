@@ -1,33 +1,50 @@
-import setError from '../setError';
+import noop from 'lodash.noop';
 import setValue from '../setValue';
-import type { LoadableAsyncStateOptions } from '../types';
+import type { LoadableStateOptions, RequestableStateOptions } from '../types';
 import becomingOnline from './becomingOnline';
 import { RESOLVED_PROMISE } from './constants';
+import { PrimitiveOrNested } from 'keyweaver';
 
 const createFetcher = (
-  fetcher: (...args: any[]) => Promise<any>,
-  shouldRetry: ((err: any, attempt: number) => number) | undefined,
-  load: (
+  handleLoad: (
     cancelPromise: Promise<void>,
-    fetch: () => Promise<boolean | void>
-  ) => void | Promise<void>
-): LoadableAsyncStateOptions<any>['load'] =>
-  function (...args: any[]) {
+    fetch: () => Promise<PrimitiveOrNested[] | void>
+  ) => void | Promise<void>,
+  {
+    load,
+    _afterLoad,
+    _beforeLoad = noop,
+    shouldRetryOnError,
+  }: RequestableStateOptions<any, any>
+): LoadableStateOptions<any>['load'] =>
+  function (...args) {
+    const self = this;
+
     let attempt = 0;
 
     let isRunning = true;
 
     let cancel!: () => void;
 
-    const retriableFetcher = (): Promise<boolean | void> =>
+    const cancelPromise = new Promise<void>((res) => {
+      cancel = () => {
+        isRunning = false;
+
+        res();
+      };
+    });
+
+    const retriableFetcher = (): Promise<PrimitiveOrNested[] | void> =>
       isRunning
-        ? fetcher(...args).then(
+        ? load(...args).then(
             (value) => {
               attempt = 0;
 
-              setValue(this, value);
+              if (isRunning) {
+                setValue(self, value);
 
-              return isRunning;
+                return args;
+              }
             },
             (err) => {
               if (isRunning) {
@@ -35,34 +52,33 @@ const createFetcher = (
                   return becomingOnline().then(retriableFetcher);
                 }
 
-                if (shouldRetry) {
-                  const delay = shouldRetry(err, attempt);
+                if (shouldRetryOnError) {
+                  const delay = shouldRetryOnError(err, attempt);
 
                   if (delay) {
                     attempt++;
 
-                    return new Promise((res) => setTimeout(res, delay)).then(
-                      retriableFetcher
-                    );
+                    return new Promise((res) => {
+                      setTimeout(res, delay);
+                    }).then(retriableFetcher);
                   }
                 }
 
-                setError(this, err);
+                setValue(self.error, err);
               }
             }
           )
         : RESOLVED_PROMISE;
 
-    load(
-      new Promise<void>((res) => {
-        cancel = () => {
-          isRunning = false;
+    handleLoad(cancelPromise, () => {
+      if (isRunning) {
+        self._internal._isFetchInProgress = true;
+      }
 
-          res();
-        };
-      }),
-      retriableFetcher
-    );
+      _beforeLoad(args, self);
+
+      return retriableFetcher().then(_afterLoad);
+    });
 
     return cancel;
   };

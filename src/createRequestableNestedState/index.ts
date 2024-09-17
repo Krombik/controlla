@@ -1,8 +1,5 @@
 import createAsyncNestedState from '../createAsyncNestedState';
-import type {
-  LoadableAsyncNestedState,
-  RequestableStateOptions,
-} from '../types';
+import type { LoadableNestedState, RequestableStateOptions } from '../types';
 import getRequestableStateCreator from '../utils/getRequestableStateCreator';
 
 const createRequestableNestedState = getRequestableStateCreator(
@@ -10,7 +7,7 @@ const createRequestableNestedState = getRequestableStateCreator(
 ) as {
   <T, E = any>(
     options: RequestableStateOptions<T, E>
-  ): LoadableAsyncNestedState<T, E>;
+  ): LoadableNestedState<T, E>;
 };
 
 export default createRequestableNestedState;

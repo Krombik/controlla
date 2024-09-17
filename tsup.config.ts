@@ -84,6 +84,8 @@ export default defineConfig((prevOptions) => ({
   external: ['react'],
   esbuildOptions: (options) => {
     options.chunkNames = `${_CHUNKS}/[name]-[hash]`;
+
+    options.mangleProps = /^_/;
   },
   async onSuccess() {
     await fs.writeFile(

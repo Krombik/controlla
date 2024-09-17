@@ -1,11 +1,11 @@
 import type { AnyAsyncState } from '../types';
-import deleteError from '../utils/deleteError';
+
 import deleteValue from '../utils/deleteValue';
 
-const clear = <S extends AnyAsyncState>(state: S) => {
-  deleteValue(state.r, false);
+const clear = <S extends AnyAsyncState>(state: S): S => {
+  deleteValue(state._internal, false);
 
-  deleteError(state.r);
+  deleteValue(state.error._internal, false);
 
   return state;
 };

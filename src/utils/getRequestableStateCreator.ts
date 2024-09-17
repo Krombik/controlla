@@ -8,13 +8,9 @@ const getRequestableStateCreator =
   (options: RequestableStateOptions<any, any>) =>
     createAsyncState({
       ...options,
-      load: createFetcher(
-        options.load,
-        options.shouldRetryOnError,
-        (cancelPromise, load) => {
-          Promise.any([becomingOnline(), cancelPromise]).then(load);
-        }
-      ),
+      load: createFetcher((cancelPromise, load) => {
+        Promise.any([becomingOnline(), cancelPromise]).then(load);
+      }, options),
     });
 
 export default getRequestableStateCreator;

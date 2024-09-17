@@ -1,19 +1,9 @@
-import type { Root } from '../types';
-import { EMPTY_ARR, RootKey } from './constants';
+import type { InternalUtils } from '../types';
+import { RootKey } from './constants';
 
-const deleteValue = (root: Root, isError: boolean) => {
-  if (root.has(RootKey.VALUE)) {
-    const rootValue = root.get(RootKey.VALUE)!;
-
-    root.delete(RootKey.VALUE);
-
-    root.get(RootKey.VALUE_SET)!(
-      undefined,
-      rootValue,
-      false,
-      EMPTY_ARR,
-      isError
-    );
+const deleteValue = (utils: InternalUtils, isError: boolean) => {
+  if (utils._data.delete(RootKey.VALUE)) {
+    utils._set(undefined, false, [], isError);
   }
 };
 

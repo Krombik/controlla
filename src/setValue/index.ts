@@ -1,24 +1,24 @@
-import type { AnyState, AsyncRoot, NOT_LOADED } from '../types';
-import { RootKey } from '../utils/constants';
-import deleteError from '../utils/deleteError';
+import getValue from '../getValue';
+import type { Pending, State } from '../types';
 
-const setValue = <S extends AnyState>(
+const setValue = <S extends State<any>>(
   state: S,
-  value: S extends AnyState<infer T> ? Exclude<T, typeof NOT_LOADED> : never
-) => {
-  const root = state.r;
-
-  const rootValue = root.get(RootKey.VALUE);
-
-  root.get(RootKey.VALUE_SET)!(
-    typeof value != 'function' ? value : value(rootValue),
-    rootValue,
+  value: S extends State<infer Value>
+    ?
+        | Exclude<Value, Pending>
+        | ((
+            prevValue: [Extract<Value, Pending>] extends [never]
+              ? Value
+              : Exclude<Value, Pending> | undefined
+          ) => Exclude<Value, Pending>)
+    : never
+): S => {
+  state._internal._set(
+    typeof value != 'function' ? value : value(getValue(state)),
     true,
-    state._p!,
+    state._path!,
     false
   );
-
-  deleteError(root as AsyncRoot);
 
   return state;
 };

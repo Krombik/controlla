@@ -1,19 +1,13 @@
 import { useContext, useLayoutEffect, useState } from 'react';
-import type {
-  AnyAsyncState,
-  AnyLoadableAsyncState,
-  Falsy,
-  ValuesOf,
-} from '../types';
+import type { AnyAsyncState, Falsy, ExtractValues, AsyncState } from '../types';
 import getPromise from '../getPromise';
 import onValueChange from '../onValueChange';
-import onError from '../onError';
 import getValue from '../getValue';
 import noop from 'lodash.noop';
 import UseContext from '../utils/UseContext';
 import { RootKey } from '../utils/constants';
 
-const useAll = ((...states: (AnyLoadableAsyncState | Falsy)[]) => {
+const useAll = ((...states: (AnyAsyncState | Falsy)[]) => {
   const l = states.length;
 
   const values: any[] = [];
@@ -30,26 +24,30 @@ const useAll = ((...states: (AnyLoadableAsyncState | Falsy)[]) => {
     const state = states[i];
 
     if (state) {
-      const root = state.r;
+      const utils = state._internal;
 
-      if (root.has(RootKey.ERROR)) {
-        throw root.get(RootKey.ERROR)!;
+      const errorData = utils._errorUtils._data;
+
+      if (errorData.has(RootKey.VALUE)) {
+        throw errorData.get(RootKey.VALUE)!;
       }
 
-      if (!root.has(RootKey.VALUE)) {
-        const unloadedStates: AnyLoadableAsyncState[] = [state];
+      if (!utils._data.has(RootKey.VALUE)) {
+        const unloadedStates: AnyAsyncState[] = [state];
 
         while (++i < l) {
           const state = states[i];
 
           if (state) {
-            const root = state.r;
+            const utils = state._internal;
 
-            if (root.has(RootKey.ERROR)) {
-              throw root.get(RootKey.ERROR);
+            const errorData = utils._errorUtils._data;
+
+            if (errorData.has(RootKey.VALUE)) {
+              throw errorData.get(RootKey.VALUE)!;
             }
 
-            if (!root.has(RootKey.VALUE)) {
+            if (!utils._data.has(RootKey.VALUE)) {
               unloadedStates.push(state);
             }
           }
@@ -60,12 +58,12 @@ const useAll = ((...states: (AnyLoadableAsyncState | Falsy)[]) => {
         for (let i = 0; i < unloadedStates.length; i++) {
           const state = unloadedStates[i];
 
-          const root = state.r;
+          const utils = state._internal;
 
-          promises.push(getPromise({ r: root }));
+          promises.push(getPromise(state, true));
 
-          if (root.has(RootKey.LOAD) && !ctx.has(root)) {
-            ctx.set(root, root.get(RootKey.LOAD)!(state));
+          if ('load' in state && !ctx.has(utils)) {
+            ctx.set(utils, state.load());
           }
         }
 
@@ -75,17 +73,17 @@ const useAll = ((...states: (AnyLoadableAsyncState | Falsy)[]) => {
       useLayoutEffect(() => {
         const unlistenValue = onValueChange(state, forceRerender);
 
-        const unlistenError = onError(state, forceRerender);
+        const unlistenError = onValueChange(state.error, forceRerender);
 
         let unregister: () => void;
 
-        if (root.has(RootKey.LOAD)) {
-          if (ctx.has(root)) {
-            unregister = ctx.get(root)!;
+        if ('load' in state) {
+          if (ctx.has(utils)) {
+            unregister = ctx.get(utils)!;
 
-            ctx.delete(root);
+            ctx.delete(utils);
           } else {
-            unregister = root.get(RootKey.LOAD)!(state);
+            unregister = state.load();
           }
         }
 
@@ -96,7 +94,7 @@ const useAll = ((...states: (AnyLoadableAsyncState | Falsy)[]) => {
 
           unregister && unregister();
         };
-      }, [root, state._p && state._p.join('.')]);
+      }, [utils, state._path && state._path.join('.')]);
 
       values.push(getValue(state));
     } else {
@@ -106,7 +104,7 @@ const useAll = ((...states: (AnyLoadableAsyncState | Falsy)[]) => {
 
   return values;
 }) as {
-  <const S extends (AnyAsyncState | Falsy)[]>(...states: S): ValuesOf<S>;
+  <const S extends (AsyncState<any> | Falsy)[]>(...states: S): ExtractValues<S>;
 };
 
 export default useAll;

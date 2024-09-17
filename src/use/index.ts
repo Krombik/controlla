@@ -1,25 +1,19 @@
 import { useContext, useLayoutEffect, useState } from 'react';
-import type {
-  AnyAsyncState,
-  AnyLoadableAsyncState,
-  Falsy,
-  NOT_LOADED,
-} from '../types';
+import type { AnyAsyncState, Falsy, Pending } from '../types';
 import useNoop from '../utils/useNoop';
 import UseContext from '../utils/UseContext';
 import onValueChange from '../onValueChange';
-import onError from '../onError';
 import getValue from '../getValue';
 import getPromise from '../getPromise';
 import { RootKey } from '../utils/constants';
 
-const use = ((state: AnyLoadableAsyncState | Falsy) => {
+const use = ((state: AnyAsyncState<any, any, any[]> | Falsy) => {
   const ctx = useContext(UseContext);
 
   if (state) {
-    const root = state.r;
+    const utils = state._internal;
 
-    if (root.has(RootKey.VALUE)) {
+    if (utils._data.has(RootKey.VALUE)) {
       const t = useState<{}>();
 
       useLayoutEffect(() => {
@@ -31,17 +25,17 @@ const use = ((state: AnyLoadableAsyncState | Falsy) => {
 
         const unlistenValue = onValueChange(state, forceRerender);
 
-        const unlistenError = onError(state, forceRerender);
+        const unlistenError = onValueChange(state.error, forceRerender);
 
         let unregister: () => void;
 
-        if (root.has(RootKey.LOAD)) {
-          if (ctx.has(root)) {
-            unregister = ctx.get(root)!;
+        if ('load' in state) {
+          if (ctx.has(utils)) {
+            unregister = ctx.get(utils)!;
 
-            ctx.delete(root);
+            ctx.delete(utils);
           } else {
-            unregister = root.get(RootKey.LOAD)!(state);
+            unregister = state.load();
           }
         }
 
@@ -52,29 +46,29 @@ const use = ((state: AnyLoadableAsyncState | Falsy) => {
 
           unregister && unregister();
         };
-      }, [root, state._p && state._p.join('.')]);
+      }, [utils, state._path && state._path.join('.')]);
 
       return getValue(state);
     }
 
-    if (root.has(RootKey.ERROR)) {
-      throw root.get(RootKey.ERROR);
+    const errorData = utils._errorUtils._data;
+
+    if (errorData.has(RootKey.VALUE)) {
+      throw errorData.get(RootKey.VALUE);
     }
 
-    if (root.has(RootKey.LOAD) && !ctx.has(root)) {
-      ctx.set(root, root.get(RootKey.LOAD)!(state));
+    if ('load' in state && !ctx.has(utils)) {
+      ctx.set(utils, state.load());
     }
 
-    throw getPromise({ r: root });
+    throw getPromise(state, true);
   }
 
   useNoop();
 }) as {
   <S extends AnyAsyncState | Falsy>(
     state: S
-  ): S extends AnyAsyncState<infer T>
-    ? Exclude<T, typeof NOT_LOADED>
-    : undefined;
+  ): S extends AnyAsyncState<infer T> ? Exclude<T, Pending> : undefined;
 };
 
 export default use;

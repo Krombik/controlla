@@ -1,14 +1,14 @@
-import type { AnyState, NOT_LOADED } from '../types';
+import type { Pending, State } from '../types';
 import { RootKey } from '../utils/constants';
 
-const getValue = <T>(
-  state: AnyState<T>
-): [Extract<T, typeof NOT_LOADED>] extends [never]
-  ? T
-  : Exclude<T, typeof NOT_LOADED> | undefined => {
-  const root = state.r;
+const getValue = <Value>(
+  state: State<Value>
+): [Extract<Value, Pending>] extends [never]
+  ? Value
+  : Exclude<Value, Pending> | undefined => {
+  const utils = state._internal;
 
-  return root.get(RootKey.VALUE_GET)!(root.get(RootKey.VALUE), state._p!);
+  return utils._get(utils._data.get(RootKey.VALUE), state._path!);
 };
 
 export default getValue;

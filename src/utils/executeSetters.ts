@@ -1,6 +1,6 @@
-import type { CallbackSet } from '../types';
+import type { CallbackRegistry } from '../types';
 
-const executeSetters = (set: CallbackSet, value?: unknown) => {
+const executeSetters = (set: CallbackRegistry, value?: unknown) => {
   const it = set.values();
 
   const next = it.next.bind(it);

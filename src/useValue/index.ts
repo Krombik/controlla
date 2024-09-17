@@ -1,20 +1,11 @@
 import { useLayoutEffect, useState } from 'react';
-import type {
-  AnyAsyncState,
-  AnyLoadableAsyncState,
-  AnyState,
-  Falsy,
-  NOT_LOADED,
-} from '../types';
+import type { AnyAsyncState, Falsy, Pending, State } from '../types';
 import onValueChange from '../onValueChange';
-import getValue from '../getValue';
 import useNoop from '../utils/useNoop';
-import { RootKey } from '../utils/constants';
+import getValue from '../getValue';
 
-const useValue = ((state: AnyLoadableAsyncState | Falsy) => {
+const useValue = ((state: AnyAsyncState | Falsy) => {
   if (state) {
-    const root = state.r;
-
     const t = useState<{}>();
 
     useLayoutEffect(() => {
@@ -24,30 +15,30 @@ const useValue = ((state: AnyLoadableAsyncState | Falsy) => {
         forceRerender({});
       });
 
-      if (root.has(RootKey.LOAD)) {
-        const unregister = root.get(RootKey.LOAD)!(state);
+      if ('load' in state) {
+        const unload = state.load();
 
         return () => {
           unlistenValue();
 
-          unregister();
+          unload();
         };
       }
 
       return unlistenValue;
-    }, [root, state._p && state._p.join('.')]);
+    }, [state._internal, state._path && state._path.join('.')]);
 
     return getValue(state);
   }
 
   useNoop();
 }) as {
-  <S extends AnyState | Falsy>(
+  <S extends State | Falsy>(
     state: S
-  ): S extends AnyAsyncState<infer T>
-    ? [Extract<T, typeof NOT_LOADED>] extends [never]
+  ): S extends State<infer T>
+    ? [Extract<T, Pending>] extends [never]
       ? T
-      : Exclude<T, typeof NOT_LOADED> | undefined
+      : Exclude<T, Pending> | undefined
     : undefined;
 };
 
