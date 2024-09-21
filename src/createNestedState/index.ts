@@ -6,6 +6,8 @@ import type {
   Key,
   NestedMap,
   NestedState,
+  OriginalStateCreator,
+  StateType,
 } from '../types';
 import { EMPTY_ARR, RootKey } from '../utils/constants';
 import executeSetters from '../utils/executeSetters';
@@ -159,7 +161,10 @@ const createNestedState = <T extends NestedArray | NestedObject>(
     } as _InternalUtils,
     _path: EMPTY_ARR,
     path,
-  } as NestedState<T>;
+  } as Partial<NestedState<any>> as NestedState<T>;
 };
 
-export default createNestedState;
+export default createNestedState as OriginalStateCreator<
+  typeof createNestedState,
+  StateType.STATE
+>;

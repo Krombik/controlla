@@ -1,13 +1,21 @@
 import createAsyncNestedState from '../createAsyncNestedState';
-import type { ControllableNestedState, PollableStateOptions } from '../types';
+import type {
+  ControllableNestedState,
+  OriginalStateCreator,
+  PollableStateOptions,
+  StateType,
+} from '../types';
 import getPollableStateCreator from '../utils/getPollableStateCreator';
 
 const createPollableNestedState = getPollableStateCreator(
   createAsyncNestedState
-) as {
-  <T, E = any>(
-    options: PollableStateOptions<T, E>
-  ): ControllableNestedState<T, E>;
-};
+);
 
-export default createPollableNestedState;
+export default createPollableNestedState as OriginalStateCreator<
+  {
+    <T, E = any>(
+      options: PollableStateOptions<T, E>
+    ): ControllableNestedState<T, E>;
+  },
+  StateType.NESTED_POLLABLE_STATE
+>;

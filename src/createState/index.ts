@@ -2,7 +2,9 @@ import type {
   CallbackRegistry,
   InternalDataMap,
   InternalUtils,
+  OriginalStateCreator,
   State,
+  StateType,
 } from '../types';
 import executeSetters from '../utils/executeSetters';
 import { RootKey } from '../utils/constants';
@@ -47,7 +49,10 @@ const createState = <T>(value?: T | (() => T)): State<T> => {
       _get: identity,
       _getValueChangeCallbackSet,
     } as _InternalUtils,
-  };
+  } as Partial<State<any>> as State<any>;
 };
 
-export default createState;
+export default createState as OriginalStateCreator<
+  typeof createState,
+  StateType.STATE
+>;

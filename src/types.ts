@@ -44,10 +44,6 @@ export type CallbackRegistry = Set<(value: any) => void>;
 
 export type NestedMap = Map<[], CallbackRegistry> & Map<Key, NestedMap>;
 
-export type NestedStorageKeys<Keys extends PrimitiveOrNested[]> = {
-  readonly a: Keys;
-};
-
 /** @internal */
 export type InternalDataMap = Map<RootKey.VALUE, any> &
   Map<RootKey.PROMISE, Promise<any>> &
@@ -64,23 +60,23 @@ export type InternalUtils = {
   _getValueChangeCallbackSet(path: Key[]): CallbackRegistry;
 };
 
-declare const HIDDEN: unique symbol;
+declare const STATE_MARKER: unique symbol;
 
-type Nesting<Keys extends PrimitiveOrNested[]> = Keys['length'] extends 0
+export type Nesting<Keys extends PrimitiveOrNested[]> = Keys['length'] extends 0
   ? {}
   : {
       readonly keys: Readonly<Keys>;
     };
 
 export type State<Value = unknown, Keys extends PrimitiveOrNested[] = []> = {
-  [HIDDEN]?: Value;
+  readonly [STATE_MARKER]: Value;
   /** @internal */
   readonly _internal: InternalUtils;
 } & Nesting<Keys> &
   /** @internal */
   Partial<Nesting<any[]>> &
   /** @internal */
-  Partial<PathBase<any>>;
+  InternalPathBase;
 
 type ErrorInternalUtils = InternalUtils & {
   readonly _parentUtils: InternalUtils;
@@ -131,9 +127,13 @@ export type ControllableState<
   reset(): void;
 };
 
-export type PathBase<Path extends (...path: any[]) => any> = {
+/** @internal */
+export type InternalPathBase = {
   /** @internal */
-  readonly _path: Key[];
+  readonly _path?: Key[];
+};
+
+export type PathBase<Path extends (...path: any[]) => any> = {
   path: Path;
 };
 
@@ -144,7 +144,9 @@ export type NestedState<Value, Keys extends PrimitiveOrNested[] = []> = State<
   PathBase<{
     <P extends ObjectPath<Value>, T = ResolvePath<Value, P>>(
       ...path: P
-    ): [] extends ObjectPath<T> ? State<T, Keys> : NestedState<T, Keys>;
+    ): [] extends Required<ObjectPath<T>>
+      ? State<T, Keys>
+      : NestedState<T, Keys>;
   }>;
 
 export type AsyncNestedState<
@@ -155,7 +157,7 @@ export type AsyncNestedState<
   PathBase<{
     <P extends ObjectPath<Value>, T = ResolvePath<Value, P>>(
       ...path: P
-    ): [] extends ObjectPath<T>
+    ): [] extends Required<ObjectPath<T>>
       ? AsyncState<T, Error, Keys>
       : AsyncNestedState<T, Error, Keys>;
   }>;
@@ -168,7 +170,7 @@ export type LoadableNestedState<
   PathBase<{
     <P extends ObjectPath<Value>, T = ResolvePath<Value, P>>(
       ...path: P
-    ): [] extends ObjectPath<T>
+    ): [] extends Required<ObjectPath<T>>
       ? LoadableState<T, Error, Keys>
       : LoadableNestedState<T, Error, Keys>;
   }>;
@@ -181,7 +183,7 @@ export type ControllableNestedState<
   PathBase<{
     <P extends ObjectPath<Value>, T = ResolvePath<Value, P>>(
       ...path: P
-    ): [] extends ObjectPath<T>
+    ): [] extends Required<ObjectPath<T>>
       ? ControllableState<T, Error, Keys>
       : ControllableNestedState<T, Error, Keys>;
   }>;
@@ -207,28 +209,6 @@ export type AnyLoadableState<
   Keys extends PrimitiveOrNested[] = [],
 > = LoadableState<Value, Error, Keys> | ControllableState<Value, Error, Keys>;
 
-type Nested<T, P extends any[]> =
-  T extends StateBase<infer Value, infer Type>
-    ? NestedStateWrapper<
-        StateBase<ResolvePath<Value, P>, Type> &
-          (T extends NestedStorageKeys<infer Keys>
-            ? NestedStorageKeys<Keys>
-            : {}) &
-          (T extends ErrorBase<infer Error> ? ErrorBase<Error> : {})
-      >
-    : never;
-
-interface StatePathResolver<Value> extends StatePath {
-  path<P extends ObjectPath<Value>>(...path: P): Nested<this, P>;
-}
-
-type NestedStateWrapper<T> = T &
-  (T extends StateBase<infer Value, string>
-    ? ObjectPath<Value> extends []
-      ? {}
-      : StatePathResolver<Value>
-    : never);
-
 export type ExtractValues<T> = T extends [infer Head, ...infer Tail]
   ? [
       Head extends AnyAsyncState<infer K> ? Exclude<K, Pending> : undefined,
@@ -236,20 +216,25 @@ export type ExtractValues<T> = T extends [infer Head, ...infer Tail]
     ]
   : [];
 
-export type AsyncStateOptions<T> = {
-  value?: T | (() => T);
+export type AsyncStateOptions<T, Keys extends PrimitiveOrNested[] = []> = {
+  value?: T | ((...keys: Keys) => T);
   isLoaded?(value: T, prevValue: T | undefined): boolean;
 };
 
-export type LoadableStateOptions<T, E = any> = AsyncStateOptions<T> & {
-  load(this: AsyncState<T, E>): void | (() => void);
+export type LoadableStateOptions<
+  T,
+  E = any,
+  Keys extends PrimitiveOrNested[] = [],
+> = AsyncStateOptions<T, Keys> & {
+  load(this: AsyncState<T, E>, ...keys: Keys): void | (() => void);
   loadingTimeout?: number;
 };
 
-export type ControllableStateOptions<T, E = any> = LoadableStateOptions<
+export type ControllableStateOptions<
   T,
-  E
-> & {
+  E = any,
+  Keys extends PrimitiveOrNested[] = [],
+> = LoadableStateOptions<T, E, Keys> & {
   pause(): void;
   resume(): void;
   reset(): void;
@@ -259,14 +244,14 @@ export type RequestableStateOptions<
   T,
   E = any,
   Keys extends PrimitiveOrNested[] = [],
-> = Pick<LoadableStateOptions<T>, 'value' | 'loadingTimeout'> & {
+> = Pick<LoadableStateOptions<T, Keys>, 'value' | 'loadingTimeout'> & {
   /** @internal */
-  _beforeLoad?(args: PrimitiveOrNested[], state: StateBase<any, any>): void;
+  _beforeLoad?(args: PrimitiveOrNested[], state: AsyncState<any>): void;
   /** @internal */
   _afterLoad?(
     args: PrimitiveOrNested[] | void
   ): Promise<PrimitiveOrNested[] | void>;
-  load(...args: Keys[]): Promise<T>;
+  load(...args: Keys): Promise<T>;
   shouldRetryOnError?(err: E, attempt: number): number;
 };
 
@@ -280,36 +265,59 @@ export type PollableStateOptions<
     hiddenInterval?: number;
   };
 
-type StorageKeys<T, Acc extends PrimitiveOrNested[] = []> =
-  T extends StateStorage<infer Key extends PrimitiveOrNested, infer Item, any[]>
+export type StorageKeys<T, Acc extends PrimitiveOrNested[] = []> =
+  T extends StateStorageMarker<infer Key extends PrimitiveOrNested, infer Item>
     ? StorageKeys<Item, [...Acc, Key]>
     : Acc;
 
-type StateWithNestedStorageKeys<T, Keys extends PrimitiveOrNested[]> =
-  T extends Record<any, StateBase<any, any>>
+type StorageItem = State<any> | StateStorage<PrimitiveOrNested, any>;
+
+type ProcessStorageItem<
+  T extends StorageItem,
+  Keys extends PrimitiveOrNested[],
+> =
+  T extends State<infer V>
+    ? T extends ControllableNestedState<any, infer E>
+      ? ControllableNestedState<V, E, Keys>
+      : T extends ControllableState<any, infer E>
+        ? ControllableState<V, E, Keys>
+        : T extends LoadableNestedState<any, infer E>
+          ? LoadableNestedState<V, E, Keys>
+          : T extends LoadableState<any, infer E>
+            ? LoadableState<V, E, Keys>
+            : T extends AsyncNestedState<any, infer E>
+              ? AsyncNestedState<V, E, Keys>
+              : T extends AsyncState<any, infer E>
+                ? AsyncState<V, E, Keys>
+                : T extends NestedState<any>
+                  ? NestedState<V, Keys>
+                  : State<V, Keys>
+    : T extends StateStorage<infer K, infer T>
+      ? StateStorage<K, T, Keys>
+      : T;
+
+type StateWithNestedStorageKeys<
+  T,
+  Keys extends PrimitiveOrNested[],
+> = T extends StorageItem
+  ? ProcessStorageItem<T, Keys>
+  : T extends Record<string, StorageItem>
     ? {
-        [key in keyof T]: StateWithNestedStorageKeys<T[key], Keys>;
+        [key in keyof T]: ProcessStorageItem<T[key], Keys>;
       }
-    : T extends StateBase<infer Value, infer Type>
-      ? StateBase<Value, Type> &
-          (T extends ErrorBase<infer Error> ? ErrorBase<Error> : {}) &
-          (ObjectPath<Value> extends [] ? {} : StatePathResolver<Value>) &
-          NestedStorageKeys<Keys>
-      : T extends StateStorage<infer K, infer S, any[]>
-        ? StateStorage<K, S, Keys>
-        : never;
+    : never;
 
 type RetrieveChildState<T, Keys extends PrimitiveOrNested[]> = Keys extends [
-  infer Head extends PrimitiveOrNested,
+  any,
   ...infer Tail extends PrimitiveOrNested[],
 ]
-  ? T extends StateStorage<Head, infer Item, any[]>
+  ? T extends StateStorageMarker<any, infer Item>
     ? RetrieveChildState<Item, Tail>
     : T
   : T;
 
-type RetrieveState<T> =
-  T extends StateStorage<any, infer Child, any[]> ? RetrieveState<Child> : T;
+export type RetrieveState<T> =
+  T extends StateStorageMarker<any, infer Child> ? RetrieveState<Child> : T;
 
 export type NestedStateStorage<
   Keys extends PrimitiveOrNested[],
@@ -321,14 +329,21 @@ export type NestedStateStorage<
   ? NestedStateStorage<Head, StateStorage<Tail, T, Head>>
   : T;
 
+export declare const STATE_STORAGE_MARKER: unique symbol;
+
+type StateStorageMarker<Key extends PrimitiveOrNested, Item> = {
+  [STATE_STORAGE_MARKER]: [Key, Item];
+};
+
 export type StateStorage<
   K extends PrimitiveOrNested,
   T,
   ParentKeys extends PrimitiveOrNested[] = [],
-> = StatePath &
-  NestedStorageKeys<ParentKeys> & {
+> = Nesting<ParentKeys> &
+  InternalPathBase &
+  StateStorageMarker<K, T> & {
     /** @internal */
-    _get(keys: any[], index: number): RetrieveChildState<T, [any]>;
+    _get(keys: any[], index: number): any;
     get<Keys extends [K, ...Partial<StorageKeys<T>>]>(
       ...keys: Keys
     ): StateWithNestedStorageKeys<
@@ -340,18 +355,60 @@ export type StateStorage<
       >,
       [...ParentKeys, ...Keys]
     >;
-  } & (T extends { path(...args: any[]): any }
-    ? {
-        path<
+  } & (T extends PathBase<(...path: any) => any>
+    ? PathBase<{
+        <
           P extends ObjectPath<
-            RetrieveState<T> extends StateBase<infer V, string> ? V : never
+            RetrieveState<T> extends State<infer V> ? V : never
           >,
         >(
           ...path: P
         ): StateStorage<
           K,
-          NestedStateStorage<StorageKeys<T>, Nested<RetrieveState<T>, P>>,
+          NestedStateStorage<
+            StorageKeys<T>,
+            RetrieveState<T> extends infer S
+              ? S extends State<infer V>
+                ? ResolvePath<V, P> extends infer V
+                  ? ObjectPath<V> extends infer P
+                    ? S extends ControllableState<any, infer E>
+                      ? [] extends Required<P>
+                        ? ControllableState<V, E>
+                        : ControllableNestedState<V, E>
+                      : S extends LoadableState<any, infer E>
+                        ? [] extends Required<P>
+                          ? LoadableState<V, E>
+                          : LoadableNestedState<V, E>
+                        : S extends AsyncState<any, infer E>
+                          ? [] extends Required<P>
+                            ? AsyncState<V, E>
+                            : AsyncNestedState<V, E>
+                          : [] extends Required<P>
+                            ? State<V>
+                            : NestedState<V>
+                    : never
+                  : never
+                : never
+              : never
+          >,
           ParentKeys
         >;
-      }
+      }>
     : {});
+
+export declare enum StateType {
+  STATE,
+  ASYNC_STATE,
+  REQUESTABLE_STATE,
+  POLLABLE_STATE,
+  NESTED_STATE,
+  NESTED_ASYNC_STATE,
+  NESTED_REQUESTABLE_STATE,
+  NESTED_POLLABLE_STATE,
+}
+
+declare const TYPE: unique symbol;
+
+export type OriginalStateCreator<Fn, T extends StateType> = Fn & {
+  [TYPE]: T;
+};
