@@ -388,7 +388,8 @@ type Kek<
 
 type Oi<
   Keys extends PrimitiveOrNested[] = PrimitiveOrNested[],
-  J extends U<string> = U<string>,
+  J extends Record<string, number> = Record<string, number>,
+  Prefix extends string = '',
 > = {
   [key in keyof J]:
     | OriginalStateArgs<OriginalStateCreator, any>
@@ -431,7 +432,15 @@ type Oi<
           | [...OriginalAsyncStateArgs<OriginalAsyncStateCreator, any>, number?]
         ),
       ]
-    | readonly [() => void, Oi<PrimitiveOrNested[], J[key][1]>, J[key][0]];
+    | readonly [
+        () => void,
+        Oi<
+          PrimitiveOrNested[],
+          J,
+          `${Prefix}_${key extends string ? key : never}`
+        >,
+        J[key],
+      ];
 };
 
 type Io<
@@ -496,7 +505,7 @@ type U<Keys extends string> = {
 
 const createStateStorage: {
   <
-    J extends U<keyof T extends string ? keyof T : never>,
+    J extends Record<keyof T, number>,
     T extends Oi<Keys, J>,
     Keys extends GenerateArr<C>,
     C extends number = LengthOf<Keys>,
@@ -643,7 +652,7 @@ createStateStorage(
     //     },
     //   },
     // ],
-    bek: [() => {}, { l: [createState, () => 'wda'] }, 3],
+    bek: [() => {}, { w: [() => {}, { l: [createState, () => 'wda'] }, 3] }, 1],
     // sek: [createStateStorage, createState, 'wda'],
   },
   1
