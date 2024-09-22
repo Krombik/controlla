@@ -13,6 +13,7 @@ import alwaysFalse from '../utils/alwaysFalse';
 import reload from '../reload';
 import reset from '../reset';
 import load from '../load';
+import alwaysTrue from '../utils/alwaysTrue';
 
 const handleListener = <Keys extends [...any[], number]>(
   state: AnyLoadableState<any, any, Keys>,
@@ -66,7 +67,7 @@ const createPaginatedStorage = <Keys extends [...any[], number]>(
   const shouldRevalidate = revalidateAll
     ? revalidateAll != true
       ? (state?: AnyLoadableState) => revalidateAll(state && getValue(state))
-      : () => true
+      : alwaysTrue
     : alwaysFalse;
 
   let resolve!: () => void;

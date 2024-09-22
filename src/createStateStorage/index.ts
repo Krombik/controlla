@@ -22,6 +22,8 @@ import type {
   RetrieveState,
   StorageKeys,
   STATE_STORAGE_MARKER,
+  LoadableStateOptions,
+  ControllableStateOptions,
 } from '../types';
 import { EMPTY_ARR } from '../utils/constants';
 import path from '../utils/path';
@@ -222,6 +224,50 @@ type OriginalAsyncStateArgsWithDeepness<
   C extends number,
 > = WithDeepness<OriginalAsyncStateArgs<CreateState, T>, C>;
 
+type OriginalLoadableStateArgs<
+  CreateState extends OriginalAsyncStateCreator,
+  T,
+  E,
+  Keys extends PrimitiveOrNested[],
+  ParentKeys extends PrimitiveOrNested[] = [],
+> = [
+  createState: CreateState,
+  options: LoadableStateOptions<T, E, [...ParentKeys, ...Keys]>,
+];
+
+type OriginalLoadableStateArgsWithDeepness<
+  CreateState extends OriginalAsyncStateCreator,
+  T,
+  E,
+  Keys extends PrimitiveOrNested[],
+  ParentKeys extends PrimitiveOrNested[] = [],
+> = WithDeepness<
+  OriginalLoadableStateArgs<CreateState, T, E, Keys, ParentKeys>,
+  Keys
+>;
+
+type OriginalControllableStateArgs<
+  CreateState extends OriginalAsyncStateCreator,
+  T,
+  E,
+  Keys extends PrimitiveOrNested[],
+  ParentKeys extends PrimitiveOrNested[] = [],
+> = [
+  createState: CreateState,
+  options: ControllableStateOptions<T, E, [...ParentKeys, ...Keys]>,
+];
+
+type OriginalControllableStateArgsWithDeepness<
+  CreateState extends OriginalAsyncStateCreator,
+  T,
+  E,
+  Keys extends PrimitiveOrNested[],
+  ParentKeys extends PrimitiveOrNested[] = [],
+> = WithDeepness<
+  OriginalControllableStateArgs<CreateState, T, E, Keys, ParentKeys>,
+  Keys
+>;
+
 type OriginalRequestableStateCreator =
   | typeof createRequestableState
   | typeof createRequestableNestedState;
@@ -292,25 +338,45 @@ type Bek<
 > =
   T extends State<infer V>
     ? T extends ControllableState<any, infer E>
-      ? OriginalPollableStateArgsWithDeepness<
-          T extends ControllableNestedState<any>
-            ? typeof createPollableNestedState
-            : typeof createPollableState,
-          V,
-          E,
-          Keys,
-          ParentKeys
-        >
+      ?
+          | OriginalPollableStateArgsWithDeepness<
+              T extends ControllableNestedState<any>
+                ? typeof createPollableNestedState
+                : typeof createPollableState,
+              V,
+              E,
+              Keys,
+              ParentKeys
+            >
+          | OriginalControllableStateArgsWithDeepness<
+              T extends ControllableNestedState<any>
+                ? typeof createAsyncNestedState
+                : typeof createAsyncState,
+              V,
+              E,
+              Keys,
+              ParentKeys
+            >
       : T extends LoadableState<any, infer E>
-        ? OriginalRequestableStateArgsWithDeepness<
-            T extends LoadableNestedState<any>
-              ? typeof createRequestableNestedState
-              : typeof createRequestableState,
-            V,
-            E,
-            Keys,
-            ParentKeys
-          >
+        ?
+            | OriginalRequestableStateArgsWithDeepness<
+                T extends LoadableNestedState<any>
+                  ? typeof createRequestableNestedState
+                  : typeof createRequestableState,
+                V,
+                E,
+                Keys,
+                ParentKeys
+              >
+            | OriginalLoadableStateArgsWithDeepness<
+                T extends LoadableNestedState<any>
+                  ? typeof createAsyncNestedState
+                  : typeof createAsyncState,
+                V,
+                E,
+                Keys,
+                ParentKeys
+              >
         : T extends AsyncState<any>
           ?
               | OriginalAsyncGetStateArgsWithDeepness<
@@ -362,17 +428,11 @@ type Jjj<
         ? StorageKeys<Item> extends infer K extends PrimitiveOrNested[]
           ? S extends StorageRecord
             ? WithDeepness<
-                [
-                  typeof createStateStorage,
-                  Kek<S, K, [...ParentKeys, ...Keys]>,
-                ],
+                WithCreateStateStorage<[Kek<S, K, [...ParentKeys, ...Keys]>]>,
                 LengthOf<K>
               >
             : S extends State<any>
-              ? [
-                  typeof createStateStorage,
-                  ...Bek<S, K, [...ParentKeys, ...Keys]>,
-                ]
+              ? WithCreateStateStorage<Bek<S, K, [...ParentKeys, ...Keys]>>
               : never
           : never
         : never
@@ -395,6 +455,8 @@ type Oi<
     | OriginalStateArgs<OriginalStateCreator, any>
     | OriginalAsyncStateArgs<OriginalAsyncStateCreator, any>
     | OriginalGetStateArgs<OriginalStateCreator, any, Keys>
+    | OriginalControllableStateArgs<OriginalAsyncStateCreator, any, any, Keys>
+    | OriginalLoadableStateArgs<OriginalAsyncStateCreator, any, any, Keys>
     | OriginalAsyncGetStateArgs<OriginalAsyncStateCreator, any, Keys>
     | OriginalRequestableStateArgs<
         OriginalRequestableStateCreator,
@@ -403,107 +465,274 @@ type Oi<
         Keys
       >
     | OriginalPollableStateArgs<OriginalPollableStateCreator, any, any, Keys>
-    | [
-        typeof createStateStorage,
-        ...(
-          | OriginalGetStateArgsWithDeepness<
-              OriginalStateCreator,
-              any,
-              PrimitiveOrNested[]
-            >
-          | OriginalAsyncGetStateArgsWithDeepness<
-              OriginalAsyncStateCreator,
-              any,
-              PrimitiveOrNested[]
-            >
-          | OriginalRequestableStateArgsWithDeepness<
-              OriginalRequestableStateCreator,
-              any,
-              any,
-              PrimitiveOrNested[]
-            >
-          | OriginalPollableStateArgsWithDeepness<
-              OriginalPollableStateCreator,
-              any,
-              any,
-              PrimitiveOrNested[]
-            >
-          | [...OriginalStateArgs<OriginalStateCreator, any>, number?]
-          | [...OriginalAsyncStateArgs<OriginalAsyncStateCreator, any>, number?]
-        ),
-      ]
-    | readonly [
-        () => void,
-        Oi<
-          PrimitiveOrNested[],
-          J,
-          `${Prefix}_${key extends string ? key : never}`
-        >,
-        J[key],
-      ];
+    | WithCreateStateStorage<
+        | OriginalControllableStateArgsWithDeepness<
+            OriginalAsyncStateCreator,
+            any,
+            any,
+            Keys
+          >
+        | OriginalLoadableStateArgsWithDeepness<
+            OriginalAsyncStateCreator,
+            any,
+            any,
+            Keys
+          >
+        | OriginalGetStateArgsWithDeepness<
+            OriginalStateCreator,
+            any,
+            PrimitiveOrNested[]
+          >
+        | OriginalAsyncGetStateArgsWithDeepness<
+            OriginalAsyncStateCreator,
+            any,
+            PrimitiveOrNested[]
+          >
+        | OriginalRequestableStateArgsWithDeepness<
+            OriginalRequestableStateCreator,
+            any,
+            any,
+            PrimitiveOrNested[]
+          >
+        | OriginalPollableStateArgsWithDeepness<
+            OriginalPollableStateCreator,
+            any,
+            any,
+            PrimitiveOrNested[]
+          >
+        | [...OriginalStateArgs<OriginalStateCreator, any>, J[key]?]
+        | [...OriginalAsyncStateArgs<OriginalAsyncStateCreator, any>, J[key]?]
+      >
+    | WithCreateStateStorage<
+        [
+          Oi<
+            PrimitiveOrNested[],
+            J,
+            `${Prefix}.${key extends string ? key : never}`
+          >,
+          J[key],
+        ]
+      >;
 };
 
-type Io<
-  T extends Oi,
-  Keys extends PrimitiveOrNested[],
-  ParentKeys extends PrimitiveOrNested[] = [],
-> = {
+type WithCreateStateStorage<T extends any[]> = [KAwdl, ...T];
+
+type DetectState<T, V, E = any> = T extends typeof createState
+  ? State<V>
+  : T extends typeof createNestedState
+    ? NestedState<V>
+    : T extends typeof createAsyncState
+      ? AsyncState<V, E>
+      : T extends typeof createAsyncNestedState
+        ? AsyncNestedState<V, E>
+        : T extends typeof createRequestableState
+          ? LoadableState<V, E>
+          : T extends typeof createRequestableNestedState
+            ? LoadableNestedState<V, E>
+            : T extends typeof createPollableState
+              ? ControllableState<V, E>
+              : T extends typeof createPollableNestedState
+                ? ControllableNestedState<V, E>
+                : never;
+
+type Io<T extends Oi, ParentKeys extends PrimitiveOrNested[] = []> = {
   [key in keyof T]: T[key] extends OriginalGetStateArgs<
     infer CreateState,
     infer V,
-    PrimitiveOrNested[]
+    PrimitiveOrNested[],
+    ParentKeys
   >
-    ? CreateState extends typeof createState
-      ? State<V>
-      : NestedState<V>
+    ? DetectState<CreateState, V>
     : T[key] extends OriginalStateArgs<infer CreateState, infer V>
-      ? CreateState extends typeof createState
-        ? State<V>
-        : NestedState<V>
-      : T[key] extends OriginalAsyncGetStateArgs<
+      ? DetectState<CreateState, V>
+      : T[key] extends OriginalControllableStateArgs<
             infer CreateState,
             infer V,
-            PrimitiveOrNested[]
+            infer E,
+            PrimitiveOrNested[],
+            ParentKeys
           >
         ? CreateState extends typeof createAsyncState
-          ? AsyncState<V>
-          : AsyncNestedState<V>
-        : T[key] extends OriginalAsyncStateArgs<infer CreateState, infer V>
+          ? ControllableState<V, E>
+          : ControllableNestedState<V, E>
+        : T[key] extends OriginalLoadableStateArgs<
+              infer CreateState,
+              infer V,
+              infer E,
+              PrimitiveOrNested[],
+              ParentKeys
+            >
           ? CreateState extends typeof createAsyncState
-            ? AsyncState<V>
-            : AsyncNestedState<V>
-          : T[key] extends OriginalRequestableStateArgs<
+            ? LoadableState<V, E>
+            : LoadableNestedState<V, E>
+          : T[key] extends OriginalAsyncGetStateArgs<
                 infer CreateState,
                 infer V,
-                infer E,
-                PrimitiveOrNested[]
+                PrimitiveOrNested[],
+                ParentKeys
               >
-            ? CreateState extends typeof createRequestableState
-              ? LoadableState<V, E>
-              : LoadableNestedState<V, E>
-            : T[key] extends OriginalPollableStateArgs<
-                  infer CreateState,
-                  infer V,
-                  infer E,
-                  PrimitiveOrNested[]
-                >
-              ? CreateState extends typeof createPollableState
-                ? ControllableState<V, E>
-                : ControllableNestedState<V, E>
-              : T[key] extends [
-                    () => void,
-                    infer W extends Oi,
-                    infer K extends number,
-                  ]
-                ? K
-                : never;
+            ? DetectState<CreateState, V>
+            : T[key] extends OriginalAsyncStateArgs<infer CreateState, infer V>
+              ? DetectState<CreateState, V>
+              : T[key] extends OriginalRequestableStateArgs<
+                    infer CreateState,
+                    infer V,
+                    infer E,
+                    PrimitiveOrNested[],
+                    ParentKeys
+                  >
+                ? DetectState<CreateState, V, E>
+                : T[key] extends OriginalPollableStateArgs<
+                      infer CreateState,
+                      infer V,
+                      infer E,
+                      PrimitiveOrNested[],
+                      ParentKeys
+                    >
+                  ? DetectState<CreateState, V, E>
+                  : T[key] extends WithCreateStateStorage<
+                        OriginalPollableStateArgsWithDeepness<
+                          infer CreateState,
+                          infer V,
+                          infer E,
+                          infer K,
+                          ParentKeys
+                        >
+                      >
+                    ? NestedStateStorage<K, DetectState<CreateState, V, E>>
+                    : T[key] extends WithCreateStateStorage<
+                          OriginalRequestableStateArgsWithDeepness<
+                            infer CreateState,
+                            infer V,
+                            infer E,
+                            infer K,
+                            ParentKeys
+                          >
+                        >
+                      ? NestedStateStorage<K, DetectState<CreateState, V, E>>
+                      : T[key] extends WithCreateStateStorage<
+                            OriginalControllableStateArgs<
+                              infer CreateState,
+                              infer V,
+                              infer E,
+                              infer K,
+                              ParentKeys
+                            >
+                          >
+                        ? NestedStateStorage<
+                            K,
+                            CreateState extends typeof createAsyncState
+                              ? ControllableState<V, E>
+                              : ControllableNestedState<V, E>
+                          >
+                        : T[key] extends WithCreateStateStorage<
+                              OriginalLoadableStateArgs<
+                                infer CreateState,
+                                infer V,
+                                infer E,
+                                infer K,
+                                ParentKeys
+                              >
+                            >
+                          ? NestedStateStorage<
+                              K,
+                              CreateState extends typeof createAsyncState
+                                ? LoadableState<V, E>
+                                : LoadableNestedState<V, E>
+                            >
+                          : T[key] extends WithCreateStateStorage<
+                                OriginalAsyncGetStateArgsWithDeepness<
+                                  infer CreateState,
+                                  infer V,
+                                  infer K,
+                                  ParentKeys
+                                >
+                              >
+                            ? NestedStateStorage<K, DetectState<CreateState, V>>
+                            : T[key] extends WithCreateStateStorage<
+                                  OriginalAsyncStateArgsWithDeepness<
+                                    infer CreateState,
+                                    infer V,
+                                    infer C
+                                  >
+                                >
+                              ? NestedStateStorage<
+                                  GenerateArr<C>,
+                                  DetectState<CreateState, V>
+                                >
+                              : T[key] extends WithCreateStateStorage<
+                                    OriginalAsyncStateArgs<
+                                      infer CreateState,
+                                      infer V
+                                    >
+                                  >
+                                ? NestedStateStorage<
+                                    [PrimitiveOrNested],
+                                    DetectState<CreateState, V>
+                                  >
+                                : T[key] extends WithCreateStateStorage<
+                                      OriginalGetStateArgsWithDeepness<
+                                        infer CreateState,
+                                        infer V,
+                                        infer K,
+                                        ParentKeys
+                                      >
+                                    >
+                                  ? NestedStateStorage<
+                                      K,
+                                      DetectState<CreateState, V>
+                                    >
+                                  : T[key] extends WithCreateStateStorage<
+                                        OriginalStateArgsWithDeepness<
+                                          infer CreateState,
+                                          infer V,
+                                          infer C
+                                        >
+                                      >
+                                    ? NestedStateStorage<
+                                        GenerateArr<C>,
+                                        DetectState<CreateState, V>
+                                      >
+                                    : T[key] extends WithCreateStateStorage<
+                                          OriginalStateArgs<
+                                            infer CreateState,
+                                            infer V
+                                          >
+                                        >
+                                      ? NestedStateStorage<
+                                          [PrimitiveOrNested],
+                                          DetectState<CreateState, V>
+                                        >
+                                      : T[key] extends WithCreateStateStorage<
+                                            [
+                                              infer W extends Oi,
+                                              infer K extends number,
+                                            ]
+                                          >
+                                        ? GenerateArr<K> extends infer K extends
+                                            PrimitiveOrNested[]
+                                          ? NestedStateStorage<
+                                              K,
+                                              Io<W, [...ParentKeys, ...K]>
+                                            >
+                                          : never
+                                        : T[key] extends WithCreateStateStorage<
+                                              [infer W extends Oi]
+                                            >
+                                          ? NestedStateStorage<
+                                              [PrimitiveOrNested],
+                                              Io<
+                                                W,
+                                                [
+                                                  ...ParentKeys,
+                                                  PrimitiveOrNested,
+                                                ]
+                                              >
+                                            >
+                                          : never;
 };
 
-type U<Keys extends string> = {
-  [key in Keys]: [number, U<string>];
-};
-
-const createStateStorage: {
+interface KAwdl {
   <
     J extends Record<keyof T, number>,
     T extends Oi<Keys, J>,
@@ -511,7 +740,7 @@ const createStateStorage: {
     C extends number = LengthOf<Keys>,
   >(
     ...args: WithDeepness<[obj: T], C>
-  ): Io<T, Keys>;
+  ): NestedStateStorage<Keys, Io<T, Keys>>;
 
   <
     T extends StorageRecord,
@@ -520,6 +749,40 @@ const createStateStorage: {
   >(
     ...args: WithDeepness<[obj: Kek<T, Keys>], C>
   ): NestedStateStorage<Keys, T>;
+
+  <T, Keys extends PrimitiveOrNested[], E = any>(
+    ...args: OriginalControllableStateArgsWithDeepness<
+      typeof createAsyncNestedState,
+      T,
+      E,
+      Keys
+    >
+  ): NestedStateStorage<Keys, ControllableNestedState<T, E, Keys>>;
+  <T, Keys extends PrimitiveOrNested[], E = any>(
+    ...args: OriginalControllableStateArgsWithDeepness<
+      typeof createAsyncState,
+      T,
+      E,
+      Keys
+    >
+  ): NestedStateStorage<Keys, ControllableState<T, E, Keys>>;
+
+  <T, Keys extends PrimitiveOrNested[], E = any>(
+    ...args: OriginalLoadableStateArgsWithDeepness<
+      typeof createAsyncNestedState,
+      T,
+      E,
+      Keys
+    >
+  ): NestedStateStorage<Keys, LoadableNestedState<T, E, Keys>>;
+  <T, Keys extends PrimitiveOrNested[], E = any>(
+    ...args: OriginalLoadableStateArgsWithDeepness<
+      typeof createAsyncState,
+      T,
+      E,
+      Keys
+    >
+  ): NestedStateStorage<Keys, LoadableState<T, E, Keys>>;
 
   <T, Keys extends PrimitiveOrNested[], E = any>(
     ...args: OriginalAsyncGetStateArgsWithDeepness<
@@ -594,8 +857,10 @@ const createStateStorage: {
   <T, Keys extends GenerateArr<C>, C extends number = LengthOf<Keys>>(
     ...args: OriginalStateArgsWithDeepness<typeof createState, T, C>
   ): NestedStateStorage<Keys, State<T, Keys>>;
-} = (
-  createState: (arg?: any, args?: any[]) => AnyState,
+}
+
+const createStateStorage: KAwdl = (
+  arg1: ((...arg: any[]) => AnyState) | Oi | typeof createStateStorage,
   arg2?: AnyOptions | ((...args: any[]) => any) | number | unknown,
   arg3?: number
 ) => {
@@ -652,11 +917,22 @@ createStateStorage(
     //     },
     //   },
     // ],
-    bek: [() => {}, { w: [() => {}, { l: [createState, () => 'wda'] }, 3] }, 1],
+    // bek: [() => {}, { w: [() => {}, createState, 2] }, 2],
+    bek: [
+      createStateStorage,
+      {
+        w: [createState, (a: string, b: string) => 'wda'],
+      },
+      2,
+    ],
+    // bek: [() => {}, createState, 2, 2],
+
     // sek: [createStateStorage, createState, 'wda'],
   },
   1
-).bek;
+)
+  .get(1)
+  .bek.get(1, 2).w;
 
 // createStateStorage(createState, (a: number, b: string) => 25);
 
