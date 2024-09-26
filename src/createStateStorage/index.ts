@@ -787,19 +787,19 @@ const toStorage = (
   }) as Partial<StateStorage<any, any, any[]>> as StateStorage<any, any, any[]>;
 
 function _delete(this: StateStorage<any, any, any[]>, key: PrimitiveOrNested) {
-  const { _storage: storage, _keyStorage: keyStorage } = this._internal;
+  const { _keyStorage: keyStorage } = this._internal;
 
-  if (!storage.delete(key)) {
-    if (keyStorage) {
-      const strKey = toKey(key);
+  if (keyStorage) {
+    const strKey = toKey(key);
 
-      if (keyStorage.has(strKey)) {
-        storage.delete(keyStorage.get(strKey)!);
+    if (keyStorage.has(strKey)) {
+      key = keyStorage.get(strKey)!;
 
-        keyStorage.delete(strKey);
-      }
+      keyStorage.delete(strKey);
     }
   }
+
+  this._internal._storage.delete(key);
 }
 
 function get(this: StateStorage<any, any, any[]>, ...keys: any[]): any {
@@ -889,13 +889,10 @@ const createStorageRecord = (
 
     const [a0, a1] = item;
 
-    return Object.assign(
-      {
-        [key]:
-          a0 != createStateStorage ? a0(a1, keys) : a0(a1, item[2], item[3]),
-      },
-      acc
-    );
+    return {
+      ...acc,
+      [key]: a0 != createStateStorage ? a0(a1, keys) : a0(a1, item[2], item[3]),
+    };
   }, {});
 
 const createStateStorage: KAwdl = (

@@ -48,9 +48,7 @@ const deepSet = (
   pushValueArr[index](nextValue);
 
   if (typeof key == 'string') {
-    return value
-      ? Object.assign({}, value, { [key]: nextValue })
-      : { [key]: nextValue };
+    return value ? { ...value, [key]: nextValue } : { [key]: nextValue };
   }
 
   const arr = value ? value.slice() : new Array(key + 1);

@@ -356,11 +356,11 @@ export type StateStorage<
 > = Nesting<ParentKeys> &
   Internal<{
     _get(keys: any[], index: number): any;
-    _storage: Map<any, any>;
+    readonly _storage: Map<any, any>;
     _keyStorage?: Map<string, any>;
     _getItem(options: any, args: any[]): any;
-    _options: any;
-    _depth: number;
+    readonly _options: any;
+    readonly _depth: number;
   }> &
   InternalPathBase &
   StateStorageMarker<K, T> & {
