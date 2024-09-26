@@ -1,8 +1,4 @@
-import toKey, {
-  NestedArray,
-  NestedObject,
-  type PrimitiveOrNested,
-} from 'keyweaver';
+import toKey, { type PrimitiveOrNested } from 'keyweaver';
 import type {
   AnyState,
   AsyncNestedState,
@@ -15,7 +11,6 @@ import type {
   ControllableState,
   State,
   StateStorage,
-  Nesting,
   AsyncStateOptions,
   RequestableStateOptions,
   PollableStateOptions,
@@ -24,105 +19,18 @@ import type {
   STATE_STORAGE_MARKER,
   LoadableStateOptions,
   ControllableStateOptions,
+  Nesting,
 } from '../types';
 import { EMPTY_ARR } from '../utils/constants';
 import path from '../utils/path';
-import createState from '../createState';
-import createAsyncState from '../createAsyncState';
-import createNestedState from '../createNestedState';
-import createAsyncNestedState from '../createAsyncNestedState';
-import createRequestableState from '../createRequestableState';
-import createRequestableNestedState from '../createRequestableNestedState';
-import createPollableState from '../createPollableState';
-import createPollableNestedState from '../createPollableNestedState';
-
-function get(this: StateStorage<any, any, any[]>, ...args: any[]) {
-  type Item = State<any, any[]> | StateStorage<any, any>;
-
-  type Container = Record<string, Item>;
-
-  let item: Item | Container = this._get(args, 0);
-
-  for (let i = 1; i < args.length; i++) {
-    item = (item as StateStorage<any, any>)._get(args, i);
-  }
-
-  if (this.keys.length) {
-    args = this.keys.concat(args);
-  }
-
-  return '_internal' in item || '_get' in item
-    ? ({
-        ...item,
-        keys: args,
-      } as Item)
-    : Object.keys(item).reduce<Container>(
-        (acc, key) => ({
-          ...acc,
-          [key]: {
-            ...(item as Container)[key],
-            a: args,
-          },
-        }),
-        {}
-      );
-}
-
-const recursiveWrap = (
-  getItem: (args?: any[]) => any,
-  count: number
-): (() => NestedStateStorage<any[], any>) =>
-  count
-    ? recursiveWrap((): StateStorage<any, any, any[]> => {
-        type Item = AnyState | StateStorage<any, any>;
-
-        const storage = new Map<any, Item>();
-
-        let keyStorage: Map<string, any>;
-
-        return {
-          get: get as any,
-          path,
-          keys: EMPTY_ARR,
-          _path: EMPTY_ARR,
-          _get(args, index) {
-            const arg = args[index];
-
-            if (storage.has(arg)) {
-              return storage.get(arg)!;
-            }
-
-            if (arg && typeof arg == 'object') {
-              keyStorage ||= new Map();
-
-              const key = toKey(arg);
-
-              if (keyStorage.has(key)) {
-                const prevArg = keyStorage.get(key)!;
-
-                const item = storage.get(prevArg)!;
-
-                storage.delete(prevArg);
-
-                storage.set(arg, item);
-
-                keyStorage.set(key, arg);
-
-                return item;
-              }
-
-              keyStorage.set(key, arg);
-            }
-
-            const item: Item = getItem(args);
-
-            storage.set(arg, item);
-
-            return item;
-          },
-        };
-      }, count - 1)
-    : getItem;
+import type createState from '../createState';
+import type createAsyncState from '../createAsyncState';
+import type createNestedState from '../createNestedState';
+import type createAsyncNestedState from '../createAsyncNestedState';
+import type createRequestableState from '../createRequestableState';
+import type createRequestableNestedState from '../createRequestableNestedState';
+import type createPollableState from '../createPollableState';
+import type createPollableNestedState from '../createPollableNestedState';
 
 type GenerateArr<
   Length extends number,
@@ -130,10 +38,6 @@ type GenerateArr<
 > = Result['length'] extends Length
   ? Result
   : GenerateArr<Length, [...Result, PrimitiveOrNested]>;
-
-type AnyAsyncOptions = { value?(...args: any): any };
-
-type AnyOptions = { load(...args: any[]): any } & AnyAsyncOptions;
 
 type LengthOf<Keys> = Keys extends any[]
   ? Keys['length'] extends 0
@@ -162,8 +66,6 @@ type OriginalStateArgsWithDeepness<
   T,
   C extends number,
 > = WithDeepness<OriginalStateArgs<CreateState, T>, C>;
-
-type l = OriginalStateArgs<OriginalStateCreator, any>;
 
 type OriginalGetStateArgs<
   CreateState extends OriginalStateCreator,
@@ -859,81 +761,178 @@ interface KAwdl {
   ): NestedStateStorage<Keys, State<T, Keys>>;
 }
 
-const createStateStorage: KAwdl = (
-  arg1: ((...arg: any[]) => AnyState) | Oi | typeof createStateStorage,
-  arg2?: AnyOptions | ((...args: any[]) => any) | number | unknown,
-  arg3?: number
-) => {
-  let fn: undefined | ((...args: any[]) => any);
+const getStorageUtils = (
+  getItem: any,
+  options: any,
+  depth: number
+): StateStorage<any, any>['_internal'] => ({
+  _storage: new Map(),
+  _keyStorage: undefined,
+  _get,
+  _getItem: getItem,
+  _options: options,
+  _depth: depth - 1,
+});
 
-  let count: number | undefined;
+const toStorage = (
+  utils: StateStorage<any, any>['_internal'],
+  keys: PrimitiveOrNested[]
+) =>
+  ({
+    _internal: utils,
+    get,
+    delete: _delete,
+    keys,
+    path,
+    _path: EMPTY_ARR,
+  }) as Partial<StateStorage<any, any, any[]>> as StateStorage<any, any, any[]>;
 
-  const l = createState.length;
+function _delete(this: StateStorage<any, any, any[]>, key: PrimitiveOrNested) {
+  const { _storage: storage, _keyStorage: keyStorage } = this._internal;
 
-  const typeofArg2 = typeof arg2;
+  if (!storage.delete(key)) {
+    if (keyStorage) {
+      const strKey = toKey(key);
 
-  if (!l) {
-    fn = createState;
+      if (keyStorage.has(strKey)) {
+        storage.delete(keyStorage.get(strKey)!);
 
-    if (typeofArg2 == 'number') {
-      count = arg2 as number;
-    }
-  } else if (typeofArg2 == 'function') {
-    count = (arg2 as Function).length;
-
-    if (l == 1) {
-      fn = (args) => createState((arg2 as Function)(...args));
-    }
-  } else if (arg2 && typeofArg2 == 'object') {
-    const { load, value } = arg2 as Partial<AnyOptions>;
-
-    if (load) {
-      count = load.length;
-    }
-
-    if (typeof value == 'function') {
-      count ||= value.length;
-
-      if (l == 1) {
-        fn = (args) => createState({ ...arg2, value: value(...args) });
+        keyStorage.delete(strKey);
       }
     }
   }
+}
 
-  return recursiveWrap(
-    fn || createState.bind(null, arg2),
-    count || arg3 || 1
-  )();
-};
+function get(this: StateStorage<any, any, any[]>, ...keys: any[]): any {
+  type Item = State<any, any[]> | StateStorage<any, any>['_internal'];
 
-createStateStorage(
-  {
-    // kek: [createNestedState, 2],
-    // trr: [
-    //   createRequestableState,
-    //   {
-    //     async load(a, b, c) {
-    //       return 'wad';
-    //     },
-    //   },
-    // ],
-    // bek: [() => {}, { w: [() => {}, createState, 2] }, 2],
-    bek: [
-      createStateStorage,
+  type Container = Record<string, Item>;
+
+  let item: Item | Container = this._internal;
+
+  for (let i = 0; i < keys.length; i++) {
+    item = (item as StateStorage<any, any>['_internal'])._get(keys, i);
+  }
+
+  if (this.keys.length) {
+    keys = this.keys.concat(keys);
+  }
+
+  return '_internal' in item
+    ? Object.assign({ keys } as Nesting<any[]>, item)
+    : '_depth' in item
+      ? toStorage(item as StateStorage<any, any>['_internal'], keys)
+      : Object.keys(item).reduce<Container>(
+          (acc, key) => ({
+            ...acc,
+            [key]: Object.assign(
+              { keys } as Nesting<any[]>,
+              (item as Container)[key]
+            ),
+          }),
+          {}
+        );
+}
+
+function _get(
+  this: StateStorage<any, any, any[]>['_internal'],
+  args: any[],
+  index: number
+) {
+  type Item = AnyState | StateStorage<any, any> | { [key: string]: Item };
+
+  const arg = args[index];
+
+  const storage = this._storage;
+
+  if (storage.has(arg)) {
+    return storage.get(arg)!;
+  }
+
+  if (arg && typeof arg == 'object') {
+    if (!this._keyStorage) {
+      this._keyStorage = new Map();
+    }
+
+    const keyStorage = this._keyStorage;
+
+    const key = toKey(arg);
+
+    if (keyStorage.has(key)) {
+      const prevArg = keyStorage.get(key)!;
+
+      const item = storage.get(prevArg)!;
+
+      storage.delete(prevArg);
+
+      storage.set(arg, item);
+
+      keyStorage.set(key, arg);
+
+      return item;
+    }
+
+    keyStorage.set(key, arg);
+  }
+
+  const item: Item = this._depth
+    ? getStorageUtils(this._getItem, this._options, this._depth)
+    : this._getItem(this._options, args);
+
+  storage.set(arg, item);
+
+  return item;
+}
+
+const createStorageRecord = (
+  obj: Record<string, any[]>,
+  keys: PrimitiveOrNested[]
+) =>
+  Object.keys(obj).reduce((acc, key) => {
+    const item = obj[key];
+
+    const [a0, a1] = item;
+
+    return Object.assign(
       {
-        w: [createState, (a: string, b: string) => 'wda'],
+        [key]:
+          a0 != createStateStorage ? a0(a1, keys) : a0(a1, item[2], item[3]),
       },
-      2,
-    ],
-    // bek: [() => {}, createState, 2, 2],
+      acc
+    );
+  }, {});
 
-    // sek: [createStateStorage, createState, 'wda'],
-  },
-  1
-)
-  .get(1)
-  .bek.get(1, 2).w;
+const createStateStorage: KAwdl = (
+  arg1: any,
+  arg2?: any,
+  arg3?: number
+): any => {
+  if (typeof arg1 == 'object') {
+    return toStorage(
+      getStorageUtils(createStorageRecord, arg1, arg2 || 1),
+      EMPTY_ARR
+    );
+  }
 
-// createStateStorage(createState, (a: number, b: string) => 25);
+  let depth = arg3 || 1;
+
+  if (arg2) {
+    const typeofArg2 = typeof arg2;
+
+    if (typeofArg2 == 'function') {
+      depth = Math.max((arg2 as Function).length, depth);
+    } else if (typeofArg2 == 'object') {
+      const { load, value } = arg2 as Partial<LoadableStateOptions<unknown>>;
+
+      depth = Math.max(
+        typeof load == 'function' ? load.length : 1,
+        typeof value == 'function' ? value.length : 1,
+        depth
+      );
+    }
+  }
+
+  return toStorage(getStorageUtils(arg1, arg2, depth), EMPTY_ARR);
+};
 
 export default createStateStorage;

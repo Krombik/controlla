@@ -14,8 +14,14 @@ type _InternalUtils = InternalUtils & {
   _valueSet: CallbackRegistry;
 };
 
-function _getValueChangeCallbackSet(this: _InternalUtils) {
-  return this._valueSet;
+function _onValueChange(this: _InternalUtils, cb: (value: any) => void) {
+  const set = this._valueSet;
+
+  set.add(cb);
+
+  return () => {
+    set.delete(cb);
+  };
 }
 
 function _set(this: _InternalUtils, value: any, isSet: boolean) {
@@ -30,11 +36,13 @@ function _set(this: _InternalUtils, value: any, isSet: boolean) {
   }
 }
 
-const createState = <T>(value?: T | (() => T)): State<T> => {
+const createState: {
+  <T>(value?: T | (() => T)): State<T>;
+} = (value: unknown | (() => unknown), keys?: any[]) => {
   const data: InternalDataMap = new Map();
 
   if (typeof value == 'function') {
-    value = (value as Function)();
+    value = keys ? value(...keys) : value();
   }
 
   if (value !== undefined) {
@@ -47,7 +55,7 @@ const createState = <T>(value?: T | (() => T)): State<T> => {
       _valueSet: new Set(),
       _set,
       _get: identity,
-      _getValueChangeCallbackSet,
+      _onValueChange,
     } as _InternalUtils,
   } as Partial<State<any>> as State<any>;
 };

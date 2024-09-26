@@ -1,5 +1,5 @@
 import { useLayoutEffect, useState } from 'react';
-import type { AnyAsyncState, Falsy, Pending, State } from '../types';
+import type { AnyAsyncState, Falsy, HandlePending, State } from '../types';
 import onValueChange from '../onValueChange';
 import useNoop from '../utils/useNoop';
 import getValue from '../getValue';
@@ -35,11 +35,7 @@ const useValue = ((state: AnyAsyncState | Falsy) => {
 }) as {
   <S extends State | Falsy>(
     state: S
-  ): S extends State<infer T>
-    ? [Extract<T, Pending>] extends [never]
-      ? T
-      : Exclude<T, Pending> | undefined
-    : undefined;
+  ): S extends State<infer T> ? HandlePending<T> : undefined;
 };
 
 export default useValue;

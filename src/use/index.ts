@@ -1,5 +1,10 @@
 import { useContext, useLayoutEffect, useState } from 'react';
-import type { AnyAsyncState, Falsy, Pending } from '../types';
+import type {
+  AnyAsyncState,
+  AsyncState,
+  Falsy,
+  WithoutPending,
+} from '../types';
 import useNoop from '../utils/useNoop';
 import UseContext from '../utils/UseContext';
 import onValueChange from '../onValueChange';
@@ -66,9 +71,9 @@ const use = ((state: AnyAsyncState<any, any, any[]> | Falsy) => {
 
   useNoop();
 }) as {
-  <S extends AnyAsyncState | Falsy>(
+  <S extends AsyncState<any> | Falsy>(
     state: S
-  ): S extends AnyAsyncState<infer T> ? Exclude<T, Pending> : undefined;
+  ): S extends AsyncState<infer T> ? WithoutPending<T> : undefined;
 };
 
 export default use;

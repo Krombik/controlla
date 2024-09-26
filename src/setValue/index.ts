@@ -1,16 +1,12 @@
 import getValue from '../getValue';
-import type { Pending, State } from '../types';
+import type { HandlePending, State, WithoutPending } from '../types';
 
 const setValue = <S extends State<any>>(
   state: S,
   value: S extends State<infer Value>
     ?
-        | Exclude<Value, Pending>
-        | ((
-            prevValue: [Extract<Value, Pending>] extends [never]
-              ? Value
-              : Exclude<Value, Pending> | undefined
-          ) => Exclude<Value, Pending>)
+        | WithoutPending<Value>
+        | ((prevValue: HandlePending<Value>) => WithoutPending<Value>)
     : never
 ): S => {
   state._internal._set(

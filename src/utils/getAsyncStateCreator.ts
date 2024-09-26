@@ -160,22 +160,25 @@ function load(this: _State, reload?: boolean) {
 }
 
 const getAsyncStateCreator =
-  (createCommonState: (defaultValue?: any) => State<any>) =>
-  ({
-    value,
-    isLoaded,
-    load: _load,
-    pause,
-    resume,
-    loadingTimeout,
-    reset,
-  }: Partial<ControllableStateOptions<any>>): AnyAsyncState<any> => {
+  (createCommonState: (defaultValue?: any, keys?: any[]) => State<any>) =>
+  (
+    {
+      value,
+      isLoaded,
+      load: _load,
+      pause,
+      resume,
+      loadingTimeout,
+      reset,
+    }: Partial<ControllableStateOptions<any>>,
+    keys?: any[]
+  ): AnyAsyncState<any> => {
     const errorState = createState() as _State['error'];
 
     const isLoadedState = createState(false);
 
     const state = {
-      ...createCommonState(value),
+      ...createCommonState(value, keys),
       error: errorState,
       isLoaded: isLoadedState,
     } as _State;

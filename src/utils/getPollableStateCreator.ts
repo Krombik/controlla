@@ -15,7 +15,7 @@ export const handleGetInterval = (
 
 const getPollableStateCreator =
   (createAsyncState: ReturnType<typeof getAsyncStateCreator>) =>
-  (options: PollableStateOptions<any, any>) => {
+  (options: PollableStateOptions<any, any>, keys?: any[]) => {
     let sleep: () => Promise<void>;
 
     let pausePromise: Promise<void> | undefined | false;
@@ -26,48 +26,51 @@ const getPollableStateCreator =
 
     let reset: () => void = noop;
 
-    const state = createAsyncState({
-      ...options,
-      load: createFetcher(async (cancelPromise, load) => {
-        do {
+    const state = createAsyncState(
+      {
+        ...options,
+        load: createFetcher(async (cancelPromise, load) => {
           do {
-            if (
-              !(await Promise.any([
-                Promise.all([sleepPromise, pausePromise, becomingOnline()]),
-                cancelPromise,
-              ]))
-            ) {
-              sleepPromise = false;
+            do {
+              if (
+                !(await Promise.any([
+                  Promise.all([sleepPromise, pausePromise, becomingOnline()]),
+                  cancelPromise,
+                ]))
+              ) {
+                sleepPromise = false;
 
-              return;
-            }
-          } while (pausePromise || !navigator.onLine);
-        } while (
-          await load().then((res) => {
-            sleepPromise = res && sleep();
+                return;
+              }
+            } while (pausePromise || !navigator.onLine);
+          } while (
+            await load().then((res) => {
+              sleepPromise = res && sleep();
 
-            return res;
-          })
-        );
-      }, options),
-      pause() {
-        if (!pausePromise) {
-          pausePromise = new Promise((res) => {
-            resume = res;
-          });
-        }
-      },
-      resume() {
-        if (pausePromise) {
-          pausePromise = false;
+              return res;
+            })
+          );
+        }, options),
+        pause() {
+          if (!pausePromise) {
+            pausePromise = new Promise((res) => {
+              resume = res;
+            });
+          }
+        },
+        resume() {
+          if (pausePromise) {
+            pausePromise = false;
 
-          resume();
-        }
+            resume();
+          }
+        },
+        reset() {
+          reset();
+        },
       },
-      reset() {
-        reset();
-      },
-    });
+      keys
+    );
 
     const data = state._internal._data;
 

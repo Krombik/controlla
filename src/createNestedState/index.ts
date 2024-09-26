@@ -14,39 +14,126 @@ import executeSetters from '../utils/executeSetters';
 import handleNotEqual from '../utils/handleNotEqual';
 import path from '../utils/path';
 import safeGet from '../utils/safeGet';
+import noop from 'lodash.noop';
 
 interface _InternalUtils extends InternalUtils {
   _rootMap: NestedMap;
 }
 
-function _getValueChangeCallbackSet(this: _InternalUtils, path: Key[]) {
-  const l = path.length;
+const deepSet = (
+  value: any,
+  nextValue: any,
+  path: Key[],
+  index: number,
+  lastIndex: number,
+  pushValueArr: ((value: any) => void)[]
+): any => {
+  const key = path[index];
+
+  if (value != null && typeof value != 'object') {
+    value = null;
+  }
+
+  if (index < lastIndex) {
+    nextValue = deepSet(
+      value && value[key],
+      nextValue,
+      path,
+      index + 1,
+      lastIndex,
+      pushValueArr
+    );
+  }
+
+  pushValueArr[index](nextValue);
+
+  if (typeof key == 'string') {
+    return value
+      ? Object.assign({}, value, { [key]: nextValue })
+      : { [key]: nextValue };
+  }
+
+  const arr = value ? value.slice() : new Array(key + 1);
+
+  arr[key] = nextValue;
+
+  return arr;
+};
+
+function _onValueChange(
+  this: _InternalUtils,
+  cb: (value: any) => void,
+  path: Key[]
+) {
+  let length = path.length;
 
   let parent = this._rootMap;
 
-  for (let i = 0; i < l; i++) {
-    const k = path[i];
+  let set: CallbackRegistry | undefined;
 
-    if (!parent.has(k)) {
-      let set: CallbackRegistry;
+  for (let i = 0, l = length; i < l; i++) {
+    if (parent._children) {
+      let child = parent._children.get(path[i]);
 
-      for (; i < l; i++) {
-        const child: NestedMap = new Map();
-
-        child.set(EMPTY_ARR, (set = new Set()));
-
-        parent.set(path[i], child);
-
+      if (child) {
         parent = child;
-      }
 
-      return set!;
+        continue;
+      }
+    } else {
+      parent._children = new Map();
     }
 
-    parent = parent.get(k)!;
+    let children = parent._children;
+
+    for (l--; i < l; i++) {
+      children.set(
+        path[i],
+        (parent = {
+          _root: null,
+          _children: (children = new Map()),
+          _parent: parent,
+        })
+      );
+    }
+
+    children.set(
+      path[l],
+      (parent = { _root: (set = new Set()), _children: null, _parent: parent })
+    );
   }
 
-  return parent.get(EMPTY_ARR)!;
+  if (!set) {
+    if (parent._root) {
+      set = parent._root;
+    } else {
+      parent._root = set = new Set();
+    }
+  }
+
+  set.add(cb);
+
+  return () => {
+    if (set.delete(cb) && !set.size) {
+      parent._root = null;
+
+      if (!parent._children) {
+        for (parent = parent._parent!; length--; parent = parent._parent!) {
+          const children = parent._children!;
+
+          if (children.size != 1) {
+            children.delete(path[length]);
+          } else {
+            parent._children = null;
+          }
+
+          if (parent._root) {
+            break;
+          }
+        }
+      }
+    }
+  };
 }
 
 function _set(
@@ -55,7 +142,9 @@ function _set(
   isSet: boolean,
   path: Key[]
 ) {
-  let currentNode: NestedMap | false = this._rootMap;
+  let currentNode: NestedMap | null | undefined = this._rootMap;
+
+  const root = currentNode._root;
 
   const data = this._data;
 
@@ -63,88 +152,62 @@ function _set(
 
   const l = path.length;
 
-  const nodesQueue: NestedMap[] = [currentNode];
+  const nodesQueue: CallbackRegistry[] = [];
+
+  const valuesArr: any[] = [];
+
+  const pushToValuesArr = valuesArr.push.bind(valuesArr);
+
+  const pushArr: ((value: any) => void)[] = [];
 
   for (let i = 0; i < l; i++) {
     const k = path[i];
 
-    if (currentNode.has(k)) {
-      currentNode = currentNode.get(k)!;
+    currentNode = currentNode._children && currentNode._children.get(k);
 
-      nodesQueue.push(currentNode);
+    if (currentNode) {
+      if (currentNode._root) {
+        nodesQueue.push(currentNode._root);
+
+        pushArr.push(pushToValuesArr);
+      } else {
+        pushArr.push(noop);
+      }
     } else {
-      currentNode = false;
+      for (; i < l; i++) {
+        pushArr.push(noop);
+      }
 
       break;
     }
   }
 
   if (handleNotEqual(safeGet(rootValue, path), nextValue, currentNode)) {
-    const valuesQueue: any[] = [];
-
     if (isSet) {
       if (l) {
-        const lastIndex = l - 1;
-
-        let newValue =
-          rootValue && typeof rootValue == 'object'
-            ? Array.isArray(rootValue)
-              ? rootValue.slice()
-              : { ...rootValue }
-            : typeof path[0] == 'string'
-              ? {}
-              : [];
-
-        data.set(RootKey.VALUE, newValue);
-
-        valuesQueue.push(newValue);
-
-        for (let i = 0; i < lastIndex; i++) {
-          const key = path[i];
-
-          const original = newValue[key];
-
-          const copy =
-            original && typeof original == 'object'
-              ? Array.isArray(original)
-                ? original.slice()
-                : { ...original }
-              : typeof key == 'string'
-                ? {}
-                : [];
-
-          newValue[key] = copy;
-
-          newValue = copy;
-
-          valuesQueue.push(copy);
-        }
-
-        newValue[path[lastIndex]] = nextValue;
-      } else {
-        data.set(RootKey.VALUE, nextValue);
+        nextValue = deepSet(rootValue, nextValue, path, 0, l - 1, pushArr);
       }
 
-      valuesQueue.push(nextValue);
+      data.set(RootKey.VALUE, nextValue);
     }
 
     for (let i = nodesQueue.length; i--; ) {
-      executeSetters(nodesQueue[i].get(EMPTY_ARR)!, valuesQueue[i]);
+      executeSetters(nodesQueue[i], valuesArr[i]);
+    }
+
+    if (root) {
+      executeSetters(root, nextValue);
     }
   }
 }
 
-const createNestedState = <T extends NestedArray | NestedObject>(
-  value?: T | (() => T)
-): NestedState<T> => {
+const createNestedState: {
+  <T extends NestedArray | NestedObject>(value?: T | (() => T)): NestedState<T>;
+} = (value?: unknown | (() => unknown), keys?: any[]) => {
   const data: InternalDataMap = new Map();
 
-  const rootMap: NestedMap = new Map();
-
-  rootMap.set(EMPTY_ARR, new Set());
-
   if (typeof value == 'function') {
-    value = value();
+    value = keys ? value(...keys) : value();
   }
 
   if (value !== undefined) {
@@ -154,14 +217,14 @@ const createNestedState = <T extends NestedArray | NestedObject>(
   return {
     _internal: {
       _data: data,
-      _rootMap: rootMap,
-      _getValueChangeCallbackSet,
+      _rootMap: { _root: null, _children: null },
+      _onValueChange,
       _get: safeGet,
       _set,
     } as _InternalUtils,
     _path: EMPTY_ARR,
     path,
-  } as Partial<NestedState<any>> as NestedState<T>;
+  } as Partial<NestedState<any>> as NestedState<any>;
 };
 
 export default createNestedState as OriginalStateCreator<

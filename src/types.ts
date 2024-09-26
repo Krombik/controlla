@@ -7,6 +7,12 @@ declare const PENDING: unique symbol;
 
 export type Pending = typeof PENDING;
 
+export type WithoutPending<Value> = Exclude<Value, Pending>;
+
+export type HandlePending<Value> = [Extract<Value, Pending>] extends [never]
+  ? Value
+  : Exclude<Value, Pending> | undefined;
+
 type ResolvePath<K, Path, O = Exclude<K, Pending>> = Path extends [
   infer Key,
   ...infer Rest,
@@ -42,7 +48,11 @@ export type Falsy = Nill | false | 0 | '';
 
 export type CallbackRegistry = Set<(value: any) => void>;
 
-export type NestedMap = Map<[], CallbackRegistry> & Map<Key, NestedMap>;
+export type NestedMap = {
+  _root: CallbackRegistry | null;
+  _children: Map<Key, NestedMap> | null;
+  _parent?: NestedMap;
+};
 
 /** @internal */
 export type InternalDataMap = Map<RootKey.VALUE, any> &
@@ -57,7 +67,7 @@ export type InternalUtils = {
   readonly _data: InternalDataMap;
   _set(nextValue: any, isSet: boolean, path: Key[], isError: boolean): void;
   _get(value: any, path: Key[]): any;
-  _getValueChangeCallbackSet(path: Key[]): CallbackRegistry;
+  _onValueChange(cb: (value: any) => void, path: Key[]): () => void;
 };
 
 declare const STATE_MARKER: unique symbol;
@@ -68,11 +78,17 @@ export type Nesting<Keys extends PrimitiveOrNested[]> = Keys['length'] extends 0
       readonly keys: Readonly<Keys>;
     };
 
+/** @internal */
+type Internal<T> = {
+  /** @internal */
+  _internal: T;
+};
+
 export type State<Value = unknown, Keys extends PrimitiveOrNested[] = []> = {
   readonly [STATE_MARKER]: Value;
-  /** @internal */
-  readonly _internal: InternalUtils;
 } & Nesting<Keys> &
+  /** @internal */
+  Internal<InternalUtils> &
   /** @internal */
   Partial<Nesting<any[]>> &
   /** @internal */
@@ -88,8 +104,9 @@ export type AsyncState<
   Error = any,
   Keys extends PrimitiveOrNested[] = [],
 > = State<Value | Pending, Keys> & {
-  /** @internal */
-  _internal: InternalUtils & {
+  readonly error: State<Error | undefined> & Internal<ErrorInternalUtils>;
+  readonly isLoaded: State<boolean>;
+} & Internal<{
     _isLoaded(value: any, prevValue: any): boolean;
     _commonSet: InternalUtils['_set'];
     _handleSlowLoading(): void;
@@ -101,13 +118,7 @@ export type AsyncState<
     _isFetchInProgress: boolean;
     _errorUtils: ErrorInternalUtils;
     _isLoadedUtils: InternalUtils;
-  };
-  readonly error: State<Error | undefined> & {
-    /** @internal */
-    _internal: ErrorInternalUtils;
-  };
-  readonly isLoaded: State<boolean>;
-};
+  }>;
 
 export type LoadableState<
   Value = unknown,
@@ -211,14 +222,17 @@ export type AnyLoadableState<
 
 export type ExtractValues<T> = T extends [infer Head, ...infer Tail]
   ? [
-      Head extends AnyAsyncState<infer K> ? Exclude<K, Pending> : undefined,
+      Head extends AnyAsyncState<infer K> ? WithoutPending<K> : undefined,
       ...ExtractValues<Tail>,
     ]
   : [];
 
 export type AsyncStateOptions<T, Keys extends PrimitiveOrNested[] = []> = {
-  value?: T | ((...keys: Keys) => T);
-  isLoaded?(value: T, prevValue: T | undefined): boolean;
+  value?: WithoutPending<T> | ((...keys: Keys) => WithoutPending<T>);
+  isLoaded?(
+    value: WithoutPending<T>,
+    prevValue: WithoutPending<T> | undefined
+  ): boolean;
 };
 
 export type LoadableStateOptions<
@@ -251,7 +265,7 @@ export type RequestableStateOptions<
   _afterLoad?(
     args: PrimitiveOrNested[] | void
   ): Promise<PrimitiveOrNested[] | void>;
-  load(...args: Keys): Promise<T>;
+  load(...args: Keys): Promise<WithoutPending<T>>;
   shouldRetryOnError?(err: E, attempt: number): number;
 };
 
@@ -340,10 +354,16 @@ export type StateStorage<
   T,
   ParentKeys extends PrimitiveOrNested[] = [],
 > = Nesting<ParentKeys> &
+  Internal<{
+    _get(keys: any[], index: number): any;
+    _storage: Map<any, any>;
+    _keyStorage?: Map<string, any>;
+    _getItem(options: any, args: any[]): any;
+    _options: any;
+    _depth: number;
+  }> &
   InternalPathBase &
   StateStorageMarker<K, T> & {
-    /** @internal */
-    _get(keys: any[], index: number): any;
     get<Keys extends [K, ...Partial<StorageKeys<T>>]>(
       ...keys: Keys
     ): StateWithNestedStorageKeys<
@@ -355,6 +375,7 @@ export type StateStorage<
       >,
       [...ParentKeys, ...Keys]
     >;
+    delete(key: K): void;
   } & (T extends PathBase<(...path: any) => any>
     ? PathBase<{
         <

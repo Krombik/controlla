@@ -12,10 +12,13 @@ const handleLoad: Parameters<typeof createFetcher>[0] = (
 
 const getRequestableStateCreator =
   (createAsyncState: ReturnType<typeof getAsyncStateCreator>) =>
-  (options: RequestableStateOptions<any, any>) =>
-    createAsyncState({
-      ...options,
-      load: createFetcher(handleLoad, options),
-    });
+  (options: RequestableStateOptions<any, any>, keys?: any[]) =>
+    createAsyncState(
+      {
+        ...options,
+        load: createFetcher(handleLoad, options),
+      },
+      keys
+    );
 
 export default getRequestableStateCreator;

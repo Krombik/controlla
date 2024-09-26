@@ -1,18 +1,15 @@
 import type { Key, NestedMap } from '../types';
 import alwaysFalse from './alwaysFalse';
-import { EMPTY_ARR } from './constants';
 import executeSetters from './executeSetters';
 
 const objectPrototype = Object.prototype;
 
-const forEachChild = (storage: NestedMap, fn: (key: Key) => void) => {
+const forEachChild = (storage: Map<Key, NestedMap>, fn: (key: Key) => void) => {
   const it = storage.keys();
 
   const next = it.next.bind(it);
 
-  next(); // skip set
-
-  for (let i = storage.size - 1; i--; ) {
+  for (let i = storage.size; i--; ) {
     fn(next().value);
   }
 };
@@ -20,50 +17,52 @@ const forEachChild = (storage: NestedMap, fn: (key: Key) => void) => {
 const handleMandatoryCheck = (
   prevValue: any,
   nextValue: any,
-  storage: NestedMap | undefined | false
+  storage: Map<Key, NestedMap>
 ): ((key: Key) => boolean) | false => {
-  if (storage && storage.size > 1) {
-    let equalList: Set<Key> | false = new Set();
+  let equalList: Set<Key> | false = new Set();
 
-    forEachChild(storage, (key) => {
-      const child = storage.get(key)!;
+  forEachChild(storage, (key) => {
+    const child = storage.get(key)!;
 
-      const newValue = nextValue[key];
+    const newValue = nextValue[key];
 
-      if (handleNotEqual(prevValue[key], newValue, child)) {
-        equalList = false;
+    if (handleNotEqual(prevValue[key], newValue, child)) {
+      equalList = false;
 
-        executeSetters(child.get(EMPTY_ARR)!, newValue);
-      } else if (equalList) {
-        equalList.add(key);
+      if (child._root) {
+        executeSetters(child._root, newValue);
       }
-    });
+    } else if (equalList) {
+      equalList.add(key);
+    }
+  });
 
-    return equalList && equalList.has.bind(equalList);
-  }
-
-  return alwaysFalse;
+  return equalList && equalList.has.bind(equalList);
 };
 
 const handleNil = (prevValue: any, nextValue: any, storage: NestedMap) => {
-  executeSetters(storage.get(EMPTY_ARR)!, nextValue);
+  const { _children, _root } = storage;
 
-  if (prevValue != nextValue && storage.size > 1) {
+  if (_root) {
+    executeSetters(_root, nextValue);
+  }
+
+  if (_children && prevValue != nextValue) {
     forEachChild(
-      storage,
+      _children,
       prevValue == null
         ? (key) => {
             const next = nextValue[key];
 
             if (next !== undefined) {
-              handleNil(undefined, next, storage.get(key)!);
+              handleNil(undefined, next, _children.get(key)!);
             }
           }
         : (key) => {
             const prev = prevValue[key];
 
             if (prev !== undefined) {
-              handleNil(prev, undefined, storage.get(key)!);
+              handleNil(prev, undefined, _children.get(key)!);
             }
           }
     );
@@ -73,7 +72,7 @@ const handleNil = (prevValue: any, nextValue: any, storage: NestedMap) => {
 const handleNotEqual = (
   prevValue: any,
   nextValue: any,
-  storage: NestedMap | undefined | false
+  storage: NestedMap | undefined | false | null
 ) => {
   if (prevValue === nextValue) {
     return false;
@@ -89,18 +88,28 @@ const handleNotEqual = (
 
   const aPrototype = Object.getPrototypeOf(prevValue);
 
+  const root = storage && storage._root;
+
+  const children = storage && storage._children;
+
   if (aPrototype != Object.getPrototypeOf(nextValue)) {
     if (storage) {
-      executeSetters(storage.get(EMPTY_ARR)!, nextValue);
+      if (root) {
+        executeSetters(root, nextValue);
+      }
 
-      handleMandatoryCheck(prevValue, nextValue, storage);
+      if (children) {
+        handleMandatoryCheck(prevValue, nextValue, children);
+      }
     }
 
     return true;
   }
 
   if (aPrototype == objectPrototype) {
-    const isChecked = handleMandatoryCheck(prevValue, nextValue, storage);
+    const isChecked = children
+      ? handleMandatoryCheck(prevValue, nextValue, children)
+      : alwaysFalse;
 
     if (!isChecked) {
       return true;
@@ -114,9 +123,7 @@ const handleNotEqual = (
       return true;
     }
 
-    const getStorage = storage
-      ? (storage.get.bind(storage) as (typeof storage)['get'])
-      : alwaysFalse;
+    const getStorage = children ? children.get.bind(children) : alwaysFalse;
 
     while (i--) {
       const key = aKeys[i];
@@ -133,7 +140,9 @@ const handleNotEqual = (
   }
 
   if (Array.isArray(prevValue)) {
-    const isChecked = handleMandatoryCheck(prevValue, nextValue, storage);
+    const isChecked = children
+      ? handleMandatoryCheck(prevValue, nextValue, children)
+      : alwaysFalse;
 
     if (!isChecked) {
       return true;
@@ -145,9 +154,7 @@ const handleNotEqual = (
       return true;
     }
 
-    const getStorage = storage
-      ? (storage.get.bind(storage) as (typeof storage)['get'])
-      : alwaysFalse;
+    const getStorage = children ? children.get.bind(children) : alwaysFalse;
 
     for (let i = 0; i < l; i++) {
       if (
