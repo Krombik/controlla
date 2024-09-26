@@ -19,7 +19,6 @@ import type {
   STATE_STORAGE_MARKER,
   LoadableStateOptions,
   ControllableStateOptions,
-  Nesting,
 } from '../types';
 import { EMPTY_ARR } from '../utils/constants';
 import path from '../utils/path';
@@ -819,16 +818,13 @@ function get(this: StateStorage<any, any, any[]>, ...keys: any[]): any {
   }
 
   return '_internal' in item
-    ? Object.assign({ keys } as Nesting<any[]>, item)
+    ? ({ ...item, keys } as State)
     : '_depth' in item
       ? toStorage(item as StateStorage<any, any>['_internal'], keys)
       : Object.keys(item).reduce<Container>(
           (acc, key) => ({
             ...acc,
-            [key]: Object.assign(
-              { keys } as Nesting<any[]>,
-              (item as Container)[key]
-            ),
+            [key]: { ...(item as Container)[key], keys },
           }),
           {}
         );
