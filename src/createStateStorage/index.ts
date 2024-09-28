@@ -19,6 +19,7 @@ import type {
   STATE_STORAGE_MARKER,
   LoadableStateOptions,
   ControllableStateOptions,
+  StorageUtils,
 } from '../types';
 import { EMPTY_ARR } from '../utils/constants';
 import path from '../utils/path';
@@ -416,7 +417,7 @@ type Oi<
       >;
 };
 
-type WithCreateStateStorage<T extends any[]> = [KAwdl, ...T];
+type WithCreateStateStorage<T extends any[]> = [CreateStateStorage, ...T];
 
 type DetectState<T, V, E = any> = T extends typeof createState
   ? State<V>
@@ -633,7 +634,7 @@ type Io<T extends Oi, ParentKeys extends PrimitiveOrNested[] = []> = {
                                           : never;
 };
 
-interface KAwdl {
+interface CreateStateStorage {
   <
     J extends Record<keyof T, number>,
     T extends Oi<Keys, J>,
@@ -764,7 +765,7 @@ const getStorageUtils = (
   getItem: any,
   options: any,
   depth: number
-): StateStorage<any, any>['_internal'] => ({
+): StorageUtils => ({
   _storage: new Map(),
   _keyStorage: undefined,
   _get,
@@ -773,10 +774,7 @@ const getStorageUtils = (
   _depth: depth - 1,
 });
 
-const toStorage = (
-  utils: StateStorage<any, any>['_internal'],
-  keys: PrimitiveOrNested[]
-) =>
+const toStorage = (utils: StorageUtils, keys: PrimitiveOrNested[]) =>
   ({
     _internal: utils,
     get,
@@ -789,7 +787,7 @@ const toStorage = (
 function _delete(this: StateStorage<any, any, any[]>, key: PrimitiveOrNested) {
   const { _keyStorage: keyStorage } = this._internal;
 
-  if (keyStorage) {
+  if (keyStorage && key && typeof key == 'object') {
     const strKey = toKey(key);
 
     if (keyStorage.has(strKey)) {
@@ -803,79 +801,75 @@ function _delete(this: StateStorage<any, any, any[]>, key: PrimitiveOrNested) {
 }
 
 function get(this: StateStorage<any, any, any[]>, ...keys: any[]): any {
-  type Item = State<any, any[]> | StateStorage<any, any>['_internal'];
+  type Item = State<any, any[]> | StorageUtils;
 
   type Container = Record<string, Item>;
 
   let item: Item | Container = this._internal;
 
-  for (let i = 0; i < keys.length; i++) {
-    item = (item as StateStorage<any, any>['_internal'])._get(keys, i);
-  }
+  const allKeys = this.keys.length ? this.keys.concat(keys) : keys;
 
-  if (this.keys.length) {
-    keys = this.keys.concat(keys);
+  for (let i = 0; i < keys.length; i++) {
+    item = (item as StorageUtils)._get(keys[i], allKeys);
   }
 
   return '_internal' in item
-    ? ({ ...item, keys } as State)
+    ? ({ ...item, keys: allKeys } as State)
     : '_depth' in item
-      ? toStorage(item as StateStorage<any, any>['_internal'], keys)
+      ? toStorage(item as StorageUtils, allKeys)
       : Object.keys(item).reduce<Container>(
           (acc, key) => ({
             ...acc,
-            [key]: { ...(item as Container)[key], keys },
+            [key]: { ...(item as Container)[key], keys: allKeys },
           }),
           {}
         );
 }
 
 function _get(
-  this: StateStorage<any, any, any[]>['_internal'],
-  args: any[],
-  index: number
+  this: StorageUtils,
+  key: PrimitiveOrNested,
+  keys: PrimitiveOrNested[]
 ) {
   type Item = AnyState | StateStorage<any, any> | { [key: string]: Item };
 
-  const arg = args[index];
-
   const storage = this._storage;
 
-  if (storage.has(arg)) {
-    return storage.get(arg)!;
+  if (storage.has(key)) {
+    return storage.get(key)!;
   }
 
-  if (arg && typeof arg == 'object') {
+  if (key && typeof key == 'object') {
     if (!this._keyStorage) {
       this._keyStorage = new Map();
     }
 
     const keyStorage = this._keyStorage;
 
-    const key = toKey(arg);
+    const strKey = toKey(key);
 
-    if (keyStorage.has(key)) {
-      const prevArg = keyStorage.get(key)!;
+    if (keyStorage.has(strKey)) {
+      const prevKey = keyStorage.get(strKey)!;
 
-      const item = storage.get(prevArg)!;
+      const item = storage.get(prevKey)!;
 
-      storage.delete(prevArg);
+      storage.delete(prevKey);
 
-      storage.set(arg, item);
+      storage.set(key, item);
 
-      keyStorage.set(key, arg);
+      keyStorage.set(strKey, key);
 
       return item;
     }
 
-    keyStorage.set(key, arg);
+    keyStorage.set(strKey, key);
   }
 
   const item: Item = this._depth
     ? getStorageUtils(this._getItem, this._options, this._depth)
-    : this._getItem(this._options, args);
+    : this._getItem(this._options, keys);
 
-  storage.set(arg, item);
+  storage.set(key, item);
 
   return item;
 }
@@ -895,7 +889,7 @@ const createStorageRecord = (
     };
   }, {});
 
-const createStateStorage: KAwdl = (
+const createStateStorage: CreateStateStorage = (
   arg1: any,
   arg2?: any,
   arg3?: number

@@ -71,13 +71,17 @@ const createFetcher = (
         : RESOLVED_PROMISE;
 
     handleLoad(cancelPromise, () => {
+      const utils = self._internal;
+
       if (isRunning) {
-        self._internal._isFetchInProgress = true;
+        utils._isFetchInProgress = true;
       }
 
-      _beforeLoad(args, self);
+      _beforeLoad(args, utils);
 
-      return retriableFetcher().then(_afterLoad);
+      return retriableFetcher().then(
+        _afterLoad && ((args) => _afterLoad(args, utils))
+      );
     });
 
     return cancel;

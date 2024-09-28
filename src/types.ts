@@ -60,7 +60,8 @@ export type InternalDataMap = Map<RootKey.VALUE, any> &
   Map<RootKey.PROMISE_RESOLVE, (value: any) => void> &
   Map<RootKey.PROMISE_REJECT, (error: any) => void> &
   Map<RootKey.SLOW_LOADING_TIMEOUT_ID, ReturnType<typeof setTimeout>> &
-  Map<RootKey.UNLOAD, () => void>;
+  Map<RootKey.UNLOAD, () => void> &
+  Map<RootKey.STABLE_VALUE, any>;
 
 /** @internal */
 export type InternalUtils = {
@@ -79,7 +80,7 @@ export type Nesting<Keys extends PrimitiveOrNested[]> = Keys['length'] extends 0
     };
 
 /** @internal */
-type Internal<T> = {
+export type Internal<T> = {
   /** @internal */
   _internal: T;
 };
@@ -260,10 +261,14 @@ export type RequestableStateOptions<
   Keys extends PrimitiveOrNested[] = [],
 > = Pick<LoadableStateOptions<T, Keys>, 'value' | 'loadingTimeout'> & {
   /** @internal */
-  _beforeLoad?(args: PrimitiveOrNested[], state: AsyncState<any>): void;
+  _beforeLoad?(
+    args: PrimitiveOrNested[],
+    utils: AsyncState<any>['_internal']
+  ): void;
   /** @internal */
   _afterLoad?(
-    args: PrimitiveOrNested[] | void
+    args: PrimitiveOrNested[] | void,
+    utils: AsyncState<any>['_internal']
   ): Promise<PrimitiveOrNested[] | void>;
   load(...args: Keys): Promise<WithoutPending<T>>;
   shouldRetryOnError?(err: E, attempt: number): number;
@@ -349,19 +354,57 @@ type StateStorageMarker<Key extends PrimitiveOrNested, Item> = {
   [STATE_STORAGE_MARKER]: [Key, Item];
 };
 
+type BasicStorageUtils = {
+  _get(key: PrimitiveOrNested, keys: readonly PrimitiveOrNested[]): any;
+  readonly _storage: Map<any, any>;
+  _getItem(options: any, args: any[]): any;
+  readonly _options: any;
+};
+
+export type StorageUtils = BasicStorageUtils & {
+  _keyStorage?: Map<string, any>;
+  readonly _depth: number;
+};
+
+export type PaginatedStorageUtils = BasicStorageUtils & {
+  _pages: Set<number>;
+  _resolvePage(page: number): void;
+  _promise: Promise<void>;
+  _resolve(): void;
+  _shouldRevalidate(state: LoadableState<any>): boolean;
+};
+
+type GetNestedPathState<T, P extends Key[]> =
+  RetrieveState<T> extends infer S
+    ? S extends State<infer V>
+      ? ResolvePath<V, P> extends infer V
+        ? ObjectPath<V> extends infer P
+          ? S extends ControllableState<any, infer E>
+            ? [] extends Required<P>
+              ? ControllableState<V, E>
+              : ControllableNestedState<V, E>
+            : S extends LoadableState<any, infer E>
+              ? [] extends Required<P>
+                ? LoadableState<V, E>
+                : LoadableNestedState<V, E>
+              : S extends AsyncState<any, infer E>
+                ? [] extends Required<P>
+                  ? AsyncState<V, E>
+                  : AsyncNestedState<V, E>
+                : [] extends Required<P>
+                  ? State<V>
+                  : NestedState<V>
+          : never
+        : never
+      : never
+    : never;
+
 export type StateStorage<
   K extends PrimitiveOrNested,
   T,
   ParentKeys extends PrimitiveOrNested[] = [],
 > = Nesting<ParentKeys> &
-  Internal<{
-    _get(keys: any[], index: number): any;
-    readonly _storage: Map<any, any>;
-    _keyStorage?: Map<string, any>;
-    _getItem(options: any, args: any[]): any;
-    readonly _options: any;
-    readonly _depth: number;
-  }> &
+  Internal<StorageUtils> &
   InternalPathBase &
   StateStorageMarker<K, T> & {
     get<Keys extends [K, ...Partial<StorageKeys<T>>]>(
@@ -386,34 +429,30 @@ export type StateStorage<
           ...path: P
         ): StateStorage<
           K,
-          NestedStateStorage<
-            StorageKeys<T>,
-            RetrieveState<T> extends infer S
-              ? S extends State<infer V>
-                ? ResolvePath<V, P> extends infer V
-                  ? ObjectPath<V> extends infer P
-                    ? S extends ControllableState<any, infer E>
-                      ? [] extends Required<P>
-                        ? ControllableState<V, E>
-                        : ControllableNestedState<V, E>
-                      : S extends LoadableState<any, infer E>
-                        ? [] extends Required<P>
-                          ? LoadableState<V, E>
-                          : LoadableNestedState<V, E>
-                        : S extends AsyncState<any, infer E>
-                          ? [] extends Required<P>
-                            ? AsyncState<V, E>
-                            : AsyncNestedState<V, E>
-                          : [] extends Required<P>
-                            ? State<V>
-                            : NestedState<V>
-                    : never
-                  : never
-                : never
-              : never
-          >,
+          NestedStateStorage<StorageKeys<T>, GetNestedPathState<T, P>>,
           ParentKeys
         >;
+      }>
+    : {});
+
+export type PaginatedStateStorage<
+  T extends LoadableState<any>,
+  ParentKeys extends PrimitiveOrNested[] = [],
+> = Nesting<ParentKeys> &
+  Internal<PaginatedStorageUtils> &
+  InternalPathBase &
+  StateStorageMarker<number, T> & {
+    get(
+      page: number
+    ): StateWithNestedStorageKeys<T, [...ParentKeys, page: number]>;
+    delete(page: number): void;
+    use(page: number): T extends State<infer V> ? V[] : never;
+    use(from: number, to: number): T extends State<infer V> ? V[] : never;
+  } & (T extends PathBase<(...path: any) => any>
+    ? PathBase<{
+        <P extends ObjectPath<T extends State<infer V> ? V : never>>(
+          ...path: P
+        ): PaginatedStateStorage<GetNestedPathState<T, P>, ParentKeys>;
       }>
     : {});
 
