@@ -34,11 +34,11 @@
   "devDependencies": {
     "@types/lodash.identity": "^3.0.9",
     "@types/lodash.noop": "^3.0.9",
-    "@types/node": "^20.14.8",
-    "@types/react": "^18.3.3",
-    "prettier": "^3.3.2",
-    "tsup": "^8.1.0",
-    "typescript": "^5.5.2"
+    "@types/node": "^22.7.4",
+    "@types/react": "^18.3.10",
+    "prettier": "^3.3.3",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.2"
   },
   "keywords": [],
   "sideEffects": false,
@@ -46,6 +46,6 @@
     "keyweaver": "^1.0.2",
     "lodash.identity": "^3.0.0",
     "lodash.noop": "^3.0.1",
-    "react-helpful-utils": "1.0.3"
+    "react-helpful-utils": "^1.0.3"
   }
 }

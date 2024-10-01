@@ -1,6 +1,5 @@
 import toKey, { type PrimitiveOrNested } from 'keyweaver';
 import type {
-  AnyState,
   AsyncNestedState,
   AsyncState,
   LoadableNestedState,
@@ -534,7 +533,7 @@ function _get(
   key: PrimitiveOrNested,
   keys: PrimitiveOrNested[]
 ) {
-  type Item = AnyState | StateStorage<any, any> | { [key: string]: Item };
+  type Item = State<any> | StateStorage<any, any> | { [key: string]: Item };
 
   const storage = this._storage;
 

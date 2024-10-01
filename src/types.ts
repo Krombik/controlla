@@ -5,7 +5,7 @@ export type Key = number | string;
 
 declare const PENDING: unique symbol;
 
-export type Pending = typeof PENDING;
+type Pending = typeof PENDING;
 
 export type WithoutPending<Value> = Exclude<Value, Pending>;
 
@@ -71,7 +71,7 @@ export type InternalUtils = {
 
 declare const STATE_MARKER: unique symbol;
 
-export type Nesting<Keys extends PrimitiveOrNested[]> = Keys['length'] extends 0
+type Nesting<Keys extends PrimitiveOrNested[]> = Keys['length'] extends 0
   ? {}
   : {
       readonly keys: Readonly<Keys>;
@@ -82,7 +82,14 @@ export type Internal<T> = {
   readonly _internal: T;
 };
 
-export type State<Value = unknown, Keys extends PrimitiveOrNested[] = []> = {
+declare class KeepTogether {
+  private readonly O_o?: never;
+}
+
+export type State<
+  Value = unknown,
+  Keys extends PrimitiveOrNested[] = [],
+> = KeepTogether & {
   readonly [STATE_MARKER]: Value;
   /** @internal */
   readonly _anchor?: Readonly<{}>;
@@ -204,12 +211,6 @@ export type ControllableNestedState<
       : ControllableNestedState<T, Error, Keys>;
   }>;
 
-export type AnyState<Value = any, Keys extends PrimitiveOrNested[] = []> =
-  | State<Value, Keys>
-  | AsyncState<Value, any, Keys>
-  | LoadableState<Value, any, Keys>
-  | ControllableState<Value, any, Keys>;
-
 export type AnyAsyncState<
   Value = any,
   Error = any,
@@ -288,7 +289,7 @@ export type PollableStateOptions<
     hiddenInterval?: number;
   };
 
-export type StorageKeys<T, Acc extends PrimitiveOrNested[] = []> =
+type StorageKeys<T, Acc extends PrimitiveOrNested[] = []> =
   T extends StateStorageMarker<infer Key extends PrimitiveOrNested, infer Item>
     ? StorageKeys<Item, [...Acc, Key]>
     : Acc;
@@ -352,7 +353,7 @@ type RetrieveChildState<T, Keys extends PrimitiveOrNested[]> = Keys extends [
     : T
   : T;
 
-export type RetrieveState<T> =
+type RetrieveState<T> =
   T extends StateStorageMarker<any, infer Child> ? RetrieveState<Child> : T;
 
 export type RetrieveStateOrPaginatedStorage<T> =
@@ -485,23 +486,6 @@ export type PaginatedStateStorage<
         ): PaginatedStateStorage<GetNestedPathState<T, P>, ParentKeys>;
       }>
     : {});
-
-export declare enum StateType {
-  STATE,
-  ASYNC_STATE,
-  REQUESTABLE_STATE,
-  POLLABLE_STATE,
-  NESTED_STATE,
-  NESTED_ASYNC_STATE,
-  NESTED_REQUESTABLE_STATE,
-  NESTED_POLLABLE_STATE,
-}
-
-declare const TYPE: unique symbol;
-
-export type OriginalStateCreator<Fn, T extends StateType> = Fn & {
-  [TYPE]: T;
-};
 
 export type WithInitModule<T, Args extends any[]> = [
   ...Args,
