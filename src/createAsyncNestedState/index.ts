@@ -6,22 +6,23 @@ import type {
   LoadableStateOptions,
   ControllableNestedState,
   ControllableStateOptions,
-  OriginalStateCreator,
-  StateType,
+  InitModule,
 } from '../types';
 import getAsyncStateCreator from '../utils/getAsyncStateCreator';
 
-const createAsyncNestedState = getAsyncStateCreator(createNestedState);
+const createAsyncNestedState = getAsyncStateCreator(createNestedState) as {
+  <T, E = any>(
+    options: ControllableStateOptions<T, E>,
+    initModule?: InitModule<T>
+  ): ControllableNestedState<T, E>;
+  <T, E = any>(
+    options: LoadableStateOptions<T, E>,
+    initModule?: InitModule<T>
+  ): LoadableNestedState<T, E>;
+  <T, E = any>(
+    options?: AsyncStateOptions<T>,
+    initModule?: InitModule<T>
+  ): AsyncNestedState<T, E>;
+};
 
-export default createAsyncNestedState as OriginalStateCreator<
-  {
-    <T, E = any>(
-      options: ControllableStateOptions<T, E>
-    ): ControllableNestedState<T, E>;
-    <T, E = any>(
-      options: LoadableStateOptions<T, E>
-    ): LoadableNestedState<T, E>;
-    <T, E = any>(options?: AsyncStateOptions<T>): AsyncNestedState<T, E>;
-  },
-  StateType.NESTED_ASYNC_STATE
->;
+export default createAsyncNestedState;

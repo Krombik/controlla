@@ -1,17 +1,16 @@
 import createAsyncState from '../createAsyncState';
 import type {
   ControllableState,
-  OriginalStateCreator,
+  InitModule,
   PollableStateOptions,
-  StateType,
 } from '../types';
 import getPollableStateCreator from '../utils/getPollableStateCreator';
 
-const createPollableState = getPollableStateCreator(createAsyncState);
+const createPollableState = getPollableStateCreator(createAsyncState) as {
+  <T, E = any>(
+    options: PollableStateOptions<T, E>,
+    initModule?: InitModule<T>
+  ): ControllableState<T, E>;
+};
 
-export default createPollableState as OriginalStateCreator<
-  {
-    <T, E = any>(options: PollableStateOptions<T, E>): ControllableState<T, E>;
-  },
-  StateType.POLLABLE_STATE
->;
+export default createPollableState;

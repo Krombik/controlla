@@ -6,20 +6,23 @@ import type {
   LoadableStateOptions,
   ControllableState,
   ControllableStateOptions,
-  OriginalStateCreator,
-  StateType,
+  InitModule,
 } from '../types';
 import getAsyncStateCreator from '../utils/getAsyncStateCreator';
 
-const createAsyncState = getAsyncStateCreator(createState);
+const createAsyncState = getAsyncStateCreator(createState) as {
+  <T, E = any>(
+    options: ControllableStateOptions<T, E>,
+    initModule?: InitModule<T>
+  ): ControllableState<T, E>;
+  <T, E = any>(
+    options: LoadableStateOptions<T, E>,
+    initModule?: InitModule<T>
+  ): LoadableState<T, E>;
+  <T, E = any>(
+    options?: AsyncStateOptions<T>,
+    initModule?: InitModule<T>
+  ): AsyncState<T, E>;
+};
 
-export default createAsyncState as OriginalStateCreator<
-  {
-    <T, E = any>(
-      options: ControllableStateOptions<T, E>
-    ): ControllableState<T, E>;
-    <T, E = any>(options: LoadableStateOptions<T, E>): LoadableState<T, E>;
-    <T, E = any>(options?: AsyncStateOptions<T>): AsyncState<T, E>;
-  },
-  StateType.ASYNC_STATE
->;
+export default createAsyncState;

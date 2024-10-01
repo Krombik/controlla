@@ -4,6 +4,7 @@ import {
   AnyLoadableState,
   ControllableNestedState,
   ControllableState,
+  InitModule,
   Internal,
   InternalUtils,
   Key,
@@ -13,6 +14,7 @@ import {
   PaginatedStorageUtils,
   PollableStateOptions,
   RequestableStateOptions,
+  WithInitModule,
 } from '../types';
 import { EMPTY_ARR, RootKey } from '../utils/constants';
 import onValueChange from '../onValueChange';
@@ -80,14 +82,17 @@ function _get(
     return storage.get(page)!;
   }
 
-  const state: PaginatedState = this._getItem(this._options, keys);
-
-  state._internal = {
-    ...state._internal,
-    _originalSet: state._internal._set,
+  const state: PaginatedState = this._getItem(this._arg1, this._arg2, keys, {
+    _parent: this,
     _page: page,
-    _set,
-  };
+  } as {
+    _parent: PaginatedStateStorage<any>['_internal'];
+    _page: number;
+  });
+
+  state._internal._originalSet = state._internal._set;
+
+  state._internal._set = _set;
 
   storage.set(page, state);
 
@@ -265,27 +270,73 @@ type Options<T> = {
   shouldRevalidate?: boolean | ((value: T | undefined) => boolean);
 };
 
+type Args<CreateState, T, O> = WithInitModule<
+  T,
+  [createState: CreateState, options: O & Options<T>]
+>;
+
+export type PaginatedRequestableStateArgs<
+  T,
+  E,
+  Keys extends PrimitiveOrNested[] = [],
+  ParentKeys extends PrimitiveOrNested[] = [],
+> = Args<
+  typeof createRequestableState,
+  T,
+  RequestableStateOptions<T, E, [...ParentKeys, ...Keys, page: number]>
+>;
+
+export type PaginatedRequestableNestedStateArgs<
+  T,
+  E,
+  Keys extends PrimitiveOrNested[] = [],
+  ParentKeys extends PrimitiveOrNested[] = [],
+> = Args<
+  typeof createRequestableNestedState,
+  T,
+  RequestableStateOptions<T, E, [...ParentKeys, ...Keys, page: number]>
+>;
+
+export type PaginatedPollableStateArgs<
+  T,
+  E,
+  Keys extends PrimitiveOrNested[] = [],
+  ParentKeys extends PrimitiveOrNested[] = [],
+> = Args<
+  typeof createPollableState,
+  T,
+  PollableStateOptions<T, E, [...ParentKeys, ...Keys, page: number]>
+>;
+
+export type PaginatedPollableNestedStateArgs<
+  T,
+  E,
+  Keys extends PrimitiveOrNested[] = [],
+  ParentKeys extends PrimitiveOrNested[] = [],
+> = Args<
+  typeof createPollableNestedState,
+  T,
+  PollableStateOptions<T, E, [...ParentKeys, ...Keys, page: number]>
+>;
+
 const createPaginatedStorage: {
   <T, Error = any>(
-    createState: typeof createRequestableState,
-    options: RequestableStateOptions<T, Error> & Options<T>
+    ...args: PaginatedRequestableStateArgs<T, Error>
   ): PaginatedStateStorage<LoadableState<T, Error>>;
   <T, Error = any>(
-    createState: typeof createRequestableNestedState,
-    options: RequestableStateOptions<T, Error> & Options<T>
+    ...args: PaginatedRequestableNestedStateArgs<T, Error>
   ): PaginatedStateStorage<LoadableNestedState<T, Error>>;
 
   <T, Error = any>(
-    createState: typeof createPollableState,
-    options: PollableStateOptions<T, Error> & Options<T>
+    ...args: PaginatedPollableStateArgs<T, Error>
   ): PaginatedStateStorage<ControllableState<T, Error>>;
   <T, Error = any>(
-    createState: typeof createPollableNestedState,
-    options: PollableStateOptions<T, Error> & Options<T>
+    ...args: PaginatedPollableNestedStateArgs<T, Error>
   ): PaginatedStateStorage<ControllableNestedState<T, Error>>;
 } = (
   createState: any,
-  options: RequestableStateOptions<any> & Options<any>
+  options: RequestableStateOptions<any, any, [number]> & Options<any>,
+  initModule?: InitModule
 ) => {
   const { shouldRevalidate } = options;
 
@@ -295,11 +346,12 @@ const createPaginatedStorage: {
     _internal: {
       _get,
       _getItem: createState,
-      _options: {
+      _arg1: {
         ...options,
         _beforeLoad,
         _afterLoad,
       },
+      _arg2: initModule,
       _pages: new Set(),
       _promise: new Promise((res) => {
         resolve = res;

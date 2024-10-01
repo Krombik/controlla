@@ -1,5 +1,5 @@
 import { createContext } from 'react';
-import { InternalUtils } from '../types';
+import type { InternalUtils } from '../types';
 
 const UseContext = createContext<Map<InternalUtils, () => void>>(null!);
 

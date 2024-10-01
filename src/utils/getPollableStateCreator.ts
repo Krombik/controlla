@@ -1,5 +1,9 @@
 import noop from 'lodash.noop';
-import type { InternalDataMap, PollableStateOptions } from '../types';
+import type {
+  InitModule,
+  InternalDataMap,
+  PollableStateOptions,
+} from '../types';
 import becomingOnline from './becomingOnline';
 import createFetcher from './createFetcher';
 import type getAsyncStateCreator from './getAsyncStateCreator';
@@ -15,7 +19,12 @@ export const handleGetInterval = (
 
 const getPollableStateCreator =
   (createAsyncState: ReturnType<typeof getAsyncStateCreator>) =>
-  (options: PollableStateOptions<any, any>, keys?: any[]) => {
+  (
+    options: PollableStateOptions<any, any>,
+    initModule?: InitModule,
+    keys?: any[],
+    utils?: Record<string, any>
+  ) => {
     let sleep: () => Promise<void>;
 
     let pausePromise: Promise<void> | undefined | false;
@@ -69,7 +78,9 @@ const getPollableStateCreator =
           reset();
         },
       },
-      keys
+      initModule,
+      keys,
+      utils
     );
 
     const data = state._internal._data;

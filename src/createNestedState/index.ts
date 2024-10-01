@@ -1,13 +1,11 @@
 import { NestedArray, NestedObject } from 'keyweaver';
 import type {
   CallbackRegistry,
-  InternalDataMap,
+  InitModule,
   InternalUtils,
   Key,
   NestedMap,
   NestedState,
-  OriginalStateCreator,
-  StateType,
 } from '../types';
 import { EMPTY_ARR, RootKey } from '../utils/constants';
 import executeSetters from '../utils/executeSetters';
@@ -15,6 +13,7 @@ import handleNotEqual from '../utils/handleNotEqual';
 import path from '../utils/path';
 import safeGet from '../utils/safeGet';
 import noop from 'lodash.noop';
+import handleState from '../utils/handleState';
 
 interface _InternalUtils extends InternalUtils {
   _rootMap: NestedMap;
@@ -200,32 +199,32 @@ function _set(
 }
 
 const createNestedState: {
-  <T extends NestedArray | NestedObject>(value?: T | (() => T)): NestedState<T>;
-} = (value?: unknown | (() => unknown), keys?: any[]) => {
-  const data: InternalDataMap = new Map();
-
-  if (typeof value == 'function') {
-    value = keys ? value(...keys) : value();
-  }
-
-  if (value !== undefined) {
-    data.set(RootKey.VALUE, value);
-  }
+  <T extends NestedArray | NestedObject>(): NestedState<T | undefined>;
+  <T extends NestedArray | NestedObject>(
+    value: T | (() => T),
+    initModule?: InitModule<T>
+  ): NestedState<T>;
+} = (
+  value?: unknown | (() => unknown),
+  initModule?: InitModule,
+  keys?: any[],
+  utils?: Record<string, any>
+) => {
+  utils = {
+    _data: undefined!,
+    _rootMap: { _root: null, _children: null },
+    _onValueChange,
+    _get: safeGet,
+    _set,
+    ...utils,
+  } as _InternalUtils;
 
   return {
-    _internal: {
-      _data: data,
-      _rootMap: { _root: null, _children: null },
-      _onValueChange,
-      _get: safeGet,
-      _set,
-    } as _InternalUtils,
+    _internal: utils as _InternalUtils,
     _path: EMPTY_ARR,
     path,
+    _anchor: handleState(value, initModule, keys, utils as _InternalUtils),
   } as Partial<NestedState<any>> as NestedState<any>;
 };
 
-export default createNestedState as OriginalStateCreator<
-  typeof createNestedState,
-  StateType.STATE
->;
+export default createNestedState;

@@ -1,4 +1,4 @@
-import type { RequestableStateOptions } from '../types';
+import type { InitModule, RequestableStateOptions } from '../types';
 import becomingOnline from './becomingOnline';
 import createFetcher from './createFetcher';
 import type getAsyncStateCreator from './getAsyncStateCreator';
@@ -12,13 +12,20 @@ const handleLoad: Parameters<typeof createFetcher>[0] = (
 
 const getRequestableStateCreator =
   (createAsyncState: ReturnType<typeof getAsyncStateCreator>) =>
-  (options: RequestableStateOptions<any, any>, keys?: any[]) =>
+  (
+    options: RequestableStateOptions<any, any>,
+    initModule?: InitModule,
+    keys?: any[],
+    utils?: Record<string, any>
+  ) =>
     createAsyncState(
       {
         ...options,
         load: createFetcher(handleLoad, options),
       },
-      keys
+      initModule,
+      keys,
+      utils
     );
 
 export default getRequestableStateCreator;

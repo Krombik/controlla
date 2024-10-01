@@ -1,14 +1,14 @@
 import type {
   CallbackRegistry,
-  InternalDataMap,
+  Internal,
   InternalUtils,
-  OriginalStateCreator,
+  InitModule,
   State,
-  StateType,
 } from '../types';
 import executeSetters from '../utils/executeSetters';
 import { RootKey } from '../utils/constants';
 import identity from 'lodash.identity';
+import handleState from '../utils/handleState';
 
 type _InternalUtils = InternalUtils & {
   _valueSet: CallbackRegistry;
@@ -37,30 +37,34 @@ function _set(this: _InternalUtils, value: any, isSet: boolean) {
 }
 
 const createState: {
-  <T>(value?: T | (() => T)): State<T>;
-} = (value: unknown | (() => unknown), keys?: any[]) => {
-  const data: InternalDataMap = new Map();
-
-  if (typeof value == 'function') {
-    value = keys ? value(...keys) : value();
-  }
-
-  if (value !== undefined) {
-    data.set(RootKey.VALUE, value);
-  }
+  /** @internal */
+  <T extends Record<string, any>>(
+    value?: unknown | (() => unknown),
+    initModule?: InitModule,
+    keys?: any[],
+    utils?: T
+  ): State<unknown> & Internal<T>;
+  <T>(): State<T | undefined>;
+  <T>(value: T | (() => T), initModule?: InitModule<T>): State<T>;
+} = (
+  value?: unknown | (() => unknown),
+  initModule?: InitModule,
+  keys?: any[],
+  utils?: Record<string, any>
+) => {
+  utils = {
+    _data: undefined!,
+    _valueSet: new Set(),
+    _set,
+    _get: identity,
+    _onValueChange,
+    ...utils,
+  } as _InternalUtils;
 
   return {
-    _internal: {
-      _data: data,
-      _valueSet: new Set(),
-      _set,
-      _get: identity,
-      _onValueChange,
-    } as _InternalUtils,
+    _internal: utils,
+    _anchor: handleState(value, initModule, keys, utils as _InternalUtils),
   } as Partial<State<any>> as State<any>;
 };
 
-export default createState as OriginalStateCreator<
-  typeof createState,
-  StateType.STATE
->;
+export default createState;

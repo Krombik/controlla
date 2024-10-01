@@ -7,7 +7,7 @@ const ORIGINAL_DID_CATCH = Symbol();
 
 const CTX = Symbol();
 
-const withUseHandler = (component: typeof Component) => {
+const withUseHandler = (component: typeof Component): typeof Component => {
   const { render, componentDidCatch } = component.prototype;
 
   return class extends component {

@@ -1,17 +1,16 @@
 import createAsyncState from '../createAsyncState';
 import type {
+  InitModule,
   LoadableState,
-  OriginalStateCreator,
   RequestableStateOptions,
-  StateType,
 } from '../types';
 import getRequestableStateCreator from '../utils/getRequestableStateCreator';
 
-const createRequestableState = getRequestableStateCreator(createAsyncState);
+const createRequestableState = getRequestableStateCreator(createAsyncState) as {
+  <T, E = any>(
+    options: RequestableStateOptions<T, E>,
+    initModule?: InitModule<T>
+  ): LoadableState<T, E>;
+};
 
-export default createRequestableState as OriginalStateCreator<
-  {
-    <T, E = any>(options: RequestableStateOptions<T, E>): LoadableState<T, E>;
-  },
-  StateType.REQUESTABLE_STATE
->;
+export default createRequestableState;

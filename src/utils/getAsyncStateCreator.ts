@@ -2,11 +2,13 @@ import noop from 'lodash.noop';
 import type {
   AnyAsyncState,
   AsyncState,
+  AsyncStateAdditionalUtils,
   ControllableState,
   ControllableStateOptions,
+  ErrorInternalUtils,
+  InitModule,
   InternalDataMap,
   Key,
-  State,
 } from '../types';
 import { EMPTY_ARR, RootKey } from './constants';
 import executeSetters from './executeSetters';
@@ -14,11 +16,7 @@ import createState from '../createState';
 import deleteValue from './deleteValue';
 import alwaysTrue from './alwaysTrue';
 
-type Mutable<T extends {}> = {
-  -readonly [key in keyof T]: T[key];
-};
-
-type _State = Mutable<AsyncState<any>> &
+type _State = AsyncState<any> &
   Partial<Omit<ControllableState, keyof AsyncState<any>>>;
 
 type _InternalUtils = _State['_internal'];
@@ -160,7 +158,7 @@ function load(this: _State, reload?: boolean) {
 }
 
 const getAsyncStateCreator =
-  (createCommonState: (defaultValue?: any, keys?: any[]) => State<any>) =>
+  (createCommonState: typeof createState) =>
   (
     {
       value,
@@ -171,42 +169,54 @@ const getAsyncStateCreator =
       loadingTimeout,
       reset,
     }: Partial<ControllableStateOptions<any>>,
-    keys?: any[]
+    initModule?: InitModule,
+    keys?: any[],
+    parentUtils?: Record<string, any>
   ): AnyAsyncState<any> => {
-    const errorState = createState() as _State['error'];
+    const errorState = createState<ErrorInternalUtils>(
+      undefined,
+      undefined,
+      undefined,
+      {
+        _commonSet: undefined!,
+        _parentUtils: undefined!,
+      }
+    );
+
+    const errorUtils = errorState._internal;
 
     const isLoadedState = createState(false);
 
     const state = {
-      ...createCommonState(value, keys),
+      ...createCommonState<AsyncStateAdditionalUtils>(value, initModule, keys, {
+        _commonSet: undefined!,
+        _isLoaded: isLoaded || alwaysTrue,
+        _handleSlowLoading: noop,
+        _counter: 0,
+        _isFetchInProgress: false,
+        _isLoadable: true,
+        _load,
+        _slowLoadingCallbackSet: undefined,
+        _slowLoadingTimeout: undefined,
+        _isLoadedUtils: isLoadedState._internal,
+        _errorUtils: errorUtils,
+        ...parentUtils,
+      }),
       error: errorState,
       isLoaded: isLoadedState,
     } as _State;
 
-    const utils: typeof state._internal = {
-      ...state._internal,
-      _commonSet: state._internal._set,
-      _set,
-      _isLoaded: isLoaded || alwaysTrue,
-      _handleSlowLoading: noop,
-      _counter: 0,
-      _isFetchInProgress: false,
-      _isLoadable: true,
-      _load,
-      _slowLoadingCallbackSet: undefined,
-      _slowLoadingTimeout: undefined,
-      _isLoadedUtils: isLoadedState._internal,
-      _errorUtils: undefined!,
-    };
+    const utils = state._internal;
 
-    state._internal = utils;
+    utils._commonSet = utils._set;
 
-    utils._errorUtils = errorState._internal = {
-      ...errorState._internal,
-      _commonSet: errorState._internal._set,
-      _set: _setError,
-      _parentUtils: utils,
-    };
+    utils._set = _set;
+
+    errorUtils._commonSet = errorUtils._set;
+
+    errorUtils._set = _setError;
+
+    errorUtils._parentUtils = utils;
 
     if (_load) {
       if (loadingTimeout) {

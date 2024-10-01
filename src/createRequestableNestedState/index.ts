@@ -1,21 +1,18 @@
 import createAsyncNestedState from '../createAsyncNestedState';
 import type {
+  InitModule,
   LoadableNestedState,
-  OriginalStateCreator,
   RequestableStateOptions,
-  StateType,
 } from '../types';
 import getRequestableStateCreator from '../utils/getRequestableStateCreator';
 
 const createRequestableNestedState = getRequestableStateCreator(
   createAsyncNestedState
-);
+) as {
+  <T, E = any>(
+    options: RequestableStateOptions<T, E>,
+    initModule?: InitModule<T>
+  ): LoadableNestedState<T, E>;
+};
 
-export default createRequestableNestedState as OriginalStateCreator<
-  {
-    <T, E = any>(
-      options: RequestableStateOptions<T, E>
-    ): LoadableNestedState<T, E>;
-  },
-  StateType.NESTED_REQUESTABLE_STATE
->;
+export default createRequestableNestedState;

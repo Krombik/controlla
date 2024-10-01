@@ -54,7 +54,6 @@ export type NestedMap = {
   _parent?: NestedMap;
 };
 
-/** @internal */
 export type InternalDataMap = Map<RootKey.VALUE, any> &
   Map<RootKey.PROMISE, Promise<any>> &
   Map<RootKey.PROMISE_RESOLVE, (value: any) => void> &
@@ -63,9 +62,8 @@ export type InternalDataMap = Map<RootKey.VALUE, any> &
   Map<RootKey.UNLOAD, () => void> &
   Map<RootKey.STABLE_VALUE, any>;
 
-/** @internal */
 export type InternalUtils = {
-  readonly _data: InternalDataMap;
+  _data: InternalDataMap;
   _set(nextValue: any, isSet: boolean, path: Key[], isError: boolean): void;
   _get(value: any, path: Key[]): any;
   _onValueChange(cb: (value: any) => void, path: Key[]): () => void;
@@ -79,14 +77,15 @@ export type Nesting<Keys extends PrimitiveOrNested[]> = Keys['length'] extends 0
       readonly keys: Readonly<Keys>;
     };
 
-/** @internal */
 export type Internal<T> = {
   /** @internal */
-  _internal: T;
+  readonly _internal: T;
 };
 
 export type State<Value = unknown, Keys extends PrimitiveOrNested[] = []> = {
   readonly [STATE_MARKER]: Value;
+  /** @internal */
+  readonly _anchor?: Readonly<{}>;
 } & Nesting<Keys> &
   /** @internal */
   Internal<InternalUtils> &
@@ -95,31 +94,37 @@ export type State<Value = unknown, Keys extends PrimitiveOrNested[] = []> = {
   /** @internal */
   InternalPathBase;
 
-type ErrorInternalUtils = InternalUtils & {
-  readonly _parentUtils: InternalUtils;
+export type ErrorInternalUtils = {
+  _parentUtils: InternalUtils;
   _commonSet: InternalUtils['_set'];
+};
+
+export type AsyncStateAdditionalUtils = {
+  _isLoaded(value: any, prevValue: any): boolean;
+  _commonSet: InternalUtils['_set'];
+  _handleSlowLoading(): void;
+  _slowLoadingTimeout?: number;
+  _slowLoadingCallbackSet?: Set<() => void>;
+  _load?(): (() => void) | void;
+  _counter: number;
+  _isLoadable: boolean;
+  _isFetchInProgress: boolean;
+  _errorUtils: ErrorInternalUtils & InternalUtils;
+  _isLoadedUtils: InternalUtils;
 };
 
 export type AsyncState<
   Value = unknown,
   Error = any,
   Keys extends PrimitiveOrNested[] = [],
-> = State<Value | Pending, Keys> & {
-  readonly error: State<Error | undefined> & Internal<ErrorInternalUtils>;
-  readonly isLoaded: State<boolean>;
-} & Internal<{
-    _isLoaded(value: any, prevValue: any): boolean;
-    _commonSet: InternalUtils['_set'];
-    _handleSlowLoading(): void;
-    _slowLoadingTimeout?: number;
-    _slowLoadingCallbackSet?: Set<() => void>;
-    _load?(): (() => void) | void;
-    _counter: number;
-    _isLoadable: boolean;
-    _isFetchInProgress: boolean;
-    _errorUtils: ErrorInternalUtils;
-    _isLoadedUtils: InternalUtils;
-  }>;
+> = State<Value | Pending, Keys> &
+  /** @internal */
+  Internal<AsyncStateAdditionalUtils> & {
+    readonly error: State<Error | undefined> &
+      /** @internal */
+      Internal<ErrorInternalUtils>;
+    readonly isLoaded: State<boolean>;
+  };
 
 export type LoadableState<
   Value = unknown,
@@ -139,7 +144,6 @@ export type ControllableState<
   reset(): void;
 };
 
-/** @internal */
 export type InternalPathBase = {
   /** @internal */
   readonly _path?: Key[];
@@ -289,7 +293,20 @@ export type StorageKeys<T, Acc extends PrimitiveOrNested[] = []> =
     ? StorageKeys<Item, [...Acc, Key]>
     : Acc;
 
-type StorageItem = State<any> | StateStorage<PrimitiveOrNested, any>;
+export type StorageKeysWithoutPagination<
+  T,
+  Acc extends PrimitiveOrNested[] = [],
+> =
+  T extends PaginatedStateStorage<any>
+    ? Acc
+    : T extends StateStorageMarker<
+          infer Key extends PrimitiveOrNested,
+          infer Item
+        >
+      ? StorageKeysWithoutPagination<Item, [...Acc, Key]>
+      : Acc;
+
+type StorageItem = State<any> | StateStorageMarker<PrimitiveOrNested, any>;
 
 type ProcessStorageItem<
   T extends StorageItem,
@@ -338,6 +355,13 @@ type RetrieveChildState<T, Keys extends PrimitiveOrNested[]> = Keys extends [
 export type RetrieveState<T> =
   T extends StateStorageMarker<any, infer Child> ? RetrieveState<Child> : T;
 
+export type RetrieveStateOrPaginatedStorage<T> =
+  T extends PaginatedStateStorage<any>
+    ? T
+    : T extends StateStorageMarker<any, infer Child>
+      ? RetrieveStateOrPaginatedStorage<Child>
+      : T;
+
 export type NestedStateStorage<
   Keys extends PrimitiveOrNested[],
   T,
@@ -356,9 +380,11 @@ type StateStorageMarker<Key extends PrimitiveOrNested, Item> = {
 
 type BasicStorageUtils = {
   _get(key: PrimitiveOrNested, keys: readonly PrimitiveOrNested[]): any;
+  _getItem(arg1: any, arg2: any, arg3: any, utils?: Record<string, any>): any;
   readonly _storage: Map<any, any>;
-  _getItem(options: any, args: any[]): any;
-  readonly _options: any;
+  readonly _arg1: any;
+  readonly _arg2: any;
+  readonly _arg3?: any;
 };
 
 export type StorageUtils = BasicStorageUtils & {
@@ -404,7 +430,9 @@ export type StateStorage<
   T,
   ParentKeys extends PrimitiveOrNested[] = [],
 > = Nesting<ParentKeys> &
+  /** @internal */
   Internal<StorageUtils> &
+  /** @internal */
   InternalPathBase &
   StateStorageMarker<K, T> & {
     get<Keys extends [K, ...Partial<StorageKeys<T>>]>(
@@ -439,7 +467,9 @@ export type PaginatedStateStorage<
   T extends LoadableState<any>,
   ParentKeys extends PrimitiveOrNested[] = [],
 > = Nesting<ParentKeys> &
+  /** @internal */
   Internal<PaginatedStorageUtils> &
+  /** @internal */
   InternalPathBase &
   StateStorageMarker<number, T> & {
     get(
@@ -471,4 +501,19 @@ declare const TYPE: unique symbol;
 
 export type OriginalStateCreator<Fn, T extends StateType> = Fn & {
   [TYPE]: T;
+};
+
+export type WithInitModule<T, Args extends any[]> = [
+  ...Args,
+  initModule?: InitModule<T>,
+];
+
+export type InitModule<T = unknown> = (
+  keys: PrimitiveOrNested[] | undefined
+) => StateModule<T>;
+
+export type StateModule<T = unknown> = {
+  set(value: T): void;
+  get(): T | undefined;
+  register?(setState: (value: T) => void): () => void;
 };
