@@ -2,13 +2,13 @@ import noop from 'lodash.noop';
 import type {
   AnyAsyncState,
   AsyncState,
-  AsyncStateAdditionalUtils,
-  ControllableState,
+  AsyncStateUtils,
+  ControllableLoadableState,
   ControllableStateOptions,
-  ErrorInternalUtils,
+  ErrorStateUtils,
   InitModule,
-  InternalDataMap,
-  Key,
+  StateDataMap,
+  PathKey,
 } from '../types';
 import { EMPTY_ARR, RootKey } from './constants';
 import executeSetters from './executeSetters';
@@ -17,12 +17,12 @@ import deleteValue from './deleteValue';
 import alwaysTrue from './alwaysTrue';
 
 type _State = AsyncState<any> &
-  Partial<Omit<ControllableState, keyof AsyncState<any>>>;
+  Partial<Omit<ControllableLoadableState, keyof AsyncState<any>>>;
 
 type _InternalUtils = _State['_internal'];
 
 const handlePromise = (
-  data: InternalDataMap,
+  data: StateDataMap,
   key: RootKey.PROMISE_REJECT | RootKey.PROMISE_RESOLVE,
   value: any
 ) => {
@@ -37,7 +37,7 @@ const handlePromise = (
   }
 };
 
-const handleUnload = (data: InternalDataMap) => {
+const handleUnload = (data: StateDataMap) => {
   if (data.has(RootKey.UNLOAD)) {
     data.get(RootKey.UNLOAD)!();
 
@@ -49,7 +49,7 @@ function _set(
   this: _InternalUtils,
   value: any,
   isSet: boolean,
-  path: Key[],
+  path: PathKey[],
   isError: boolean
 ) {
   const data = this._data;
@@ -100,7 +100,7 @@ function _setError(
   this: _InternalUtils['_errorUtils'],
   value: any,
   isSet: boolean,
-  path: Key[],
+  path: PathKey[],
   isError: boolean
 ) {
   this._commonSet(value, isSet, path, isError);
@@ -173,7 +173,7 @@ const getAsyncStateCreator =
     keys?: any[],
     parentUtils?: Record<string, any>
   ): AnyAsyncState<any> => {
-    const errorState = createState<ErrorInternalUtils>(
+    const errorState = createState<ErrorStateUtils>(
       undefined,
       undefined,
       undefined,
@@ -188,7 +188,7 @@ const getAsyncStateCreator =
     const isLoadedState = createState(false);
 
     const state = {
-      ...createCommonState<AsyncStateAdditionalUtils>(value, initModule, keys, {
+      ...createCommonState<AsyncStateUtils>(value, initModule, keys, {
         _commonSet: undefined!,
         _isLoaded: isLoaded || alwaysTrue,
         _handleSlowLoading: noop,
@@ -217,6 +217,10 @@ const getAsyncStateCreator =
     errorUtils._set = _setError;
 
     errorUtils._parentUtils = utils;
+
+    if (utils._data.has(RootKey.VALUE)) {
+      utils._isLoadable = false;
+    }
 
     if (_load) {
       if (loadingTimeout) {

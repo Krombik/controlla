@@ -1,17 +1,17 @@
 {
-  "name": "temp",
+  "name": "react-state-forge",
   "version": "1.0.0",
   "description": "",
   "author": "Krombik",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Krombik/temp.git"
+    "url": "git+https://github.com/Krombik/react-state-forge.git"
   },
   "bugs": {
-    "url": "https://github.com/Krombik/temp/issues"
+    "url": "https://github.com/Krombik/react-state-forge/issues"
   },
-  "homepage": "https://github.com/Krombik/temp#readme",
+  "homepage": "https://github.com/Krombik/react-state-forge#readme",
   "type": "module",
   "source": "src/index.ts",
   "engines": {

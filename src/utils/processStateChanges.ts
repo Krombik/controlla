@@ -1,10 +1,13 @@
-import type { Key, NestedMap } from '../types';
+import type { PathKey, StateCallbackMap } from '../types';
 import alwaysFalse from './alwaysFalse';
 import executeSetters from './executeSetters';
 
 const objectPrototype = Object.prototype;
 
-const forEachChild = (storage: Map<Key, NestedMap>, fn: (key: Key) => void) => {
+const forEachChild = (
+  storage: Map<PathKey, StateCallbackMap>,
+  fn: (key: PathKey) => void
+) => {
   const it = storage.keys();
 
   const next = it.next.bind(it);
@@ -17,16 +20,16 @@ const forEachChild = (storage: Map<Key, NestedMap>, fn: (key: Key) => void) => {
 const handleMandatoryCheck = (
   prevValue: any,
   nextValue: any,
-  storage: Map<Key, NestedMap>
-): ((key: Key) => boolean) | false => {
-  let equalList: Set<Key> | false = new Set();
+  storage: Map<PathKey, StateCallbackMap>
+): ((key: PathKey) => boolean) | false => {
+  let equalList: Set<PathKey> | false = new Set();
 
   forEachChild(storage, (key) => {
     const child = storage.get(key)!;
 
     const newValue = nextValue[key];
 
-    if (handleNotEqual(prevValue[key], newValue, child)) {
+    if (processStateChanges(prevValue[key], newValue, child)) {
       equalList = false;
 
       if (child._root) {
@@ -40,7 +43,11 @@ const handleMandatoryCheck = (
   return equalList && equalList.has.bind(equalList);
 };
 
-const handleNil = (prevValue: any, nextValue: any, storage: NestedMap) => {
+const handleNil = (
+  prevValue: any,
+  nextValue: any,
+  storage: StateCallbackMap
+) => {
   const { _children, _root } = storage;
 
   if (_root) {
@@ -69,10 +76,10 @@ const handleNil = (prevValue: any, nextValue: any, storage: NestedMap) => {
   }
 };
 
-const handleNotEqual = (
+const processStateChanges = (
   prevValue: any,
   nextValue: any,
-  storage: NestedMap | undefined | false | null
+  storage: StateCallbackMap | undefined | false | null
 ) => {
   if (prevValue === nextValue) {
     return false;
@@ -130,7 +137,7 @@ const handleNotEqual = (
 
       if (
         !isChecked(key) &&
-        handleNotEqual(prevValue[key], nextValue[key], getStorage(key))
+        processStateChanges(prevValue[key], nextValue[key], getStorage(key))
       ) {
         return true;
       }
@@ -159,7 +166,7 @@ const handleNotEqual = (
     for (let i = 0; i < l; i++) {
       if (
         !isChecked(i) &&
-        handleNotEqual(prevValue[i], nextValue[i], getStorage(i))
+        processStateChanges(prevValue[i], nextValue[i], getStorage(i))
       ) {
         return true;
       }
@@ -175,4 +182,4 @@ const handleNotEqual = (
   return true;
 };
 
-export default handleNotEqual;
+export default processStateChanges;

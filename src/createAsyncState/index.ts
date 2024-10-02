@@ -4,7 +4,7 @@ import type {
   AsyncStateOptions,
   LoadableState,
   LoadableStateOptions,
-  ControllableState,
+  ControllableLoadableState,
   ControllableStateOptions,
   InitModule,
 } from '../types';
@@ -14,7 +14,7 @@ const createAsyncState = getAsyncStateCreator(createState) as {
   <T, E = any>(
     options: ControllableStateOptions<T, E>,
     initModule?: InitModule<T>
-  ): ControllableState<T, E>;
+  ): ControllableLoadableState<T, E>;
   <T, E = any>(
     options: LoadableStateOptions<T, E>,
     initModule?: InitModule<T>

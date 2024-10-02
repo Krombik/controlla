@@ -1,9 +1,9 @@
 import getValue from '../getValue';
-import type { AsyncState, WithoutPending } from '../types';
+import type { AsyncState, ResolvedValue } from '../types';
 import { RootKey } from '../utils/constants';
 
 const getPromise: {
-  <T>(state: AsyncState<T>): Promise<WithoutPending<T>>;
+  <T>(state: AsyncState<T>): Promise<ResolvedValue<T>>;
   /** @internal */
   (state: AsyncState<any>, isRoot: true): Promise<any>;
 } = (state: AsyncState<any>, isRoot?: true) => {

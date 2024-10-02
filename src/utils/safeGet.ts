@@ -1,6 +1,6 @@
-import type { Key } from '../types';
+import type { PathKey } from '../types';
 
-const safeGet = (value: any, path: Key[]) => {
+const safeGet = (value: any, path: PathKey[]) => {
   const l = path.length;
 
   for (

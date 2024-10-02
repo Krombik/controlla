@@ -1,5 +1,5 @@
 import noop from 'lodash.noop';
-import type { InitModule, InternalDataMap, InternalUtils } from '../types';
+import type { InitModule, StateDataMap, StateInternalUtils } from '../types';
 import { EMPTY_ARR, RootKey } from './constants';
 
 const finalizationRegistry: Pick<
@@ -11,13 +11,13 @@ const finalizationRegistry: Pick<
     })
   : { register: noop };
 
-const handleState = <T extends InternalUtils>(
+const handleState = <T extends StateInternalUtils>(
   value: unknown | (() => unknown) | undefined,
   initModule: InitModule | undefined,
   keys: any[] | undefined,
   utils: T
 ): Readonly<{}> | undefined => {
-  const data: InternalDataMap = new Map();
+  const data: StateDataMap = new Map();
 
   utils._data = data;
 

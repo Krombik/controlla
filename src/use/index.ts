@@ -1,19 +1,20 @@
 import { useContext, useLayoutEffect, useState } from 'react';
-import type {
-  AnyAsyncState,
-  AsyncState,
-  Falsy,
-  WithoutPending,
-} from '../types';
+import type { AnyAsyncState, AsyncState, Falsy, ResolvedValue } from '../types';
 import useNoop from '../utils/useNoop';
-import UseContext from '../utils/UseContext';
+import ErrorBoundaryContext from '../utils/ErrorBoundaryContext';
 import onValueChange from '../onValueChange';
 import getValue from '../getValue';
-import getPromise from '../getPromise';
 import { RootKey } from '../utils/constants';
+import SuspenseContext from '../utils/SuspenseContext';
+import { handleLoad, handleUnload } from '../utils/handleSuspense';
 
-const use = ((state: AnyAsyncState<any, any, any[]> | Falsy) => {
-  const ctx = useContext(UseContext);
+const use = ((
+  state: AnyAsyncState<any, any, any[]> | Falsy,
+  safeReturn?: boolean
+) => {
+  const errorBoundaryCtx = useContext(ErrorBoundaryContext);
+
+  const suspenseCtx = useContext(SuspenseContext);
 
   if (state) {
     const utils = state._internal;
@@ -32,17 +33,9 @@ const use = ((state: AnyAsyncState<any, any, any[]> | Falsy) => {
 
         const unlistenError = onValueChange(state.error, forceRerender);
 
-        let unregister: () => void;
-
-        if ('load' in state) {
-          if (ctx.has(utils)) {
-            unregister = ctx.get(utils)!;
-
-            ctx.delete(utils);
-          } else {
-            unregister = state.load();
-          }
-        }
+        const unregister =
+          'load' in state &&
+          (handleUnload(utils, errorBoundaryCtx, suspenseCtx) || state.load());
 
         return () => {
           unlistenValue();
@@ -53,27 +46,41 @@ const use = ((state: AnyAsyncState<any, any, any[]> | Falsy) => {
         };
       }, [utils, state._path && state._path.join('.')]);
 
-      return getValue(state);
+      return safeReturn ? [getValue(state)] : getValue(state);
     }
 
     const errorData = utils._errorUtils._data;
 
     if (errorData.has(RootKey.VALUE)) {
+      const unload = handleUnload(utils, errorBoundaryCtx, suspenseCtx);
+
+      if (unload) {
+        unload();
+      }
+
+      if (safeReturn) {
+        return [undefined, errorData.get(RootKey.VALUE)];
+      }
+
       throw errorData.get(RootKey.VALUE);
     }
 
-    if ('load' in state && !ctx.has(utils)) {
-      ctx.set(utils, state.load());
-    }
-
-    throw getPromise(state, true);
+    throw handleLoad(state, errorBoundaryCtx, suspenseCtx);
   }
 
   useNoop();
 }) as {
-  <S extends AsyncState<any> | Falsy>(
-    state: S
-  ): S extends AsyncState<infer T> ? WithoutPending<T> : undefined;
+  <S extends AsyncState<any> | Falsy, SafeReturn extends boolean = false>(
+    state: S,
+    safeReturn?: SafeReturn
+  ): S extends AsyncState<infer T, infer E>
+    ? SafeReturn extends false
+      ? ResolvedValue<T>
+      : Readonly<
+          | [value: ResolvedValue<T>, error: undefined]
+          | [value: undefined, error: E]
+        >
+    : undefined;
 };
 
 export default use;

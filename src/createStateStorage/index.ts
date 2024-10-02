@@ -6,14 +6,14 @@ import type {
   LoadableState,
   NestedState,
   NestedStateStorage,
-  ControllableNestedState,
-  ControllableState,
+  ControllableLoadableNestedState,
+  ControllableLoadableState,
   State,
   StateStorage,
   AsyncStateOptions,
   RequestableStateOptions,
   PollableStateOptions,
-  STATE_STORAGE_MARKER,
+  STATE_STORAGE_IDENTIFIER,
   LoadableStateOptions,
   ControllableStateOptions,
   StorageUtils,
@@ -22,7 +22,7 @@ import type {
   PaginatedStateStorage,
   RetrieveStateOrPaginatedStorage,
   StorageKeysWithoutPagination,
-  WithoutPending,
+  ResolvedValue,
 } from '../types';
 import { EMPTY_ARR } from '../utils/constants';
 import path from '../utils/path';
@@ -196,31 +196,31 @@ type PollableStateArgs<
   ]
 >;
 
-type Lll =
+type StateStorageItem =
   | StorageRecord
   | PaginatedStateStorage<any>
   | State<any>
   | {
-      [STATE_STORAGE_MARKER]: [PrimitiveOrNested, Lll];
+      [STATE_STORAGE_IDENTIFIER]: [PrimitiveOrNested, StateStorageItem];
     };
 
 type StorageRecord = {
   [key: string]:
     | State<any>
     | PaginatedStateStorage<any>
-    | StateStorage<PrimitiveOrNested, Lll>;
+    | StateStorage<PrimitiveOrNested, StateStorageItem>;
 };
 
-type Bek<
+type StateCreationArguments<
   T extends State<any>,
   Keys extends PrimitiveOrNested[],
   ParentKeys extends PrimitiveOrNested[],
 > =
   T extends State<infer V>
-    ? T extends ControllableState<any, infer E>
+    ? T extends ControllableLoadableState<any, infer E>
       ?
           | PollableStateArgs<
-              T extends ControllableNestedState<any>
+              T extends ControllableLoadableNestedState<any>
                 ? typeof createPollableNestedState
                 : typeof createPollableState,
               V,
@@ -229,7 +229,7 @@ type Bek<
               ParentKeys
             >
           | ControllableStateArgs<
-              T extends ControllableNestedState<any>
+              T extends ControllableLoadableNestedState<any>
                 ? typeof createAsyncNestedState
                 : typeof createAsyncState,
               V,
@@ -292,32 +292,32 @@ type Bek<
                 >
     : never;
 
-type Olw<
+type PaginatedStorageArgs<
   T extends PaginatedStateStorage<any>,
   Keys extends PrimitiveOrNested[],
   ParentKeys extends PrimitiveOrNested[],
 > =
   T extends PaginatedStateStorage<infer S>
     ? WithCreatePaginatedStorage<
-        S extends ControllableNestedState<infer V, infer E>
+        S extends ControllableLoadableNestedState<infer V, infer E>
           ? PaginatedPollableNestedStateArgs<
-              WithoutPending<V>,
+              ResolvedValue<V>,
               E,
               Keys,
               ParentKeys
             >
-          : S extends ControllableState<infer V, infer E>
-            ? PaginatedPollableStateArgs<WithoutPending<V>, E, Keys, ParentKeys>
+          : S extends ControllableLoadableState<infer V, infer E>
+            ? PaginatedPollableStateArgs<ResolvedValue<V>, E, Keys, ParentKeys>
             : S extends LoadableNestedState<infer V, infer E>
               ? PaginatedRequestableNestedStateArgs<
-                  WithoutPending<V>,
+                  ResolvedValue<V>,
                   E,
                   Keys,
                   ParentKeys
                 >
               : S extends LoadableState<infer V, infer E>
                 ? PaginatedRequestableStateArgs<
-                    WithoutPending<V>,
+                    ResolvedValue<V>,
                     E,
                     Keys,
                     ParentKeys
@@ -330,28 +330,34 @@ type RemoveDepth<T extends any[]> = T extends [...infer Head, number?]
   ? Head
   : T;
 
-type Kek<
+type StorageRecordArgs<
   T extends StorageRecord,
   Keys extends PrimitiveOrNested[],
   ParentKeys extends PrimitiveOrNested[] = [],
 > = {
   [key in keyof T]: T[key] extends PaginatedStateStorage<any>
-    ? Olw<T[key], Keys, ParentKeys>
+    ? PaginatedStorageArgs<T[key], Keys, ParentKeys>
     : T[key] extends State<any>
-      ? RemoveDepth<Bek<T[key], Keys, ParentKeys>>
-      : T[key] extends StateStorage<any, Lll>
+      ? RemoveDepth<StateCreationArguments<T[key], Keys, ParentKeys>>
+      : T[key] extends StateStorage<any, StateStorageItem>
         ? RetrieveStateOrPaginatedStorage<T[key]> extends infer S
           ? StorageKeysWithoutPagination<T[key]> extends infer K extends
               PrimitiveOrNested[]
             ? S extends StorageRecord
               ? WithDepth<
-                  WithCreateStateStorage<[Kek<S, K, [...ParentKeys, ...Keys]>]>,
+                  WithCreateStateStorage<
+                    [StorageRecordArgs<S, K, [...ParentKeys, ...Keys]>]
+                  >,
                   LengthOf<K>
                 >
               : S extends State<any>
-                ? WithCreateStateStorage<Bek<S, K, [...ParentKeys, ...Keys]>>
+                ? WithCreateStateStorage<
+                    StateCreationArguments<S, K, [...ParentKeys, ...Keys]>
+                  >
                 : S extends PaginatedStateStorage<any>
-                  ? WithCreateStateStorage<Olw<S, K, [...ParentKeys, ...Keys]>>
+                  ? WithCreateStateStorage<
+                      PaginatedStorageArgs<S, K, [...ParentKeys, ...Keys]>
+                    >
                   : never
             : never
           : never
@@ -371,7 +377,7 @@ interface CreateStateStorage {
     Keys extends GenerateArr<C>,
     C extends number = LengthOf<Keys>,
   >(
-    ...args: WithDepth<[obj: Kek<T, Keys>], C>
+    ...args: WithDepth<[obj: StorageRecordArgs<T, Keys>], C>
   ): NestedStateStorage<Keys, T>;
 
   <T, Keys extends PrimitiveOrNested[], E = any>(
@@ -387,22 +393,25 @@ interface CreateStateStorage {
 
   <T, Keys extends PrimitiveOrNested[], E = any>(
     ...args: WithCreatePaginatedStorage<PaginatedPollableStateArgs<T, E, Keys>>
-  ): NestedStateStorage<Keys, PaginatedStateStorage<ControllableState<T, E>>>;
+  ): NestedStateStorage<
+    Keys,
+    PaginatedStateStorage<ControllableLoadableState<T, E>>
+  >;
   <T, Keys extends PrimitiveOrNested[], E = any>(
     ...args: WithCreatePaginatedStorage<
       PaginatedPollableNestedStateArgs<T, E, Keys>
     >
   ): NestedStateStorage<
     Keys,
-    PaginatedStateStorage<ControllableNestedState<T, E>>
+    PaginatedStateStorage<ControllableLoadableNestedState<T, E>>
   >;
 
   <T, Keys extends PrimitiveOrNested[], E = any>(
     ...args: ControllableStateArgs<typeof createAsyncNestedState, T, E, Keys>
-  ): NestedStateStorage<Keys, ControllableNestedState<T, E, Keys>>;
+  ): NestedStateStorage<Keys, ControllableLoadableNestedState<T, E, Keys>>;
   <T, Keys extends PrimitiveOrNested[], E = any>(
     ...args: ControllableStateArgs<typeof createAsyncState, T, E, Keys>
-  ): NestedStateStorage<Keys, ControllableState<T, E, Keys>>;
+  ): NestedStateStorage<Keys, ControllableLoadableState<T, E, Keys>>;
 
   <T, Keys extends PrimitiveOrNested[], E = any>(
     ...args: LoadableStateArgs<typeof createAsyncNestedState, T, E, Keys>
@@ -439,10 +448,10 @@ interface CreateStateStorage {
 
   <T, Keys extends PrimitiveOrNested[], E = any>(
     ...args: PollableStateArgs<typeof createPollableNestedState, T, E, Keys>
-  ): NestedStateStorage<Keys, ControllableNestedState<T, E, Keys>>;
+  ): NestedStateStorage<Keys, ControllableLoadableNestedState<T, E, Keys>>;
   <T, Keys extends PrimitiveOrNested[], E = any>(
     ...args: PollableStateArgs<typeof createPollableState, T, E, Keys>
-  ): NestedStateStorage<Keys, ControllableState<T, E, Keys>>;
+  ): NestedStateStorage<Keys, ControllableLoadableState<T, E, Keys>>;
 
   <T, Keys extends PrimitiveOrNested[]>(
     ...args: GetStateArgs<typeof createNestedState, T, Keys>

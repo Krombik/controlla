@@ -1,12 +1,12 @@
 import getValue from '../getValue';
-import type { HandlePending, State, WithoutPending } from '../types';
+import type { HandlePending, State, ResolvedValue } from '../types';
 
 const setValue = <S extends State<any>>(
   state: S,
   value: S extends State<infer Value>
     ?
-        | WithoutPending<Value>
-        | ((prevValue: HandlePending<Value>) => WithoutPending<Value>)
+        | ResolvedValue<Value>
+        | ((prevValue: HandlePending<Value>) => ResolvedValue<Value>)
     : never
 ): S => {
   state._internal._set(

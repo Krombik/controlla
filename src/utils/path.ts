@@ -1,8 +1,8 @@
-import type { InternalPathBase, Key, PathBase } from '../types';
+import type { InternalPathBase, PathKey, StatePath } from '../types';
 
-function path<T extends PathBase<any> & InternalPathBase>(
+function path<T extends StatePath<any> & InternalPathBase>(
   this: T,
-  ...path: Key[]
+  ...path: PathKey[]
 ): any {
   const prevPath = this._path!;
 

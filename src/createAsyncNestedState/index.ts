@@ -4,7 +4,7 @@ import type {
   AsyncStateOptions,
   LoadableNestedState,
   LoadableStateOptions,
-  ControllableNestedState,
+  ControllableLoadableNestedState,
   ControllableStateOptions,
   InitModule,
 } from '../types';
@@ -14,7 +14,7 @@ const createAsyncNestedState = getAsyncStateCreator(createNestedState) as {
   <T, E = any>(
     options: ControllableStateOptions<T, E>,
     initModule?: InitModule<T>
-  ): ControllableNestedState<T, E>;
+  ): ControllableLoadableNestedState<T, E>;
   <T, E = any>(
     options: LoadableStateOptions<T, E>,
     initModule?: InitModule<T>

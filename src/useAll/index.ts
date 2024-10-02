@@ -1,18 +1,27 @@
 import { useContext, useLayoutEffect, useState } from 'react';
-import type { AnyAsyncState, Falsy, ExtractValues, AsyncState } from '../types';
-import getPromise from '../getPromise';
+import type {
+  AnyAsyncState,
+  Falsy,
+  ExtractValues,
+  AsyncState,
+  ExtractError,
+} from '../types';
 import onValueChange from '../onValueChange';
 import getValue from '../getValue';
 import noop from 'lodash.noop';
-import UseContext from '../utils/UseContext';
+import ErrorBoundaryContext from '../utils/ErrorBoundaryContext';
 import { RootKey } from '../utils/constants';
+import { handleLoad, handleUnload } from '../utils/handleSuspense';
+import SuspenseContext from '../utils/SuspenseContext';
 
-const useAll = ((...states: (AnyAsyncState | Falsy)[]) => {
+const useAll = ((states: (AnyAsyncState | Falsy)[], safeReturn?: boolean) => {
   const l = states.length;
 
   const values: any[] = [];
 
-  const ctx = useContext(UseContext);
+  const errorBoundaryCtx = useContext(ErrorBoundaryContext);
+
+  const suspenseCtx = useContext(SuspenseContext);
 
   const setValue = useState<{}>()[1];
 
@@ -29,6 +38,10 @@ const useAll = ((...states: (AnyAsyncState | Falsy)[]) => {
       const errorData = utils._errorUtils._data;
 
       if (errorData.has(RootKey.VALUE)) {
+        if (safeReturn) {
+          return [[], errorData.get(RootKey.VALUE)!];
+        }
+
         throw errorData.get(RootKey.VALUE)!;
       }
 
@@ -44,6 +57,10 @@ const useAll = ((...states: (AnyAsyncState | Falsy)[]) => {
             const errorData = utils._errorUtils._data;
 
             if (errorData.has(RootKey.VALUE)) {
+              if (safeReturn) {
+                return [[], errorData.get(RootKey.VALUE)!];
+              }
+
               throw errorData.get(RootKey.VALUE)!;
             }
 
@@ -56,15 +73,9 @@ const useAll = ((...states: (AnyAsyncState | Falsy)[]) => {
         const promises: Promise<any>[] = [];
 
         for (let i = 0; i < unloadedStates.length; i++) {
-          const state = unloadedStates[i];
-
-          const utils = state._internal;
-
-          promises.push(getPromise(state, true));
-
-          if ('load' in state && !ctx.has(utils)) {
-            ctx.set(utils, state.load());
-          }
+          promises.push(
+            handleLoad(unloadedStates[i], errorBoundaryCtx, suspenseCtx)
+          );
         }
 
         throw Promise.all(promises);
@@ -75,17 +86,9 @@ const useAll = ((...states: (AnyAsyncState | Falsy)[]) => {
 
         const unlistenError = onValueChange(state.error, forceRerender);
 
-        let unregister: () => void;
-
-        if ('load' in state) {
-          if (ctx.has(utils)) {
-            unregister = ctx.get(utils)!;
-
-            ctx.delete(utils);
-          } else {
-            unregister = state.load();
-          }
-        }
+        const unregister =
+          'load' in state &&
+          (handleUnload(utils, errorBoundaryCtx, suspenseCtx) || state.load());
 
         return () => {
           unlistenValue();
@@ -102,9 +105,20 @@ const useAll = ((...states: (AnyAsyncState | Falsy)[]) => {
     }
   }
 
-  return values;
+  return safeReturn ? [values] : (values as ReadonlyArray<any>);
 }) as {
-  <const S extends (AsyncState<any> | Falsy)[]>(...states: S): ExtractValues<S>;
+  <
+    const S extends (AsyncState<any> | Falsy)[],
+    SafeReturn extends boolean = false,
+  >(
+    states: S,
+    safeReturn?: SafeReturn
+  ): SafeReturn extends false
+    ? ExtractValues<S>
+    : Readonly<
+        | [values: ExtractValues<S>, error: undefined]
+        | [values: readonly [], error: ExtractError<S>]
+      >;
 };
 
 export default useAll;

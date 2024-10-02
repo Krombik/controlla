@@ -1,9 +1,5 @@
 import noop from 'lodash.noop';
-import type {
-  InitModule,
-  InternalDataMap,
-  PollableStateOptions,
-} from '../types';
+import type { InitModule, StateDataMap, PollableStateOptions } from '../types';
 import becomingOnline from './becomingOnline';
 import createFetcher from './createFetcher';
 import type getAsyncStateCreator from './getAsyncStateCreator';
@@ -11,7 +7,7 @@ import { RootKey } from './constants';
 
 export const handleGetInterval = (
   interval: number | ((value: any) => number),
-  data: InternalDataMap
+  data: StateDataMap
 ) =>
   typeof interval == 'number'
     ? () => interval

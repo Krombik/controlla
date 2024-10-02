@@ -1,7 +1,7 @@
 import type {
-  CallbackRegistry,
+  ValueChangeCallbacks,
   Internal,
-  InternalUtils,
+  StateInternalUtils,
   InitModule,
   State,
 } from '../types';
@@ -10,8 +10,8 @@ import { RootKey } from '../utils/constants';
 import identity from 'lodash.identity';
 import handleState from '../utils/handleState';
 
-type _InternalUtils = InternalUtils & {
-  _valueSet: CallbackRegistry;
+type _InternalUtils = StateInternalUtils & {
+  _valueSet: ValueChangeCallbacks;
 };
 
 function _onValueChange(this: _InternalUtils, cb: (value: any) => void) {

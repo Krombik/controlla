@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react';
 import getValue from '../getValue';
 import {
   AnyLoadableState,
-  ControllableNestedState,
-  ControllableState,
+  ControllableLoadableNestedState,
+  ControllableLoadableState,
   InitModule,
   Internal,
-  InternalUtils,
-  Key,
+  StateInternalUtils,
+  PathKey,
   LoadableNestedState,
   LoadableState,
   PaginatedStateStorage,
@@ -31,7 +31,7 @@ import createPollableNestedState from '../createPollableNestedState';
 type PaginatedState = LoadableState<any> &
   Internal<{
     _parent: PaginatedStateStorage<any>['_internal'];
-    _originalSet: InternalUtils['_set'];
+    _originalSet: StateInternalUtils['_set'];
     _page: number;
   }>;
 
@@ -41,10 +41,14 @@ const handleListener = (
 ) => {
   const unlistenValue = onValueChange(state, forceRerender);
 
+  const unlistenError = onValueChange(state.error, forceRerender);
+
   const unregister = state.load();
 
   return () => {
     unlistenValue();
+
+    unlistenError();
 
     unregister();
   };
@@ -54,7 +58,7 @@ function _set(
   this: PaginatedState['_internal'],
   nextValue: any,
   isSet: boolean,
-  path: Key[],
+  path: PathKey[],
   isError: boolean
 ) {
   this._originalSet(nextValue, isSet, path, isError);
@@ -158,7 +162,9 @@ function usePages(
     return (from: number, to: number) => {
       let isUnstable = false;
 
-      const arr: AnyLoadableState<any>[] = [];
+      const states: AnyLoadableState<any>[] = [];
+
+      const errors: any[] = [];
 
       const t = useState<{}>();
 
@@ -180,12 +186,12 @@ function usePages(
         if (fromDiff) {
           if (fromDiff > 0) {
             for (let i = 0; i < fromDiff; i++) {
-              cleanupMap.set(from + i, handleListener(arr[i], callback));
+              cleanupMap.set(from + i, handleListener(states[i], callback));
             }
 
             if (!isUnstable) {
-              for (let i = fromDiff; i < arr.length; i++) {
-                const state = arr[i];
+              for (let i = fromDiff; i < states.length; i++) {
+                const state = states[i];
 
                 if (shouldRevalidate(state)) {
                   state.load(true);
@@ -209,7 +215,7 @@ function usePages(
 
             if (start && !isUnstable) {
               for (let i = 0; i < start; i++) {
-                const state = arr[i];
+                const state = states[i];
 
                 if (shouldRevalidate(state)) {
                   state.load(true);
@@ -219,8 +225,8 @@ function usePages(
               }
             }
 
-            for (let i = start; i < arr.length; i++) {
-              cleanupMap.set(from + i, handleListener(arr[i], callback));
+            for (let i = start; i < states.length; i++) {
+              cleanupMap.set(from + i, handleListener(states[i], callback));
             }
           } else {
             for (let i = prevTo; i < to; i++) {
@@ -254,14 +260,19 @@ function usePages(
           isUnstable = true;
         }
 
-        arr.push(state);
+        errors.push(getValue(state.error));
+
+        states.push(state);
       }
 
-      return arr.map(
-        isUnstable
-          ? (item) => item._internal._data.get(RootKey.STABLE_VALUE)
-          : getValue
-      );
+      return [
+        states.map(
+          isUnstable
+            ? (item) => item._internal._data.get(RootKey.STABLE_VALUE)
+            : getValue
+        ),
+        errors,
+      ] as const;
     };
   })(from, to);
 }
@@ -329,10 +340,10 @@ const createPaginatedStorage: {
 
   <T, Error = any>(
     ...args: PaginatedPollableStateArgs<T, Error>
-  ): PaginatedStateStorage<ControllableState<T, Error>>;
+  ): PaginatedStateStorage<ControllableLoadableState<T, Error>>;
   <T, Error = any>(
     ...args: PaginatedPollableNestedStateArgs<T, Error>
-  ): PaginatedStateStorage<ControllableNestedState<T, Error>>;
+  ): PaginatedStateStorage<ControllableLoadableNestedState<T, Error>>;
 } = (
   createState: any,
   options: RequestableStateOptions<any, any, [number]> & Options<any>,
@@ -370,9 +381,9 @@ const createPaginatedStorage: {
     path,
     _path: EMPTY_ARR,
     keys: EMPTY_ARR,
-    use: usePages,
+    usePages,
   } as Partial<PaginatedStateStorage<any, any[]>> as PaginatedStateStorage<
-    ControllableNestedState<any>
+    ControllableLoadableNestedState<any>
   >;
 };
 

@@ -1,28 +1,28 @@
 import { NestedArray, NestedObject } from 'keyweaver';
 import type {
-  CallbackRegistry,
+  ValueChangeCallbacks,
   InitModule,
-  InternalUtils,
-  Key,
-  NestedMap,
+  StateInternalUtils,
+  PathKey,
+  StateCallbackMap,
   NestedState,
 } from '../types';
 import { EMPTY_ARR, RootKey } from '../utils/constants';
 import executeSetters from '../utils/executeSetters';
-import handleNotEqual from '../utils/handleNotEqual';
+import processStateChanges from '../utils/processStateChanges';
 import path from '../utils/path';
 import safeGet from '../utils/safeGet';
 import noop from 'lodash.noop';
 import handleState from '../utils/handleState';
 
-interface _InternalUtils extends InternalUtils {
-  _rootMap: NestedMap;
+interface _InternalUtils extends StateInternalUtils {
+  _rootMap: StateCallbackMap;
 }
 
 const deepSet = (
   value: any,
   nextValue: any,
-  path: Key[],
+  path: PathKey[],
   index: number,
   lastIndex: number,
   pushValueArr: ((value: any) => void)[]
@@ -60,13 +60,13 @@ const deepSet = (
 function _onValueChange(
   this: _InternalUtils,
   cb: (value: any) => void,
-  path: Key[]
+  path: PathKey[]
 ) {
   let length = path.length;
 
   let parent = this._rootMap;
 
-  let set: CallbackRegistry | undefined;
+  let set: ValueChangeCallbacks | undefined;
 
   for (let i = 0, l = length; i < l; i++) {
     if (parent._children) {
@@ -116,9 +116,9 @@ function _onValueChange(
 
       if (!parent._children) {
         for (parent = parent._parent!; length--; parent = parent._parent!) {
-          const children = parent._children!;
+          const children = parent._children;
 
-          if (children.size != 1) {
+          if (children && children.size != 1) {
             children.delete(path[length]);
           } else {
             parent._children = null;
@@ -137,9 +137,9 @@ function _set(
   this: _InternalUtils,
   nextValue: any,
   isSet: boolean,
-  path: Key[]
+  path: PathKey[]
 ) {
-  let currentNode: NestedMap | null | undefined = this._rootMap;
+  let currentNode: StateCallbackMap | null | undefined = this._rootMap;
 
   const root = currentNode._root;
 
@@ -149,7 +149,7 @@ function _set(
 
   const l = path.length;
 
-  const nodesQueue: CallbackRegistry[] = [];
+  const nodesQueue: ValueChangeCallbacks[] = [];
 
   const valuesArr: any[] = [];
 
@@ -179,7 +179,7 @@ function _set(
     }
   }
 
-  if (handleNotEqual(safeGet(rootValue, path), nextValue, currentNode)) {
+  if (processStateChanges(safeGet(rootValue, path), nextValue, currentNode)) {
     if (isSet) {
       if (l) {
         nextValue = deepSet(rootValue, nextValue, path, 0, l - 1, pushArr);
