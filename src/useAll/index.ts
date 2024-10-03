@@ -1,4 +1,4 @@
-import { useContext, useLayoutEffect, useState } from 'react';
+import { useContext, useLayoutEffect } from 'react';
 import type {
   AnyAsyncState,
   Falsy,
@@ -13,6 +13,7 @@ import ErrorBoundaryContext from '../utils/ErrorBoundaryContext';
 import { RootKey } from '../utils/constants';
 import { handleLoad, handleUnload } from '../utils/handleSuspense';
 import SuspenseContext from '../utils/SuspenseContext';
+import useForceRerender from 'react-helpful-utils/useForceRerender';
 
 const useAll = ((states: (AnyAsyncState | Falsy)[], safeReturn?: boolean) => {
   const l = states.length;
@@ -23,11 +24,7 @@ const useAll = ((states: (AnyAsyncState | Falsy)[], safeReturn?: boolean) => {
 
   const suspenseCtx = useContext(SuspenseContext);
 
-  const setValue = useState<{}>()[1];
-
-  const forceRerender = () => {
-    setValue({});
-  };
+  const forceRerender = useForceRerender;
 
   for (let i = 0; i < l; i++) {
     const state = states[i];

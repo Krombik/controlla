@@ -1,4 +1,4 @@
-import { useContext, useLayoutEffect, useState } from 'react';
+import { useContext, useLayoutEffect } from 'react';
 import type { AnyAsyncState, AsyncState, Falsy, ResolvedValue } from '../types';
 import useNoop from '../utils/useNoop';
 import ErrorBoundaryContext from '../utils/ErrorBoundaryContext';
@@ -7,6 +7,7 @@ import getValue from '../getValue';
 import { RootKey } from '../utils/constants';
 import SuspenseContext from '../utils/SuspenseContext';
 import { handleLoad, handleUnload } from '../utils/handleSuspense';
+import useForceRerender from 'react-helpful-utils/useForceRerender';
 
 const use = ((
   state: AnyAsyncState<any, any, any[]> | Falsy,
@@ -20,15 +21,9 @@ const use = ((
     const utils = state._internal;
 
     if (utils._data.has(RootKey.VALUE)) {
-      const t = useState<{}>();
+      const forceRerender = useForceRerender();
 
       useLayoutEffect(() => {
-        const setValue = t[1];
-
-        const forceRerender = () => {
-          setValue({});
-        };
-
         const unlistenValue = onValueChange(state, forceRerender);
 
         const unlistenError = onValueChange(state.error, forceRerender);

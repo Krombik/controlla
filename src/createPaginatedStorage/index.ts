@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import getValue from '../getValue';
 import {
   AnyLoadableState,
@@ -27,6 +27,7 @@ import createRequestableState from '../createRequestableState';
 import createRequestableNestedState from '../createRequestableNestedState';
 import createPollableState from '../createPollableState';
 import createPollableNestedState from '../createPollableNestedState';
+import { useForceRerender } from 'react-helpful-utils';
 
 type PaginatedState = LoadableState<any> &
   Internal<{
@@ -166,19 +167,17 @@ function usePages(
 
       const errors: any[] = [];
 
-      const t = useState<{}>();
+      const forceRerender = useForceRerender();
 
       useEffect(() => {
         const fromDiff = prevFrom - from;
 
         const toDiff = to - prevTo;
 
-        const forceRerender = t[1];
-
         const callback = () => {
           for (
             let i = from;
-            (i < to || (forceRerender({}) as undefined)) && !pages.has(i);
+            (i < to || (forceRerender() as undefined)) && !pages.has(i);
             i++
           ) {}
         };

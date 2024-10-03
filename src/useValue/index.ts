@@ -1,19 +1,16 @@
-import { useLayoutEffect, useState } from 'react';
+import { useLayoutEffect } from 'react';
 import type { AnyAsyncState, Falsy, HandlePending, State } from '../types';
 import onValueChange from '../onValueChange';
 import useNoop from '../utils/useNoop';
 import getValue from '../getValue';
+import useForceRerender from 'react-helpful-utils/useForceRerender';
 
 const useValue = ((state: AnyAsyncState | Falsy) => {
   if (state) {
-    const t = useState<{}>();
+    const forceRerender = useForceRerender();
 
     useLayoutEffect(() => {
-      const forceRerender = t[1];
-
-      const unlistenValue = onValueChange(state, () => {
-        forceRerender({});
-      });
+      const unlistenValue = onValueChange(state, forceRerender);
 
       if ('load' in state) {
         const unload = state.load();
