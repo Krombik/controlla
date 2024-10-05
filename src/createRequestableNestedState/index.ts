@@ -1,6 +1,6 @@
 import createAsyncNestedState from '../createAsyncNestedState';
 import type {
-  InitModule,
+  StateInitializer,
   LoadableNestedState,
   RequestableStateOptions,
 } from '../types';
@@ -11,7 +11,7 @@ const createRequestableNestedState = getRequestableStateCreator(
 ) as {
   <T, E = any>(
     options: RequestableStateOptions<T, E>,
-    initModule?: InitModule<T>
+    stateInitializer?: StateInitializer<T>
   ): LoadableNestedState<T, E>;
 };
 

@@ -1,7 +1,7 @@
 import createAsyncNestedState from '../createAsyncNestedState';
 import type {
   ControllableLoadableNestedState,
-  InitModule,
+  StateInitializer,
   PollableStateOptions,
 } from '../types';
 import getPollableStateCreator from '../utils/getPollableStateCreator';
@@ -11,7 +11,7 @@ const createPollableNestedState = getPollableStateCreator(
 ) as {
   <T, E = any>(
     options: PollableStateOptions<T, E>,
-    initModule?: InitModule<T>
+    stateInitializer?: StateInitializer<T>
   ): ControllableLoadableNestedState<T, E>;
 };
 

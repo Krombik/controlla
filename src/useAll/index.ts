@@ -1,30 +1,58 @@
-import { useContext, useLayoutEffect } from 'react';
+import { ContextType, useContext, useLayoutEffect } from 'react';
 import type {
   AnyAsyncState,
   Falsy,
   ExtractValues,
   AsyncState,
-  ExtractError,
+  ExtractErrors,
+  ArrayOfUndefined,
 } from '../types';
-import onValueChange from '../onValueChange';
-import getValue from '../getValue';
 import noop from 'lodash.noop';
 import ErrorBoundaryContext from '../utils/ErrorBoundaryContext';
-import { RootKey } from '../utils/constants';
-import { handleLoad, handleUnload } from '../utils/handleSuspense';
+import { handleLoad } from '../utils/handleSuspense';
 import SuspenseContext from '../utils/SuspenseContext';
 import useForceRerender from 'react-helpful-utils/useForceRerender';
+import useHandleSuspenseValue from '../utils/useHandleSuspenseValue';
+
+const awaitAll = (
+  states: AnyAsyncState[],
+  errorBoundaryCtx: ContextType<typeof ErrorBoundaryContext>,
+  suspenseCtx: ContextType<typeof SuspenseContext>,
+  settle?: boolean
+) =>
+  new Promise<void>((res) => {
+    const l = states.length;
+
+    let inProgressCount = l;
+
+    const onResolve = () => {
+      if (--inProgressCount) {
+        res();
+      }
+    };
+
+    const onReject = settle ? onResolve : res;
+
+    for (let i = 0; i < l; i++) {
+      handleLoad(states[i], errorBoundaryCtx, suspenseCtx).then(
+        onResolve,
+        onReject
+      );
+    }
+  });
 
 const useAll = ((states: (AnyAsyncState | Falsy)[], safeReturn?: boolean) => {
   const l = states.length;
 
   const values: any[] = [];
 
+  const errors: any[] = [];
+
   const errorBoundaryCtx = useContext(ErrorBoundaryContext);
 
   const suspenseCtx = useContext(SuspenseContext);
 
-  const forceRerender = useForceRerender;
+  const forceRerender = useForceRerender();
 
   for (let i = 0; i < l; i++) {
     const state = states[i];
@@ -32,17 +60,26 @@ const useAll = ((states: (AnyAsyncState | Falsy)[], safeReturn?: boolean) => {
     if (state) {
       const utils = state._internal;
 
-      const errorData = utils._errorUtils._data;
+      const err = utils._errorUtils._value;
 
-      if (errorData.has(RootKey.VALUE)) {
-        if (safeReturn) {
-          return [[], errorData.get(RootKey.VALUE)!];
-        }
+      const isError = err !== undefined;
 
-        throw errorData.get(RootKey.VALUE)!;
+      if (isError && !safeReturn) {
+        throw err;
       }
 
-      if (!utils._data.has(RootKey.VALUE)) {
+      if (utils._value !== undefined || isError) {
+        values.push(
+          useHandleSuspenseValue(
+            state,
+            errorBoundaryCtx,
+            suspenseCtx,
+            forceRerender
+          )
+        );
+
+        errors.push(err);
+      } else {
         const unloadedStates: AnyAsyncState[] = [state];
 
         while (++i < l) {
@@ -51,58 +88,35 @@ const useAll = ((states: (AnyAsyncState | Falsy)[], safeReturn?: boolean) => {
           if (state) {
             const utils = state._internal;
 
-            const errorData = utils._errorUtils._data;
+            const err = utils._errorUtils._value;
 
-            if (errorData.has(RootKey.VALUE)) {
-              if (safeReturn) {
-                return [[], errorData.get(RootKey.VALUE)!];
+            if (err === undefined) {
+              if (utils._value === undefined) {
+                unloadedStates.push(state);
               }
-
-              throw errorData.get(RootKey.VALUE)!;
-            }
-
-            if (!utils._data.has(RootKey.VALUE)) {
-              unloadedStates.push(state);
+            } else if (!safeReturn) {
+              throw err;
             }
           }
         }
 
-        const promises: Promise<any>[] = [];
-
-        for (let i = 0; i < unloadedStates.length; i++) {
-          promises.push(
-            handleLoad(unloadedStates[i], errorBoundaryCtx, suspenseCtx)
-          );
-        }
-
-        throw Promise.all(promises);
+        throw awaitAll(
+          unloadedStates,
+          errorBoundaryCtx,
+          suspenseCtx,
+          safeReturn
+        );
       }
-
-      useLayoutEffect(() => {
-        const unlistenValue = onValueChange(state, forceRerender);
-
-        const unlistenError = onValueChange(state.error, forceRerender);
-
-        const unregister =
-          'load' in state &&
-          (handleUnload(utils, errorBoundaryCtx, suspenseCtx) || state.load());
-
-        return () => {
-          unlistenValue();
-
-          unlistenError();
-
-          unregister && unregister();
-        };
-      }, [utils, state._path && state._path.join('.')]);
-
-      values.push(getValue(state));
     } else {
-      values.push(useLayoutEffect(noop, [0, 0]));
+      values.length++;
+
+      errors.length++;
+
+      useLayoutEffect(noop, [0, 0]);
     }
   }
 
-  return safeReturn ? [values] : (values as ReadonlyArray<any>);
+  return safeReturn ? [values, errors] : (values as ReadonlyArray<any>);
 }) as {
   <
     const S extends (AsyncState<any> | Falsy)[],
@@ -113,8 +127,8 @@ const useAll = ((states: (AnyAsyncState | Falsy)[], safeReturn?: boolean) => {
   ): SafeReturn extends false
     ? ExtractValues<S>
     : Readonly<
-        | [values: ExtractValues<S>, error: undefined]
-        | [values: readonly [], error: ExtractError<S>]
+        | [values: ExtractValues<S>, errors: ArrayOfUndefined<S>]
+        | [values: ExtractValues<S, true>, errors: ExtractErrors<S>]
       >;
 };
 

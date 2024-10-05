@@ -4,15 +4,8 @@ import alwaysFalse from '../utils/alwaysFalse';
 
 const alwaysNoop = () => noop;
 
-const has = () => {
-  throw new Error('unsupported skeleton state usage');
-};
-
 const utils: StateInternalUtils = {
-  _data: {
-    get: noop,
-    has,
-  } as any,
+  _value: undefined,
   _get: noop,
   _set: noop,
   _onValueChange: alwaysNoop,
@@ -32,10 +25,7 @@ const SKELETON_STATE = {
   > as ControllableLoadableNestedState<any>['error'],
   isLoaded: {
     _internal: {
-      _data: {
-        get: alwaysFalse,
-        has,
-      } as any,
+      _value: undefined,
       _get: alwaysFalse,
       _set: noop,
       _onValueChange: alwaysNoop,

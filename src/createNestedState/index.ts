@@ -1,17 +1,16 @@
 import { NestedArray, NestedObject } from 'keyweaver';
 import type {
   ValueChangeCallbacks,
-  InitModule,
+  StateInitializer,
   StateInternalUtils,
   PathKey,
   StateCallbackMap,
   NestedState,
 } from '../types';
-import { EMPTY_ARR, RootKey } from '../utils/constants';
+import { EMPTY_ARR } from '../utils/constants';
 import executeSetters from '../utils/executeSetters';
 import processStateChanges from '../utils/processStateChanges';
 import path from '../utils/path';
-import safeGet from '../utils/safeGet';
 import noop from 'lodash.noop';
 import handleState from '../utils/handleState';
 
@@ -133,19 +132,10 @@ function _onValueChange(
   };
 }
 
-function _set(
-  this: _InternalUtils,
-  nextValue: any,
-  isSet: boolean,
-  path: PathKey[]
-) {
+function _set(this: _InternalUtils, nextValue: any, path: PathKey[]) {
   let currentNode: StateCallbackMap | null | undefined = this._rootMap;
 
   const root = currentNode._root;
-
-  const data = this._data;
-
-  const rootValue = data.get(RootKey.VALUE);
 
   const l = path.length;
 
@@ -179,14 +169,12 @@ function _set(
     }
   }
 
-  if (processStateChanges(safeGet(rootValue, path), nextValue, currentNode)) {
-    if (isSet) {
-      if (l) {
-        nextValue = deepSet(rootValue, nextValue, path, 0, l - 1, pushArr);
-      }
-
-      data.set(RootKey.VALUE, nextValue);
+  if (processStateChanges(this._get(path), nextValue, currentNode)) {
+    if (l) {
+      nextValue = deepSet(this._value, nextValue, path, 0, l - 1, pushArr);
     }
+
+    this._value = nextValue;
 
     for (let i = nodesQueue.length; i--; ) {
       executeSetters(nodesQueue[i], valuesArr[i]);
@@ -198,23 +186,38 @@ function _set(
   }
 }
 
+function _get(this: _InternalUtils, path: PathKey[]) {
+  const l = path.length;
+
+  let value = this._value;
+
+  for (
+    let i = 0;
+    i < l && (value = value ? value[path[i]] : undefined) !== undefined;
+    i++
+  ) {}
+
+  return value;
+}
+
 const createNestedState: {
   <T extends NestedArray | NestedObject>(): NestedState<T | undefined>;
   <T extends NestedArray | NestedObject>(
     value: T | (() => T),
-    initModule?: InitModule<T>
+    stateInitializer?: StateInitializer<T>
   ): NestedState<T>;
 } = (
   value?: unknown | (() => unknown),
-  initModule?: InitModule,
+  stateInitializer?: StateInitializer,
   keys?: any[],
   utils?: Record<string, any>
 ) => {
   utils = {
+    _value: undefined,
     _data: undefined!,
     _rootMap: { _root: null, _children: null },
     _onValueChange,
-    _get: safeGet,
+    _get,
     _set,
     ...utils,
   } as _InternalUtils;
@@ -223,7 +226,12 @@ const createNestedState: {
     _internal: utils as _InternalUtils,
     _path: EMPTY_ARR,
     path,
-    _anchor: handleState(value, initModule, keys, utils as _InternalUtils),
+    _anchor: handleState(
+      value,
+      stateInitializer,
+      keys,
+      utils as _InternalUtils
+    ),
   } as Partial<NestedState<any>> as NestedState<any>;
 };
 

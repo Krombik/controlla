@@ -3,13 +3,13 @@ import { AsyncState, ResolvedValue } from '../types';
 import use from '../use';
 import Suspense from '../Suspense';
 
-export type SuspenseStateValueProps<V, E = any> = {
+export type SuspenseStateProps<V, E = any> = {
   state: AsyncState<V, E>;
   render(value: ResolvedValue<V>): ReturnType<FC>;
   renderIfError?: ((error: E) => ReturnType<FC>) | ReturnType<FC>;
 } & Pick<SuspenseProps, 'fallback'>;
 
-const StateValue: FC<SuspenseStateValueProps<unknown, unknown>> = ({
+const StateValue: FC<SuspenseStateProps<unknown, unknown>> = ({
   render,
   state,
   renderIfError,
@@ -27,12 +27,10 @@ const StateValue: FC<SuspenseStateValueProps<unknown, unknown>> = ({
       : renderIfError;
 };
 
-const SuspenseStateValue = <V, E = any>(
-  props: SuspenseStateValueProps<V, E>
-) => (
+const SuspenseState = <V, E = any>(props: SuspenseStateProps<V, E>) => (
   <Suspense fallback={props.fallback}>
     <StateValue {...props} />
   </Suspense>
 );
 
-export default SuspenseStateValue;
+export default SuspenseState;

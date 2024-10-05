@@ -1,12 +1,10 @@
-import { useContext, useLayoutEffect } from 'react';
-import type { AnyAsyncState, AsyncState, Falsy, ResolvedValue } from '../types';
+import { useContext } from 'react';
+import type { AnyAsyncState, AsyncState, Falsy } from '../types';
 import useNoop from '../utils/useNoop';
 import ErrorBoundaryContext from '../utils/ErrorBoundaryContext';
-import onValueChange from '../onValueChange';
-import getValue from '../getValue';
-import { RootKey } from '../utils/constants';
 import SuspenseContext from '../utils/SuspenseContext';
-import { handleLoad, handleUnload } from '../utils/handleSuspense';
+import { handleLoad } from '../utils/handleSuspense';
+import useHandleSuspenseValue from '../utils/useHandleSuspenseValue';
 import useForceRerender from 'react-helpful-utils/useForceRerender';
 
 const use = ((
@@ -20,44 +18,23 @@ const use = ((
   if (state) {
     const utils = state._internal;
 
-    if (utils._data.has(RootKey.VALUE)) {
-      const forceRerender = useForceRerender();
+    const err = utils._errorUtils._value;
 
-      useLayoutEffect(() => {
-        const unlistenValue = onValueChange(state, forceRerender);
+    const isError = err !== undefined;
 
-        const unlistenError = onValueChange(state.error, forceRerender);
-
-        const unregister =
-          'load' in state &&
-          (handleUnload(utils, errorBoundaryCtx, suspenseCtx) || state.load());
-
-        return () => {
-          unlistenValue();
-
-          unlistenError();
-
-          unregister && unregister();
-        };
-      }, [utils, state._path && state._path.join('.')]);
-
-      return safeReturn ? [getValue(state)] : getValue(state);
+    if (isError && !safeReturn) {
+      throw err;
     }
 
-    const errorData = utils._errorUtils._data;
+    if (utils._value !== undefined || isError) {
+      const value = useHandleSuspenseValue(
+        state,
+        errorBoundaryCtx,
+        suspenseCtx,
+        useForceRerender()
+      );
 
-    if (errorData.has(RootKey.VALUE)) {
-      const unload = handleUnload(utils, errorBoundaryCtx, suspenseCtx);
-
-      if (unload) {
-        unload();
-      }
-
-      if (safeReturn) {
-        return [undefined, errorData.get(RootKey.VALUE)];
-      }
-
-      throw errorData.get(RootKey.VALUE);
+      return safeReturn ? [value, err] : value;
     }
 
     throw handleLoad(state, errorBoundaryCtx, suspenseCtx);
@@ -70,11 +47,8 @@ const use = ((
     safeReturn?: SafeReturn
   ): S extends AsyncState<infer T, infer E>
     ? SafeReturn extends false
-      ? ResolvedValue<T>
-      : Readonly<
-          | [value: ResolvedValue<T>, error: undefined]
-          | [value: undefined, error: E]
-        >
+      ? T
+      : Readonly<[value: T, error: undefined] | [value: undefined, error: E]>
     : undefined;
 };
 

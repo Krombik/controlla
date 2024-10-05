@@ -4,26 +4,20 @@ import onValueChange from '../onValueChange';
 import useNoop from '../utils/useNoop';
 import getValue from '../getValue';
 import useForceRerender from 'react-helpful-utils/useForceRerender';
+import handleListeners from '../utils/handleListeners';
 
 const useValue = ((state: AnyAsyncState | Falsy) => {
   if (state) {
     const forceRerender = useForceRerender();
 
-    useLayoutEffect(() => {
-      const unlistenValue = onValueChange(state, forceRerender);
-
-      if ('load' in state) {
-        const unload = state.load();
-
-        return () => {
-          unlistenValue();
-
-          unload();
-        };
-      }
-
-      return unlistenValue;
-    }, [state._internal, state._path && state._path.join('.')]);
+    useLayoutEffect(
+      () =>
+        handleListeners([
+          onValueChange(state, forceRerender),
+          'load' in state && !state._withoutLoading && state.load(),
+        ]),
+      [state._internal, state._path && state._path.join('.')]
+    );
 
     return getValue(state);
   }

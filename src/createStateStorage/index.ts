@@ -15,9 +15,9 @@ import type {
   PollableStateOptions,
   STATE_STORAGE_IDENTIFIER,
   LoadableStateOptions,
-  ControllableStateOptions,
+  ControllableLoadableStateOptions,
   StorageUtils,
-  InitModule,
+  StateInitializer,
   WithInitModule,
   PaginatedStateStorage,
   RetrieveStateOrPaginatedStorage,
@@ -156,7 +156,7 @@ type ControllableStateArgs<
   T,
   [
     createState: CreateState,
-    options: ControllableStateOptions<T, E, [...ParentKeys, ...Keys]>,
+    options: ControllableLoadableStateOptions<T, E, [...ParentKeys, ...Keys]>,
   ]
 >;
 
@@ -216,7 +216,7 @@ type StateCreationArguments<
   Keys extends PrimitiveOrNested[],
   ParentKeys extends PrimitiveOrNested[],
 > =
-  T extends State<infer V>
+  T extends State<ResolvedValue<infer V>>
     ? T extends ControllableLoadableState<any, infer E>
       ?
           | PollableStateArgs<
@@ -620,7 +620,7 @@ const createStateStorage: CreateStateStorage = (
   arg1: unknown,
   arg2?: unknown,
   arg3?: unknown,
-  arg4?: number | InitModule,
+  arg4?: number | StateInitializer,
   parentDepth?: number
 ): any => {
   parentDepth ||= 0;

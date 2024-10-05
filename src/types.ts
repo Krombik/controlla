@@ -1,5 +1,4 @@
 import type { PrimitiveOrNested } from 'keyweaver';
-import type { RootKey } from './utils/constants';
 
 export type PathKey = number | string;
 
@@ -54,24 +53,16 @@ export type StateCallbackMap = {
   _parent?: StateCallbackMap;
 };
 
-export type StateDataMap = Map<RootKey.VALUE, any> &
-  Map<RootKey.PROMISE, Promise<any>> &
-  Map<RootKey.PROMISE_RESOLVE, (value: any) => void> &
-  Map<RootKey.PROMISE_REJECT, (error: any) => void> &
-  Map<RootKey.SLOW_LOADING_TIMEOUT_ID, ReturnType<typeof setTimeout>> &
-  Map<RootKey.UNLOAD, () => void> &
-  Map<RootKey.STABLE_VALUE, any>;
-
 export type StateInternalUtils = {
-  _data: StateDataMap;
-  _set(nextValue: any, isSet: boolean, path: PathKey[], isError: boolean): void;
-  _get(value: any, path: PathKey[]): any;
+  _value: any;
+  _set(nextValue: any, path: PathKey[], isError?: boolean): void;
+  _get(path: PathKey[]): any;
   _onValueChange(cb: (value: any) => void, path: PathKey[]): () => void;
 };
 
 declare const STATE_IDENTIFIER: unique symbol;
 
-type Nesting<Keys extends PrimitiveOrNested[]> = Keys['length'] extends 0
+type StorageKeys<Keys extends PrimitiveOrNested[]> = Keys['length'] extends 0
   ? {}
   : {
       readonly keys: Readonly<Keys>;
@@ -93,31 +84,40 @@ export type State<
   readonly [STATE_IDENTIFIER]: Value;
   /** @internal */
   readonly _anchor?: Readonly<{}>;
-} & Nesting<Keys> &
+} & StorageKeys<Keys> &
   /** @internal */
   Internal<StateInternalUtils> &
   /** @internal */
-  Partial<Nesting<any[]>> &
+  Partial<StorageKeys<any[]>> &
   /** @internal */
   InternalPathBase;
 
 export type ErrorStateUtils = {
-  _parentUtils: StateInternalUtils;
+  _parentUtils: StateInternalUtils & AsyncStateUtils;
   _commonSet: StateInternalUtils['_set'];
 };
 
 export type AsyncStateUtils = {
   _isLoaded(value: any, prevValue: any): boolean;
   _commonSet: StateInternalUtils['_set'];
-  _handleSlowLoading(): void;
-  _slowLoadingTimeout?: number;
-  _slowLoadingCallbackSet?: Set<() => void>;
-  _load?(): (() => void) | void;
+  _slowLoading: {
+    _handle(isLoadedUtils: StateInternalUtils): void;
+    _timeout: number;
+    _timeoutId: ReturnType<typeof setTimeout> | undefined;
+    _callbackSet: Set<() => void>;
+  } | null;
+  _load: (() => (() => void) | void) | undefined;
   _counter: number;
   _isLoadable: boolean;
   _isFetchInProgress: boolean;
   _errorUtils: ErrorStateUtils & StateInternalUtils;
   _isLoadedUtils: StateInternalUtils;
+  _promise: {
+    _promise: Promise<any>;
+    _resolve(value: any): void;
+    _reject(error: any): void;
+  } | null;
+  _unload: (() => void) | void | undefined;
 };
 
 export type AsyncState<
@@ -127,6 +127,8 @@ export type AsyncState<
 > = State<Value | typeof PENDING, Keys> &
   /** @internal */
   Internal<AsyncStateUtils> & {
+    /** @internal */
+    readonly _awaitOnly?: true;
     readonly error: State<Error | undefined> &
       /** @internal */
       Internal<ErrorStateUtils>;
@@ -138,6 +140,8 @@ export type LoadableState<
   Error = any,
   Keys extends PrimitiveOrNested[] = [],
 > = AsyncState<Value, Error, Keys> & {
+  /** @internal */
+  readonly _withoutLoading?: true;
   load(force?: boolean): () => void;
 };
 
@@ -228,18 +232,29 @@ export type AnyLoadableState<
   | LoadableState<Value, Error, Keys>
   | ControllableLoadableState<Value, Error, Keys>;
 
-export type ExtractValues<T> = Readonly<
+export type ExtractValues<T, Nullable extends boolean = false> = Readonly<
   T extends [infer Head, ...infer Tail]
     ? [
-        Head extends AsyncState<infer K> ? ResolvedValue<K> : undefined,
-        ...ExtractValues<Tail>,
+        Head extends AsyncState<infer K>
+          ? K | (Nullable extends false ? never : undefined)
+          : undefined,
+        ...ExtractValues<Tail, Nullable>,
       ]
     : []
 >;
 
-export type ExtractError<T> = T extends [infer Head, ...infer Tail]
-  ? (Head extends AsyncState<any, infer K> ? K : never) | ExtractError<Tail>
-  : never;
+export type ExtractErrors<T> = Readonly<
+  T extends [infer Head, ...infer Tail]
+    ? [
+        Head extends AsyncState<any, infer K> ? K | undefined : undefined,
+        ...ExtractErrors<Tail>,
+      ]
+    : []
+>;
+
+export type ArrayOfUndefined<T> = Readonly<
+  T extends [any, ...infer Tail] ? [undefined, ...ExtractErrors<Tail>] : []
+>;
 
 export type AsyncStateOptions<T, Keys extends PrimitiveOrNested[] = []> = {
   value?: ResolvedValue<T> | ((...keys: Keys) => ResolvedValue<T>);
@@ -258,7 +273,7 @@ export type LoadableStateOptions<
   loadingTimeout?: number;
 };
 
-export type ControllableStateOptions<
+export type ControllableLoadableStateOptions<
   T,
   E = any,
   Keys extends PrimitiveOrNested[] = [],
@@ -297,9 +312,9 @@ export type PollableStateOptions<
     hiddenInterval?: number;
   };
 
-type StorageKeys<T, Acc extends PrimitiveOrNested[] = []> =
+type KeysOfStorage<T, Acc extends PrimitiveOrNested[] = []> =
   T extends StateStorageMarker<infer Key extends PrimitiveOrNested, infer Item>
-    ? StorageKeys<Item, [...Acc, Key]>
+    ? KeysOfStorage<Item, [...Acc, Key]>
     : Acc;
 
 export type StorageKeysWithoutPagination<
@@ -321,7 +336,7 @@ type ProcessStorageItem<
   T extends StorageItem,
   Keys extends PrimitiveOrNested[],
 > =
-  T extends State<infer V>
+  T extends State<ResolvedValue<infer V>>
     ? T extends ControllableLoadableNestedState<any, infer E>
       ? ControllableLoadableNestedState<V, E, Keys>
       : T extends ControllableLoadableState<any, infer E>
@@ -411,7 +426,7 @@ export type PaginatedStorageUtils = StorageUtilsBase & {
 
 type GetNestedPathState<T, P extends PathKey[]> =
   RetrieveState<T> extends infer S
-    ? S extends State<infer V>
+    ? S extends State<ResolvedValue<infer V>>
       ? ResolvePath<V, P> extends infer V
         ? ObjectPath<V> extends infer P
           ? S extends ControllableLoadableState<any, infer E>
@@ -438,13 +453,13 @@ export type StateStorage<
   K extends PrimitiveOrNested,
   T,
   ParentKeys extends PrimitiveOrNested[] = [],
-> = Nesting<ParentKeys> &
+> = StorageKeys<ParentKeys> &
   /** @internal */
   Internal<StorageUtils> &
   /** @internal */
   InternalPathBase &
   StateStorageMarker<K, T> & {
-    get<Keys extends [K, ...Partial<StorageKeys<T>>]>(
+    get<Keys extends [K, ...Partial<KeysOfStorage<T>>]>(
       ...keys: Keys
     ): StateWithNestedStorageKeys<
       RetrieveChildState<
@@ -460,13 +475,13 @@ export type StateStorage<
     ? StatePath<{
         <
           P extends ObjectPath<
-            RetrieveState<T> extends State<infer V> ? V : never
+            RetrieveState<T> extends State<infer V> ? ResolvedValue<V> : never
           >,
         >(
           ...path: P
         ): StateStorage<
           K,
-          NestedStateStorage<StorageKeys<T>, GetNestedPathState<T, P>>,
+          NestedStateStorage<KeysOfStorage<T>, GetNestedPathState<T, P>>,
           ParentKeys
         >;
       }>
@@ -475,7 +490,7 @@ export type StateStorage<
 export type PaginatedStateStorage<
   T extends LoadableState<any>,
   ParentKeys extends PrimitiveOrNested[] = [],
-> = Nesting<ParentKeys> &
+> = StorageKeys<ParentKeys> &
   /** @internal */
   Internal<PaginatedStorageUtils> &
   /** @internal */
@@ -504,7 +519,11 @@ export type PaginatedStateStorage<
       : never;
   } & (T extends StatePath<(...path: any) => any>
     ? StatePath<{
-        <P extends ObjectPath<T extends State<infer V> ? V : never>>(
+        <
+          P extends ObjectPath<
+            T extends State<infer V> ? ResolvedValue<V> : never
+          >,
+        >(
           ...path: P
         ): PaginatedStateStorage<GetNestedPathState<T, P>, ParentKeys>;
       }>
@@ -512,15 +531,13 @@ export type PaginatedStateStorage<
 
 export type WithInitModule<T, Args extends any[]> = [
   ...Args,
-  initModule?: InitModule<T>,
+  stateInitializer?: StateInitializer<T>,
 ];
 
-export type InitModule<T = unknown> = (
+export type StateInitializer<T = unknown> = (
   keys: PrimitiveOrNested[] | undefined
-) => StateModule<T>;
-
-export type StateModule<T = unknown> = {
+) => {
   set(value: T): void;
   get(): T | undefined;
-  register?(setState: (value: T) => void): () => void;
+  observe?(setState: (value: T) => void): () => void;
 };

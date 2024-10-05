@@ -1,5 +1,5 @@
 import toKey from 'keyweaver';
-import { InitModule } from '../types';
+import { StateInitializer } from '../types';
 
 type SafeStorage = {
   getItem(key: string): string | undefined | null;
@@ -65,13 +65,13 @@ export const safeLocalStorage =
 export const safeSessionStorage =
   isStorageAvailable('session') && (sessionStorage satisfies SafeStorage);
 
-const createPersistModule = <T>({
+const getPersistInitializer = <T>({
   name,
   storage,
   converter,
   isValid,
   sharable,
-}: Options<T>): InitModule<T> | undefined =>
+}: Options<T>): StateInitializer<T> | undefined =>
   storage &&
   ((keys) => {
     const key = keys ? toKey([name, keys]) : name;
@@ -99,7 +99,7 @@ const createPersistModule = <T>({
           storage.removeItem(key);
         }
       },
-      register:
+      observe:
         sharable && storage.listen
           ? (setState) =>
               storage.listen!(key, (value) => {
@@ -119,4 +119,4 @@ const createPersistModule = <T>({
     };
   });
 
-export default createPersistModule;
+export default getPersistInitializer;

@@ -1,19 +1,16 @@
-import noop from 'lodash.noop';
 import type {
   AnyAsyncState,
   AsyncState,
   AsyncStateUtils,
   ControllableLoadableState,
-  ControllableStateOptions,
+  ControllableLoadableStateOptions,
   ErrorStateUtils,
-  InitModule,
-  StateDataMap,
+  StateInitializer,
   PathKey,
 } from '../types';
-import { EMPTY_ARR, RootKey } from './constants';
+import { EMPTY_ARR } from './constants';
 import executeSetters from './executeSetters';
 import createState from '../createState';
-import deleteValue from './deleteValue';
 import alwaysTrue from './alwaysTrue';
 
 type _State = AsyncState<any> &
@@ -21,94 +18,79 @@ type _State = AsyncState<any> &
 
 type _InternalUtils = _State['_internal'];
 
-const handlePromise = (
-  data: StateDataMap,
-  key: RootKey.PROMISE_REJECT | RootKey.PROMISE_RESOLVE,
-  value: any
-) => {
-  if (data.has(key as RootKey.PROMISE_REJECT)) {
-    data.get(key as RootKey.PROMISE_REJECT)!(value);
-
-    data.delete(RootKey.PROMISE);
-
-    data.delete(RootKey.PROMISE_RESOLVE);
-
-    data.delete(RootKey.PROMISE_REJECT);
-  }
-};
-
-const handleUnload = (data: StateDataMap) => {
-  if (data.has(RootKey.UNLOAD)) {
-    data.get(RootKey.UNLOAD)!();
-
-    data.delete(RootKey.UNLOAD);
+const handleUnload = (utils: _InternalUtils) => {
+  if (utils._unload) {
+    utils._unload = utils._unload();
   }
 };
 
 function _set(
   this: _InternalUtils,
   value: any,
-  isSet: boolean,
   path: PathKey[],
   isError: boolean
 ) {
-  const data = this._data;
-
-  const rootValue = data.get(RootKey.VALUE);
+  const prevValue = this._value;
 
   this._isFetchInProgress = false;
 
-  const isLoaded = isSet ? this._isLoaded(value, rootValue) : isError;
+  this._commonSet(value, path);
 
-  this._commonSet(value, isSet, path, isError);
+  const newValue = this._value;
 
-  if (isSet) {
-    handlePromise(data, RootKey.PROMISE_RESOLVE, rootValue);
+  const isSet = newValue !== undefined;
 
-    deleteValue(this._errorUtils, false);
+  const isLoaded = isSet ? this._isLoaded(newValue, prevValue) : isError;
+
+  if (isSet && this._promise) {
+    this._promise._resolve(newValue);
+
+    this._promise = null;
   }
 
-  this._isLoadedUtils._set(isLoaded, true, path, false);
+  if (!isError) {
+    this._errorUtils._set(undefined, EMPTY_ARR);
+  }
 
-  this._handleSlowLoading();
+  this._isLoadedUtils._set(isLoaded, path, false);
+
+  if (this._slowLoading) {
+    this._slowLoading._handle(this._isLoadedUtils);
+  }
 
   if (isLoaded) {
     this._isLoadable = false;
 
-    handleUnload(data);
+    handleUnload(this);
   }
 }
 
-function _handleSlowLoading(this: _InternalUtils) {
-  const data = this._data;
-
-  clearTimeout(data.get(RootKey.SLOW_LOADING_TIMEOUT_ID));
-
-  if (this._isLoadedUtils._data.get(RootKey.VALUE)) {
-    data.delete(RootKey.SLOW_LOADING_TIMEOUT_ID);
-  } else {
-    data.set(
-      RootKey.SLOW_LOADING_TIMEOUT_ID,
-      setTimeout(() => {
-        executeSetters(this._slowLoadingCallbackSet!);
-      }, this._slowLoadingTimeout)
-    );
-  }
-}
-
-function _setError(
-  this: _InternalUtils['_errorUtils'],
-  value: any,
-  isSet: boolean,
-  path: PathKey[],
-  isError: boolean
+function _handleSlowLoading(
+  this: NonNullable<_InternalUtils['_slowLoading']>,
+  isLoadedUtils: _InternalUtils['_isLoadedUtils']
 ) {
-  this._commonSet(value, isSet, path, isError);
+  clearTimeout(this._timeoutId);
 
-  if (isSet) {
-    deleteValue(this._parentUtils, true);
+  this._timeoutId = isLoadedUtils._value
+    ? undefined
+    : setTimeout(() => {
+        executeSetters(this._callbackSet);
+      }, this._timeout);
+}
 
-    handlePromise(this._data, RootKey.PROMISE_REJECT, value);
+function _setError(this: _InternalUtils['_errorUtils'], value: any) {
+  this._commonSet(value, EMPTY_ARR);
+
+  if (value !== undefined) {
+    const parentUtils = this._parentUtils;
+
+    parentUtils._set(undefined, EMPTY_ARR, true);
+
+    if (parentUtils._promise) {
+      parentUtils._promise._reject(value);
+
+      parentUtils._promise = null;
+    }
   }
 }
 
@@ -118,7 +100,7 @@ function load(this: _State, reload?: boolean) {
   const utils = this._internal;
 
   if (reload && !utils._isFetchInProgress) {
-    handleUnload(utils._data);
+    handleUnload(utils);
 
     utils._isLoadable = true;
   }
@@ -126,9 +108,11 @@ function load(this: _State, reload?: boolean) {
   if (utils._isLoadable) {
     utils._isLoadable = false;
 
-    utils._isLoadedUtils._set(false, true, EMPTY_ARR, false);
+    utils._isLoadedUtils._set(false, EMPTY_ARR);
 
-    utils._handleSlowLoading();
+    if (utils._slowLoading) {
+      utils._slowLoading._handle(utils._isLoadedUtils);
+    }
 
     const unload = utils._load!.apply(
       { ...this, _path: EMPTY_ARR },
@@ -136,7 +120,7 @@ function load(this: _State, reload?: boolean) {
     );
 
     if (unload) {
-      utils._data.set(RootKey.UNLOAD, unload);
+      utils._unload = unload;
     }
   }
 
@@ -147,9 +131,9 @@ function load(this: _State, reload?: boolean) {
       isNotCanceled = false;
 
       if (!--utils._counter) {
-        handleUnload(utils._data);
+        handleUnload(utils);
 
-        if (!utils._isLoadedUtils._data.get(RootKey.VALUE)) {
+        if (!utils._isLoadedUtils._value) {
           utils._isLoadable = true;
         }
       }
@@ -168,8 +152,8 @@ const getAsyncStateCreator =
       resume,
       loadingTimeout,
       reset,
-    }: Partial<ControllableStateOptions<any>>,
-    initModule?: InitModule,
+    }: Partial<ControllableLoadableStateOptions<any>>,
+    stateInitializer?: StateInitializer,
     keys?: any[],
     parentUtils?: Record<string, any>
   ): AnyAsyncState<any> => {
@@ -188,18 +172,18 @@ const getAsyncStateCreator =
     const isLoadedState = createState(false);
 
     const state = {
-      ...createCommonState<AsyncStateUtils>(value, initModule, keys, {
+      ...createCommonState<AsyncStateUtils>(value, stateInitializer, keys, {
         _commonSet: undefined!,
         _isLoaded: isLoaded || alwaysTrue,
-        _handleSlowLoading: noop,
+        _slowLoading: null,
         _counter: 0,
         _isFetchInProgress: false,
         _isLoadable: true,
         _load,
-        _slowLoadingCallbackSet: undefined,
-        _slowLoadingTimeout: undefined,
         _isLoadedUtils: isLoadedState._internal,
         _errorUtils: errorUtils,
+        _promise: null,
+        _unload: undefined,
         ...parentUtils,
       }),
       error: errorState,
@@ -218,17 +202,18 @@ const getAsyncStateCreator =
 
     errorUtils._parentUtils = utils;
 
-    if (utils._data.has(RootKey.VALUE)) {
+    if (utils._value !== undefined) {
       utils._isLoadable = false;
     }
 
     if (_load) {
       if (loadingTimeout) {
-        utils._slowLoadingCallbackSet = new Set();
-
-        utils._slowLoadingTimeout = loadingTimeout;
-
-        utils._handleSlowLoading = _handleSlowLoading;
+        utils._slowLoading = {
+          _timeout: loadingTimeout,
+          _timeoutId: undefined,
+          _callbackSet: new Set(),
+          _handle: _handleSlowLoading,
+        };
       }
 
       return pause && resume && reset

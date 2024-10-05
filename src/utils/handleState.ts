@@ -1,6 +1,6 @@
 import noop from 'lodash.noop';
-import type { InitModule, StateDataMap, StateInternalUtils } from '../types';
-import { EMPTY_ARR, RootKey } from './constants';
+import type { StateInitializer, StateInternalUtils } from '../types';
+import { EMPTY_ARR } from './constants';
 
 const finalizationRegistry: Pick<
   FinalizationRegistry<() => void>,
@@ -13,18 +13,16 @@ const finalizationRegistry: Pick<
 
 const handleState = <T extends StateInternalUtils>(
   value: unknown | (() => unknown) | undefined,
-  initModule: InitModule | undefined,
+  stateInitializer: StateInitializer | undefined,
   keys: any[] | undefined,
   utils: T
 ): Readonly<{}> | undefined => {
-  const data: StateDataMap = new Map();
-
-  utils._data = data;
-
-  if (initModule) {
-    const { get, set, register } = initModule(keys);
+  if (stateInitializer) {
+    const { get, set, observe } = stateInitializer(keys);
 
     const _value = get();
+
+    const originalValue = value;
 
     if (_value !== undefined) {
       value = _value;
@@ -36,7 +34,7 @@ const handleState = <T extends StateInternalUtils>(
       set(value);
     }
 
-    if (register) {
+    if (observe) {
       const anchor = {};
 
       let callable = true;
@@ -49,18 +47,25 @@ const handleState = <T extends StateInternalUtils>(
 
       finalizationRegistry.register(
         anchor,
-        register((value) => {
+        observe((newValue) => {
           callable = false;
 
-          utils._set(value, true, EMPTY_ARR, false);
+          if (newValue === undefined) {
+            newValue =
+              typeof originalValue === 'function'
+                ? keys
+                  ? originalValue(...keys)
+                  : originalValue()
+                : originalValue;
+          }
+
+          utils._set(newValue, EMPTY_ARR, false);
 
           callable = true;
         })
       );
 
-      if (value !== undefined) {
-        data.set(RootKey.VALUE, value);
-      }
+      utils._value = value;
 
       return anchor;
     }
@@ -70,9 +75,7 @@ const handleState = <T extends StateInternalUtils>(
     value = keys ? value(...keys) : value();
   }
 
-  if (value !== undefined) {
-    data.set(RootKey.VALUE, value);
-  }
+  utils._value = value;
 };
 
 export default handleState;

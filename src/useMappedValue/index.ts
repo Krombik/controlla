@@ -1,13 +1,14 @@
-import { useEffect, useRef } from 'react';
-import { AsyncState, State } from '../types';
+import { useLayoutEffect, useRef } from 'react';
+import { AnyAsyncState, AsyncState, State } from '../types';
 import getValue from '../getValue';
 import onValueChange from '../onValueChange';
 import useForceRerender from 'react-helpful-utils/useForceRerender';
+import handleListeners from '../utils/handleListeners';
 
 const simpleIsEqual = (next: any, prev: any) => next === prev;
 
 const useMappedValue = ((
-  state: AsyncState<any>,
+  state: AnyAsyncState<any>,
   mapper: (value: any, isLoaded?: boolean, error?: any) => any,
   isEqual: (nextValue: any, prevValue: any) => boolean = simpleIsEqual
 ) => {
@@ -25,36 +26,32 @@ const useMappedValue = ((
 
   prevMappedValueRef.current = mappedValue;
 
-  useEffect(() => {
-    const unlistenValue = onValueChange(state, (value) => {
-      if (
-        !isEqual(
-          mapper(value, isLoaded && getValue(isLoaded)),
-          prevMappedValueRef.current
-        )
-      ) {
-        forceRerender();
-      }
-    });
-
-    if (error && mapper.length > 2) {
-      const unlistenError = onValueChange(error, (err) => {
-        if (
-          !isEqual(mapper(undefined, true, err), prevMappedValueRef.current)
-        ) {
-          forceRerender();
-        }
-      });
-
-      return () => {
-        unlistenValue();
-
-        unlistenError();
-      };
-    }
-
-    return unlistenValue;
-  }, [utils, state._path && state._path.join('.')]);
+  useLayoutEffect(
+    () =>
+      handleListeners([
+        onValueChange(state, (value) => {
+          if (
+            !isEqual(
+              mapper(value, isLoaded && getValue(isLoaded)),
+              prevMappedValueRef.current
+            )
+          ) {
+            forceRerender();
+          }
+        }),
+        'load' in state && !state._withoutLoading && state.load(),
+        error &&
+          mapper.length > 2 &&
+          onValueChange(error, (err) => {
+            if (
+              !isEqual(mapper(undefined, true, err), prevMappedValueRef.current)
+            ) {
+              forceRerender();
+            }
+          }),
+      ]),
+    [utils, state._path && state._path.join('.')]
+  );
 
   return mappedValue;
 }) as {

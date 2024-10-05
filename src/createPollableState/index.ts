@@ -1,7 +1,7 @@
 import createAsyncState from '../createAsyncState';
 import type {
   ControllableLoadableState,
-  InitModule,
+  StateInitializer,
   PollableStateOptions,
 } from '../types';
 import getPollableStateCreator from '../utils/getPollableStateCreator';
@@ -9,7 +9,7 @@ import getPollableStateCreator from '../utils/getPollableStateCreator';
 const createPollableState = getPollableStateCreator(createAsyncState) as {
   <T, E = any>(
     options: PollableStateOptions<T, E>,
-    initModule?: InitModule<T>
+    stateInitializer?: StateInitializer<T>
   ): ControllableLoadableState<T, E>;
 };
 

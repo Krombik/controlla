@@ -9,7 +9,7 @@ export const handleLoad = (
   errorBoundaryCtx: ContextType<typeof ErrorBoundaryContext>,
   suspenseCtx: ContextType<typeof SuspenseContext>
 ) => {
-  if ('load' in state) {
+  if ('load' in state && !state._withoutLoading) {
     const utils = state._internal;
 
     if (!errorBoundaryCtx.has(utils)) {

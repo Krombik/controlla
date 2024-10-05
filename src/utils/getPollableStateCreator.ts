@@ -1,23 +1,24 @@
 import noop from 'lodash.noop';
-import type { InitModule, StateDataMap, PollableStateOptions } from '../types';
+import type {
+  StateInitializer,
+  PollableStateOptions,
+  StateInternalUtils,
+} from '../types';
 import becomingOnline from './becomingOnline';
 import createFetcher from './createFetcher';
 import type getAsyncStateCreator from './getAsyncStateCreator';
-import { RootKey } from './constants';
 
-export const handleGetInterval = (
+const handleGetInterval = (
   interval: number | ((value: any) => number),
-  data: StateDataMap
+  utils: StateInternalUtils
 ) =>
-  typeof interval == 'number'
-    ? () => interval
-    : () => interval(data.get(RootKey.VALUE));
+  typeof interval == 'number' ? () => interval : () => interval(utils._value);
 
 const getPollableStateCreator =
   (createAsyncState: ReturnType<typeof getAsyncStateCreator>) =>
   (
     options: PollableStateOptions<any, any>,
-    initModule?: InitModule,
+    stateInitializer?: StateInitializer,
     keys?: any[],
     utils?: Record<string, any>
   ) => {
@@ -74,16 +75,16 @@ const getPollableStateCreator =
           reset();
         },
       },
-      initModule,
+      stateInitializer,
       keys,
       utils
     );
 
-    const data = state._internal._data;
+    const _utils = state._internal;
 
     const { hiddenInterval } = options;
 
-    const getVisibleInterval = handleGetInterval(options.interval, data);
+    const getVisibleInterval = handleGetInterval(options.interval, _utils);
 
     if (hiddenInterval == null) {
       sleep = () =>
@@ -99,7 +100,7 @@ const getPollableStateCreator =
           const id = setTimeout(reset, getVisibleInterval());
         });
     } else {
-      const getHiddenInterval = handleGetInterval(hiddenInterval, data);
+      const getHiddenInterval = handleGetInterval(hiddenInterval, _utils);
 
       const getInterval = () =>
         (document.hidden ? getHiddenInterval : getVisibleInterval)();

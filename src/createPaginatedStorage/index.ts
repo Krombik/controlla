@@ -4,7 +4,7 @@ import {
   AnyLoadableState,
   ControllableLoadableNestedState,
   ControllableLoadableState,
-  InitModule,
+  StateInitializer,
   Internal,
   StateInternalUtils,
   PathKey,
@@ -16,7 +16,7 @@ import {
   RequestableStateOptions,
   WithInitModule,
 } from '../types';
-import { EMPTY_ARR, RootKey } from '../utils/constants';
+import { EMPTY_ARR } from '../utils/constants';
 import onValueChange from '../onValueChange';
 import useConst from 'react-helpful-utils/useConst';
 import alwaysFalse from '../utils/alwaysFalse';
@@ -29,12 +29,14 @@ import createPollableState from '../createPollableState';
 import createPollableNestedState from '../createPollableNestedState';
 import { useForceRerender } from 'react-helpful-utils';
 
-type PaginatedState = LoadableState<any> &
-  Internal<{
-    _parent: PaginatedStateStorage<any>['_internal'];
-    _originalSet: StateInternalUtils['_set'];
-    _page: number;
-  }>;
+type AdditionalUtils = {
+  _parent: PaginatedStateStorage<any>['_internal'];
+  _originalSet: StateInternalUtils['_set'];
+  _page: number;
+  _stableValue: any;
+};
+
+type PaginatedState = AnyLoadableState<any> & Internal<AdditionalUtils>;
 
 const handleListener = (
   state: AnyLoadableState<any>,
@@ -58,11 +60,10 @@ const handleListener = (
 function _set(
   this: PaginatedState['_internal'],
   nextValue: any,
-  isSet: boolean,
   path: PathKey[],
   isError: boolean
 ) {
-  this._originalSet(nextValue, isSet, path, isError);
+  this._originalSet(nextValue, path, isError);
 
   this._parent._resolvePage(this._page);
 }
@@ -90,10 +91,9 @@ function _get(
   const state: PaginatedState = this._getItem(this._arg1, this._arg2, keys, {
     _parent: this,
     _page: page,
-  } as {
-    _parent: PaginatedStateStorage<any>['_internal'];
-    _page: number;
-  });
+    _originalSet: undefined!,
+    _stableValue: undefined,
+  } as AdditionalUtils);
 
   state._internal._originalSet = state._internal._set;
 
@@ -121,7 +121,7 @@ function _delete(this: PaginatedStateStorage<any>, page: number) {
 const _beforeLoad = (args: any[], utils: PaginatedState['_internal']) => {
   utils._parent._pages.add(args[args.length - 1] as number);
 
-  utils._data.set(RootKey.STABLE_VALUE, utils._data.get(RootKey.VALUE));
+  utils._stableValue = utils._value;
 };
 
 const _afterLoad = async (
@@ -163,7 +163,7 @@ function usePages(
     return (from: number, to: number) => {
       let isUnstable = false;
 
-      const states: AnyLoadableState<any>[] = [];
+      const states: PaginatedState[] = [];
 
       const errors: any[] = [];
 
@@ -253,7 +253,7 @@ function usePages(
       );
 
       for (let i = from; i < to; i++) {
-        const state: AnyLoadableState<any> = this.get(i);
+        const state: PaginatedState = this.get(i);
 
         if (state._internal._isFetchInProgress) {
           isUnstable = true;
@@ -266,9 +266,7 @@ function usePages(
 
       return [
         states.map(
-          isUnstable
-            ? (item) => item._internal._data.get(RootKey.STABLE_VALUE)
-            : getValue
+          isUnstable ? (item) => item._internal._stableValue : getValue
         ),
         errors,
       ] as const;
@@ -346,7 +344,7 @@ const createPaginatedStorage: {
 } = (
   createState: any,
   options: RequestableStateOptions<any, any, [number]> & Options<any>,
-  initModule?: InitModule
+  stateInitializer?: StateInitializer
 ) => {
   const { shouldRevalidate } = options;
 
@@ -361,7 +359,7 @@ const createPaginatedStorage: {
         _beforeLoad,
         _afterLoad,
       },
-      _arg2: initModule,
+      _arg2: stateInitializer,
       _pages: new Set(),
       _promise: new Promise((res) => {
         resolve = res;

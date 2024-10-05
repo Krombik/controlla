@@ -5,23 +5,23 @@ import type {
   LoadableNestedState,
   LoadableStateOptions,
   ControllableLoadableNestedState,
-  ControllableStateOptions,
-  InitModule,
+  ControllableLoadableStateOptions,
+  StateInitializer,
 } from '../types';
 import getAsyncStateCreator from '../utils/getAsyncStateCreator';
 
 const createAsyncNestedState = getAsyncStateCreator(createNestedState) as {
   <T, E = any>(
-    options: ControllableStateOptions<T, E>,
-    initModule?: InitModule<T>
+    options: ControllableLoadableStateOptions<T, E>,
+    stateInitializer?: StateInitializer<T>
   ): ControllableLoadableNestedState<T, E>;
   <T, E = any>(
     options: LoadableStateOptions<T, E>,
-    initModule?: InitModule<T>
+    stateInitializer?: StateInitializer<T>
   ): LoadableNestedState<T, E>;
   <T, E = any>(
     options?: AsyncStateOptions<T>,
-    initModule?: InitModule<T>
+    stateInitializer?: StateInitializer<T>
   ): AsyncNestedState<T, E>;
 };
 

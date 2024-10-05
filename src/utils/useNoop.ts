@@ -1,8 +1,9 @@
 import noop from 'lodash.noop';
-import { useLayoutEffect, useState } from 'react';
+import { useLayoutEffect } from 'react';
+import useForceRerender from 'react-helpful-utils/useForceRerender';
 
 const useNoop = () => {
-  useState();
+  useForceRerender();
 
   useLayoutEffect(noop, [0, 0]);
 };
