@@ -418,4 +418,6 @@ const createPaginatedStorage: {
   >;
 };
 
+export type { PaginatedStateStorage };
+
 export default createPaginatedStorage;

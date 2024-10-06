@@ -688,4 +688,6 @@ const createStateStorage: CreateStateStorage = (
   throw new Error('depth should be > 0');
 };
 
+export type { StateStorage, NestedStateStorage };
+
 export default createStateStorage;

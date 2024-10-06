@@ -3,18 +3,19 @@ import { AsyncState, ExtractErrors, ExtractValues, Falsy } from '../types';
 import Suspense, { SuspenseProps } from '../Suspense';
 import useAll from '../useAll';
 
-export type SuspenseAllStatesProps<S extends (AsyncState<any> | Falsy)[]> = {
-  states: S;
-  render(...values: ExtractValues<S>): ReturnType<FC>;
-  renderIfError?:
-    | ((
-        values: ExtractValues<S, true>,
-        errors: ExtractErrors<S>
-      ) => ReturnType<FC>)
-    | ReturnType<FC>;
-} & Pick<SuspenseProps, 'fallback' | 'isSkeleton'>;
+export type SuspenseAllControllerProps<S extends (AsyncState<any> | Falsy)[]> =
+  {
+    states: S;
+    render(...values: ExtractValues<S>): ReturnType<FC>;
+    renderIfError?:
+      | ((
+          values: ExtractValues<S, true>,
+          errors: ExtractErrors<S>
+        ) => ReturnType<FC>)
+      | ReturnType<FC>;
+  } & Pick<SuspenseProps, 'fallback' | 'isSkeleton'>;
 
-const AllStatesValue: FC<SuspenseAllStatesProps<any[]>> = ({
+const AllStatesValue: FC<SuspenseAllControllerProps<any[]>> = ({
   render,
   states,
   renderIfError,
@@ -32,12 +33,12 @@ const AllStatesValue: FC<SuspenseAllStatesProps<any[]>> = ({
       : renderIfError;
 };
 
-const SuspenseAllStates = <const S extends Array<AsyncState<any> | Falsy>>(
-  props: SuspenseAllStatesProps<S>
+const SuspenseAllController = <const S extends Array<AsyncState<any> | Falsy>>(
+  props: SuspenseAllControllerProps<S>
 ) => (
   <Suspense fallback={props.fallback} isSkeleton={props.isSkeleton}>
     <AllStatesValue {...(props as any)} />
   </Suspense>
 );
 
-export default SuspenseAllStates;
+export default SuspenseAllController;

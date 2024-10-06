@@ -235,4 +235,6 @@ const createNestedState: {
   } as Partial<NestedState<any>> as NestedState<any>;
 };
 
+export type { NestedState };
+
 export default createNestedState;

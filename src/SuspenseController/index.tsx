@@ -1,15 +1,15 @@
-import { FC, SuspenseProps } from 'react';
+import { FC } from 'react';
 import { AsyncState, ResolvedValue } from '../types';
 import use from '../use';
-import Suspense from '../Suspense';
+import Suspense, { SuspenseProps } from '../Suspense';
 
-export type SuspenseStateProps<V, E = any> = {
+export type SuspenseControllerProps<V, E = any> = {
   state: AsyncState<V, E>;
   render(value: ResolvedValue<V>): ReturnType<FC>;
   renderIfError?: ((error: E) => ReturnType<FC>) | ReturnType<FC>;
-} & Pick<SuspenseProps, 'fallback'>;
+} & Pick<SuspenseProps, 'fallback' | 'isSkeleton'>;
 
-const StateValue: FC<SuspenseStateProps<unknown, unknown>> = ({
+const StateValue: FC<SuspenseControllerProps<unknown, unknown>> = ({
   render,
   state,
   renderIfError,
@@ -27,10 +27,12 @@ const StateValue: FC<SuspenseStateProps<unknown, unknown>> = ({
       : renderIfError;
 };
 
-const SuspenseState = <V, E = any>(props: SuspenseStateProps<V, E>) => (
-  <Suspense fallback={props.fallback}>
+const SuspenseController = <V, E = any>(
+  props: SuspenseControllerProps<V, E>
+) => (
+  <Suspense fallback={props.fallback} isSkeleton={props.isSkeleton}>
     <StateValue {...props} />
   </Suspense>
 );
 
-export default SuspenseState;
+export default SuspenseController;

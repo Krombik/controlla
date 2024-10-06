@@ -2,7 +2,7 @@ import { FC } from 'react';
 import { AsyncState, HandlePending, State } from '../types';
 import useValue from '../useValue';
 
-export type StateValueProps<S extends State<any>> = {
+export type ControllerProps<S extends State<any>> = {
   state: S;
   render: S extends State<infer V>
     ? (value: HandlePending<V>) => ReturnType<FC>
@@ -13,11 +13,11 @@ export type StateValueProps<S extends State<any>> = {
     }
   : {});
 
-const StateValue: {
-  <S extends State<any>>(props: StateValueProps<S>): ReturnType<FC>;
+const Controller: {
+  <S extends State<any>>(props: ControllerProps<S>): ReturnType<FC>;
   /** @internal */
-  (props: StateValueProps<AsyncState<any>>): ReturnType<FC>;
-} = ({ render, state, renderIfError }: StateValueProps<AsyncState<any>>) => {
+  (props: ControllerProps<AsyncState<any>>): ReturnType<FC>;
+} = ({ render, state, renderIfError }: ControllerProps<AsyncState<any>>) => {
   const err =
     renderIfError !== undefined && state.error
       ? useValue(state.error)
@@ -32,4 +32,4 @@ const StateValue: {
       : renderIfError || null;
 };
 
-export default StateValue;
+export default Controller;

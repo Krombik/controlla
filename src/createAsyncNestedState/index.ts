@@ -25,4 +25,10 @@ const createAsyncNestedState = getAsyncStateCreator(createNestedState) as {
   ): AsyncNestedState<T, E>;
 };
 
+export type {
+  AsyncNestedState,
+  LoadableNestedState,
+  ControllableLoadableNestedState,
+};
+
 export default createAsyncNestedState;

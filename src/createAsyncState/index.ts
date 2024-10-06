@@ -25,4 +25,6 @@ const createAsyncState = getAsyncStateCreator(createState) as {
   ): AsyncState<T, E>;
 };
 
+export type { AsyncState, LoadableState, ControllableLoadableState };
+
 export default createAsyncState;

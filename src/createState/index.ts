@@ -71,4 +71,6 @@ const createState: {
   } as Partial<State<any>> as State<any>;
 };
 
+export type { State };
+
 export default createState;

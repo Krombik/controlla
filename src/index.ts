@@ -26,13 +26,13 @@ export { default as withoutLoading } from './withoutLoading';
 
 export { default as withUseHandler } from './withUseHandler';
 
-export { default as Pagination } from './Pagination';
+export { default as PaginationController } from './PaginationController';
 export { default as SkeletonMode } from './SkeletonMode';
-export { default as StateMappedValue } from './StateMappedValue';
-export { default as StateValue } from './StateValue';
+export { default as MappedController } from './MappedController';
+export { default as Controller } from './Controller';
 export { default as Suspense } from './Suspense';
-export { default as SuspenseAllStates } from './SuspenseAllStates';
-export { default as SuspenseState } from './SuspenseState';
+export { default as SuspenseAllController } from './SuspenseAllController';
+export { default as SuspenseController } from './SuspenseController';
 
 export { default as SKELETON_STATE } from './SKELETON_STATE';
 

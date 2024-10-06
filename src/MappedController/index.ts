@@ -17,7 +17,7 @@ type Props<V> = {
   isEqual?: (nextMappedValue: V, prevMappedValue: V) => boolean;
 };
 
-const StateMappedValue: {
+const MappedController: {
   <T, V, E>(props: AsyncStateProps<T, V, E> & Props<V>): ReturnType<FC>;
   <T, V>(props: StateProps<T, V> & Props<V>): ReturnType<FC>;
 } = (
@@ -27,4 +27,4 @@ const StateMappedValue: {
     useMappedValue(props.state as AsyncState<any>, props.mapper, props.isEqual)
   );
 
-export default StateMappedValue;
+export default MappedController;
