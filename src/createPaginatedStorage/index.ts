@@ -28,12 +28,13 @@ import createRequestableNestedState from '../createRequestableNestedState';
 import createPollableState from '../createPollableState';
 import createPollableNestedState from '../createPollableNestedState';
 import { useForceRerender } from 'react-helpful-utils';
+import getPromise from '../getPromise';
 
 type AdditionalUtils = {
-  _parent: PaginatedStateStorage<any>['_internal'];
+  readonly _parent: PaginatedStateStorage<any>['_internal'];
   _originalSet: StateInternalUtils['_set'];
-  _page: number;
-  _stableValue: any;
+  readonly _page: number;
+  readonly _stable: Pick<StateInternalUtils, '_get' | '_value'>;
 };
 
 type PaginatedState = AnyLoadableState<any> & Internal<AdditionalUtils>;
@@ -92,12 +93,16 @@ function _get(
     _parent: this,
     _page: page,
     _originalSet: undefined!,
-    _stableValue: undefined,
+    _stable: { _value: undefined, _get: undefined! },
   } as AdditionalUtils);
 
-  state._internal._originalSet = state._internal._set;
+  const utils = state._internal;
 
-  state._internal._set = _set;
+  utils._originalSet = utils._set;
+
+  utils._set = _set;
+
+  utils._stable._get = utils._get;
 
   storage.set(page, state);
 
@@ -121,7 +126,7 @@ function _delete(this: PaginatedStateStorage<any>, page: number) {
 const _beforeLoad = (args: any[], utils: PaginatedState['_internal']) => {
   utils._parent._pages.add(args[args.length - 1] as number);
 
-  utils._stableValue = utils._value;
+  utils._stable._value = utils._value;
 };
 
 const _afterLoad = async (
@@ -151,14 +156,15 @@ function usePages(
   }
 
   return useConst(() => {
-    const { _pages: pages, _shouldRevalidate: shouldRevalidate } =
-      this._internal;
+    const { _shouldRevalidate: shouldRevalidate } = this._internal;
 
     const cleanupMap = new Map<number, () => void>();
 
     let prevFrom = from;
 
     let prevTo = from;
+
+    let inProgress = true;
 
     return (from: number, to: number) => {
       let isUnstable = false;
@@ -169,17 +175,31 @@ function usePages(
 
       const forceRerender = useForceRerender();
 
+      inProgress = true;
+
       useEffect(() => {
         const fromDiff = prevFrom - from;
 
         const toDiff = to - prevTo;
 
         const callback = () => {
-          for (
-            let i = from;
-            (i < to || (forceRerender() as undefined)) && !pages.has(i);
-            i++
-          ) {}
+          if (inProgress) {
+            inProgress = false;
+
+            const l = states.length;
+
+            let inProgressCount = l;
+
+            const onDone = () => {
+              if (--inProgressCount) {
+                forceRerender();
+              }
+            };
+
+            for (let i = 0; i < l; i++) {
+              getPromise(states[i], true).then(onDone, onDone);
+            }
+          }
         };
 
         if (fromDiff) {
@@ -193,7 +213,13 @@ function usePages(
                 const state = states[i];
 
                 if (shouldRevalidate(state)) {
-                  state.load(true);
+                  const page = from + i;
+
+                  const prev = cleanupMap.get(page)!;
+
+                  cleanupMap.set(page, state.load(true));
+
+                  prev();
                 } else if ('reset' in state) {
                   state.reset();
                 }
@@ -217,7 +243,13 @@ function usePages(
                 const state = states[i];
 
                 if (shouldRevalidate(state)) {
-                  state.load(true);
+                  const page = from + i;
+
+                  const prev = cleanupMap.get(page)!;
+
+                  cleanupMap.set(page, state.load(true));
+
+                  prev();
                 } else if ('reset' in state) {
                   state.reset();
                 }
@@ -266,7 +298,9 @@ function usePages(
 
       return [
         states.map(
-          isUnstable ? (item) => item._internal._stableValue : getValue
+          isUnstable
+            ? (item) => item._internal._stable._get(item._path!)
+            : getValue
         ),
         errors,
       ] as const;

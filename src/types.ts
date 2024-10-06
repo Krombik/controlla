@@ -50,7 +50,7 @@ export type ValueChangeCallbacks = Set<(value: any) => void>;
 export type StateCallbackMap = {
   _root: ValueChangeCallbacks | null;
   _children: Map<PathKey, StateCallbackMap> | null;
-  _parent?: StateCallbackMap;
+  readonly _parent?: StateCallbackMap;
 };
 
 export type StateInternalUtils = {
@@ -110,8 +110,8 @@ export type AsyncStateUtils = {
   _counter: number;
   _isLoadable: boolean;
   _isFetchInProgress: boolean;
-  _errorUtils: ErrorStateUtils & StateInternalUtils;
-  _isLoadedUtils: StateInternalUtils;
+  readonly _errorUtils: ErrorStateUtils & StateInternalUtils;
+  readonly _isLoadedUtils: StateInternalUtils;
   _promise: {
     _promise: Promise<any>;
     _resolve(value: any): void;
@@ -417,7 +417,7 @@ export type StorageUtils = StorageUtilsBase & {
 };
 
 export type PaginatedStorageUtils = StorageUtilsBase & {
-  _pages: Set<number>;
+  readonly _pages: Set<number>;
   _resolvePage(page: number): void;
   _promise: Promise<void>;
   _resolve(): void;
