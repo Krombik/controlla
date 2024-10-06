@@ -55,6 +55,11 @@ const useMappedValue = ((
 
   return mappedValue;
 }) as {
+  /**
+   * Hook to {@link mapper map} and retrieve a value from a {@link state}.
+   * @param mapper - Function that maps the value.
+   * @param isEqual - Optional comparison function to determine equality of the mapped values.
+   */
   <T, V, E = any>(
     state: AsyncState<T, E>,
     mapper: (
@@ -64,6 +69,11 @@ const useMappedValue = ((
     ) => V,
     isEqual?: (nextMappedValue: V, prevMappedValue: V) => boolean
   ): V;
+  /**
+   * Hook to {@link mapper map} and retrieve a value from a {@link state}.
+   * @param mapper - Function that maps the value.
+   * @param isEqual - Optional comparison function to determine equality of the mapped values.
+   */
   <T, V>(
     state: State<T>,
     mapper: (value: T) => V,

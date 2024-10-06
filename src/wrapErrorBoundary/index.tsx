@@ -17,7 +17,9 @@ declare class ErrorBoundary extends Component {
   readonly [ORIGINAL_WILL_UNMOUNT]: Component['componentWillUnmount'];
 }
 
-const withUseHandler = (component: typeof Component): typeof ErrorBoundary => {
+const wrapErrorBoundary = (
+  component: typeof Component
+): typeof ErrorBoundary => {
   const { render, componentDidCatch, componentWillUnmount } =
     component.prototype;
 
@@ -70,4 +72,4 @@ const withUseHandler = (component: typeof Component): typeof ErrorBoundary => {
   };
 };
 
-export default withUseHandler;
+export default wrapErrorBoundary;

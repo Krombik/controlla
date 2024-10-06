@@ -200,6 +200,7 @@ function _get(this: _InternalUtils, path: PathKey[]) {
   return value;
 }
 
+/** Creates a nested state for managing complex state. */
 const createNestedState: {
   <T extends NestedArray | NestedObject>(): NestedState<T | undefined>;
   <T extends NestedArray | NestedObject>(

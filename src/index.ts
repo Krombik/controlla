@@ -24,7 +24,7 @@ export { default as useAll } from './useAll';
 export { default as awaitOnly } from './awaitOnly';
 export { default as withoutLoading } from './withoutLoading';
 
-export { default as withUseHandler } from './withUseHandler';
+export { default as wrapErrorBoundary } from './wrapErrorBoundary';
 
 export { default as PaginationController } from './PaginationController';
 export { default as SkeletonMode } from './SkeletonMode';

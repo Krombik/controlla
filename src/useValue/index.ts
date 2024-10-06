@@ -24,6 +24,7 @@ const useValue = ((state: AnyAsyncState | Falsy) => {
 
   useNoop();
 }) as {
+  /** Hook to retrieve the current value from the {@link state}. */
   <S extends State | Falsy>(
     state: S
   ): S extends State<infer T> ? HandlePending<T> : undefined;
