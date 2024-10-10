@@ -1,38 +1,64 @@
-import { FC } from 'react';
-import { AsyncState, ResolvedValue } from '../types';
+import { ComponentType, FC, PropsWithChildren } from 'react';
+import { AsyncState } from '../types';
 import use from '../use';
 import Suspense, { SuspenseProps } from '../Suspense';
 
-export type SuspenseControllerProps<V, E = any> = {
-  state: AsyncState<V, E>;
-  render(value: ResolvedValue<V>): ReturnType<FC>;
-  renderIfError?: ((error: E) => ReturnType<FC>) | ReturnType<FC>;
+type Props<S extends AsyncState<any>> = {
+  state: S;
+  render(value: S extends AsyncState<infer V> ? V : never): ReturnType<FC>;
+  renderIfError?:
+    | ((
+        error: S extends AsyncState<any, infer E> ? E : never
+      ) => ReturnType<FC>)
+    | ReturnType<FC>;
+  container?: ComponentType<PropsWithChildren> | keyof JSX.IntrinsicElements;
 } & Pick<SuspenseProps, 'fallback' | 'isSkeleton'>;
 
-const StateValue: FC<SuspenseControllerProps<unknown, unknown>> = ({
+const StateValue: FC<Props<AsyncState<any>>> = ({
   render,
   state,
   renderIfError,
+  container: Container,
 }) => {
+  let children;
+
   if (renderIfError === undefined) {
-    return render(use(state));
+    children = render(use(state));
+  } else {
+    const [value, err] = use(state, true);
+
+    children =
+      err === undefined
+        ? render(value)
+        : typeof renderIfError == 'function'
+          ? renderIfError(err)
+          : renderIfError;
   }
 
-  const [value, err] = use(state, true);
-
-  return err === undefined
-    ? render(value)
-    : typeof renderIfError == 'function'
-      ? renderIfError(err)
-      : renderIfError;
+  return Container && (children || children === 0) ? (
+    <Container>{children}</Container>
+  ) : (
+    children
+  );
 };
 
-const SuspenseController = <V, E = any>(
-  props: SuspenseControllerProps<V, E>
-) => (
-  <Suspense fallback={props.fallback} isSkeleton={props.isSkeleton}>
-    <StateValue {...props} />
-  </Suspense>
-);
+const SuspenseController = <S extends AsyncState<any>>(props: Props<S>) => {
+  const { container: Container, fallback } = props;
+
+  return (
+    <Suspense
+      fallback={
+        Container && (fallback || fallback === 0) ? (
+          <Container>{fallback as any}</Container>
+        ) : (
+          (fallback as any)
+        )
+      }
+      isSkeleton={props.isSkeleton}
+    >
+      <StateValue {...(props as any)} />
+    </Suspense>
+  );
+};
 
 export default SuspenseController;

@@ -73,14 +73,12 @@ export type Internal<T> = {
   readonly _internal: T;
 };
 
-declare class KeepTogether {
-  private readonly O_o?: never;
-}
+declare class StateBase {}
 
 export type State<
   Value = unknown,
   Keys extends PrimitiveOrNested[] = [],
-> = KeepTogether & {
+> = StateBase & {
   readonly [STATE_IDENTIFIER]: Value;
   /** @internal */
   readonly _anchor?: Readonly<{}>;
@@ -232,29 +230,24 @@ export type AnyLoadableState<
   | LoadableState<Value, Error, Keys>
   | ControllableLoadableState<Value, Error, Keys>;
 
-export type ExtractValues<T, Nullable extends boolean = false> = Readonly<
-  T extends [infer Head, ...infer Tail]
-    ? [
-        Head extends AsyncState<infer K>
-          ? K | (Nullable extends false ? never : undefined)
-          : undefined,
-        ...ExtractValues<Tail, Nullable>,
-      ]
-    : []
->;
+export type ExtractValues<
+  T extends Array<AsyncState<any> | Falsy>,
+  Nullable extends boolean = false,
+> = Readonly<{
+  [index in keyof T]: T[index] extends AsyncState<infer K>
+    ? K | (Nullable extends false ? never : undefined)
+    : undefined;
+}>;
 
-export type ExtractErrors<T> = Readonly<
-  T extends [infer Head, ...infer Tail]
-    ? [
-        Head extends AsyncState<any, infer K> ? K | undefined : undefined,
-        ...ExtractErrors<Tail>,
-      ]
-    : []
->;
+export type ExtractErrors<T extends Array<AsyncState<any> | Falsy>> = Readonly<{
+  [index in keyof T]: T[index] extends AsyncState<any, infer K>
+    ? K | undefined
+    : undefined;
+}>;
 
-export type ArrayOfUndefined<T> = Readonly<
-  T extends [any, ...infer Tail] ? [undefined, ...ExtractErrors<Tail>] : []
->;
+export type ArrayOfUndefined<T extends any[]> = Readonly<{
+  [index in keyof T]: undefined;
+}>;
 
 export type AsyncStateOptions<T, Keys extends PrimitiveOrNested[] = []> = {
   value?: ResolvedValue<T> | ((...keys: Keys) => ResolvedValue<T>);

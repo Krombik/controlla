@@ -18,6 +18,7 @@ export { default as onSlowLoading } from './onSlowLoading';
 
 export { default as useValue } from './useValue';
 export { default as useMappedValue } from './useMappedValue';
+export { default as useMergedValue } from './useMergedValue';
 export { default as use } from './use';
 export { default as useAll } from './useAll';
 
@@ -29,10 +30,13 @@ export { default as wrapErrorBoundary } from './wrapErrorBoundary';
 export { default as PaginationController } from './PaginationController';
 export { default as SkeletonMode } from './SkeletonMode';
 export { default as MappedController } from './MappedController';
+export { default as MergedController } from './MergedController';
 export { default as Controller } from './Controller';
 export { default as Suspense } from './Suspense';
 export { default as SuspenseAllController } from './SuspenseAllController';
 export { default as SuspenseController } from './SuspenseController';
+export { default as SuspenseOnlyController } from './SuspenseOnlyController';
+export { default as SuspenseOnlyAllController } from './SuspenseOnlyAllController';
 
 export { default as SKELETON_STATE } from './SKELETON_STATE';
 

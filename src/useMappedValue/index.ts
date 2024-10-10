@@ -1,59 +1,67 @@
-import { useLayoutEffect, useRef } from 'react';
+import { useLayoutEffect, useMemo } from 'react';
 import { AnyAsyncState, AsyncState, State } from '../types';
 import getValue from '../getValue';
 import onValueChange from '../onValueChange';
 import useForceRerender from 'react-helpful-utils/useForceRerender';
 import handleListeners from '../utils/handleListeners';
-
-const simpleIsEqual = (next: any, prev: any) => next === prev;
+import simpleIsEqual from '../utils/simpleIsEqual';
 
 const useMappedValue = ((
   state: AnyAsyncState<any>,
   mapper: (value: any, isLoaded?: boolean, error?: any) => any,
   isEqual: (nextValue: any, prevValue: any) => boolean = simpleIsEqual
 ) => {
-  const { _internal: utils, isLoaded, error } = state;
+  const { isLoaded } = state;
 
-  const mappedValue = mapper(
-    getValue(state),
-    isLoaded && getValue(isLoaded),
-    error && getValue(error)
-  );
+  const error = mapper.length > 2 && state.error;
+
+  const deps = [state._internal, state._path && state._path.join('.')] as const;
 
   const forceRerender = useForceRerender();
 
-  const prevMappedValueRef = useRef(mappedValue);
-
-  prevMappedValueRef.current = mappedValue;
+  const mappedValueRef = useMemo(
+    () => ({
+      _value: mapper(
+        getValue(state),
+        isLoaded && getValue(isLoaded),
+        error && getValue(error)
+      ),
+    }),
+    deps
+  );
 
   useLayoutEffect(
     () =>
       handleListeners([
         onValueChange(state, (value) => {
-          if (
-            !isEqual(
-              mapper(value, isLoaded && getValue(isLoaded)),
-              prevMappedValueRef.current
-            )
-          ) {
-            forceRerender();
+          if (!error || value !== undefined || getValue(error) === undefined) {
+            const nextValue = mapper(value, isLoaded && getValue(isLoaded));
+
+            if (!isEqual(nextValue, mappedValueRef._value)) {
+              mappedValueRef._value = nextValue;
+
+              forceRerender();
+            }
           }
         }),
         'load' in state && !state._withoutLoading && state.load(),
         error &&
-          mapper.length > 2 &&
           onValueChange(error, (err) => {
-            if (
-              !isEqual(mapper(undefined, true, err), prevMappedValueRef.current)
-            ) {
-              forceRerender();
+            if (err !== undefined || getValue(state) === undefined) {
+              const nextValue = mapper(undefined, err !== undefined, err);
+
+              if (!isEqual(nextValue, mappedValueRef._value)) {
+                mappedValueRef._value = nextValue;
+
+                forceRerender();
+              }
             }
           }),
       ]),
-    [utils, state._path && state._path.join('.')]
+    deps
   );
 
-  return mappedValue;
+  return mappedValueRef._value;
 }) as {
   /**
    * Hook to {@link mapper map} and retrieve a value from a {@link state}.

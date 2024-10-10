@@ -85,6 +85,8 @@ export default defineConfig((prevOptions) => ({
   esbuildOptions: (options) => {
     options.chunkNames = `${_CHUNKS}/[name]-[hash]`;
 
+    options.mangleQuoted = true;
+
     options.mangleProps = /^_/;
   },
   async onSuccess() {

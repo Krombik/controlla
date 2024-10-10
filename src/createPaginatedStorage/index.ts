@@ -156,13 +156,15 @@ function usePages(
   }
 
   return useConst(() => {
-    const { _shouldRevalidate: shouldRevalidate } = this._internal;
+    const paginationUtils = this._internal;
+
+    const { _shouldRevalidate: shouldRevalidate } = paginationUtils;
 
     const cleanupMap = new Map<number, () => void>();
 
-    let prevFrom = from;
+    let prevFrom: null | number = null;
 
-    let prevTo = from;
+    let prevTo: null | number = null;
 
     let inProgress = true;
 
@@ -178,9 +180,9 @@ function usePages(
       inProgress = true;
 
       useEffect(() => {
-        const fromDiff = prevFrom - from;
+        const fromDiff = prevFrom != null ? prevFrom - from : 0;
 
-        const toDiff = to - prevTo;
+        const toDiff = prevTo != null ? to - prevTo : to;
 
         const callback = () => {
           if (inProgress) {
@@ -226,7 +228,7 @@ function usePages(
               }
             }
           } else {
-            for (let i = prevFrom; i < from; i++) {
+            for (let i = prevFrom!; i < from; i++) {
               cleanupMap.get(i)!();
 
               cleanupMap.delete(i);
@@ -236,7 +238,7 @@ function usePages(
 
         if (toDiff) {
           if (toDiff > 0) {
-            const start = prevTo - prevFrom;
+            const start = prevTo != null ? prevTo - prevFrom! : 0;
 
             if (start && !isUnstable) {
               for (let i = 0; i < start; i++) {
@@ -260,7 +262,7 @@ function usePages(
               cleanupMap.set(from + i, handleListener(states[i], callback));
             }
           } else {
-            for (let i = prevTo; i < to; i++) {
+            for (let i = prevTo!; i < to; i++) {
               cleanupMap.get(i)!();
 
               cleanupMap.delete(i);
@@ -271,17 +273,19 @@ function usePages(
         prevFrom = from;
 
         prevTo = to;
-      }, [from, to]);
+      }, [from, to, paginationUtils]);
 
       useEffect(
         () => () => {
-          for (let i = prevFrom; i < prevTo; i++) {
+          for (let i = prevFrom!; i < prevTo!; i++) {
             cleanupMap.get(i)!();
 
             cleanupMap.delete(i);
           }
+
+          prevFrom = prevTo = null;
         },
-        []
+        [paginationUtils]
       );
 
       for (let i = from; i < to; i++) {

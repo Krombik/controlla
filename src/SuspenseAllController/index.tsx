@@ -1,44 +1,66 @@
-import { FC } from 'react';
+import { ComponentType, FC, PropsWithChildren } from 'react';
 import { AsyncState, ExtractErrors, ExtractValues, Falsy } from '../types';
 import Suspense, { SuspenseProps } from '../Suspense';
 import useAll from '../useAll';
 
-export type SuspenseAllControllerProps<S extends (AsyncState<any> | Falsy)[]> =
-  {
-    states: S;
-    render(...values: ExtractValues<S>): ReturnType<FC>;
-    renderIfError?:
-      | ((
-          values: ExtractValues<S, true>,
-          errors: ExtractErrors<S>
-        ) => ReturnType<FC>)
-      | ReturnType<FC>;
-  } & Pick<SuspenseProps, 'fallback' | 'isSkeleton'>;
+type Props<S extends (AsyncState<any> | Falsy)[]> = {
+  states: S;
+  render(...values: ExtractValues<S>): ReturnType<FC>;
+  renderIfError?:
+    | ((
+        values: ExtractValues<S, true>,
+        errors: ExtractErrors<S>
+      ) => ReturnType<FC>)
+    | ReturnType<FC>;
+  container?: ComponentType<PropsWithChildren> | keyof JSX.IntrinsicElements;
+} & Pick<SuspenseProps, 'fallback' | 'isSkeleton'>;
 
-const AllStatesValue: FC<SuspenseAllControllerProps<any[]>> = ({
+const AllStatesValue: FC<Props<any[]>> = ({
   render,
   states,
   renderIfError,
+  container: Container,
 }) => {
+  let children;
+
   if (renderIfError === undefined) {
-    return render(...useAll(states));
+    children = render(...useAll(states));
+  } else {
+    const [values, errors] = useAll(states, true);
+
+    children = errors.every((item) => item === undefined)
+      ? render(...values)
+      : typeof renderIfError == 'function'
+        ? renderIfError(values, errors)
+        : renderIfError;
   }
 
-  const [values, errors] = useAll(states, true);
-
-  return errors.every((item) => item === undefined)
-    ? render(...values)
-    : typeof renderIfError == 'function'
-      ? renderIfError(values, errors)
-      : renderIfError;
+  return Container && (children || children === 0) ? (
+    <Container>{children}</Container>
+  ) : (
+    children
+  );
 };
 
 const SuspenseAllController = <const S extends Array<AsyncState<any> | Falsy>>(
-  props: SuspenseAllControllerProps<S>
-) => (
-  <Suspense fallback={props.fallback} isSkeleton={props.isSkeleton}>
-    <AllStatesValue {...(props as any)} />
-  </Suspense>
-);
+  props: Props<S>
+) => {
+  const { container: Container, fallback } = props;
+
+  return (
+    <Suspense
+      fallback={
+        Container && (fallback || fallback === 0) ? (
+          <Container>{fallback as any}</Container>
+        ) : (
+          (fallback as any)
+        )
+      }
+      isSkeleton={props.isSkeleton}
+    >
+      <AllStatesValue {...(props as any)} />
+    </Suspense>
+  );
+};
 
 export default SuspenseAllController;

@@ -2,7 +2,7 @@ import { FC } from 'react';
 import { AsyncState, HandlePending, State } from '../types';
 import useValue from '../useValue';
 
-export type ControllerProps<S extends State<any>> = {
+type Props<S extends State<any>> = {
   state: S;
   /** Function that renders the value of the state. */
   render: S extends State<infer V>
@@ -17,10 +17,10 @@ export type ControllerProps<S extends State<any>> = {
 
 /** A controller that renders the value from state. Component wrapper of {@link useValue} hook */
 const Controller: {
-  <S extends State<any>>(props: ControllerProps<S>): ReturnType<FC>;
+  <S extends State<any>>(props: Props<S>): ReturnType<FC>;
   /** @internal */
-  (props: ControllerProps<AsyncState<any>>): ReturnType<FC>;
-} = ({ render, state, renderIfError }: ControllerProps<AsyncState<any>>) => {
+  (props: Props<AsyncState<any>>): ReturnType<FC>;
+} = ({ render, state, renderIfError }: Props<AsyncState<any>>) => {
   const err =
     renderIfError !== undefined && state.error
       ? useValue(state.error)
