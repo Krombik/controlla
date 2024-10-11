@@ -8,11 +8,11 @@ import type {
   NestedState,
 } from '../types';
 import { EMPTY_ARR } from '../utils/constants';
-import executeSetters from '../utils/executeSetters';
 import processStateChanges from '../utils/processStateChanges';
 import path from '../utils/path';
 import noop from 'lodash.noop';
 import handleState from '../utils/handleState';
+import handleSetExecution from '../utils/handleSetExecution';
 
 interface _InternalUtils extends StateInternalUtils {
   _rootMap: StateCallbackMap;
@@ -177,11 +177,11 @@ function _set(this: _InternalUtils, nextValue: any, path: PathKey[]) {
     this._value = nextValue;
 
     for (let i = nodesQueue.length; i--; ) {
-      executeSetters(nodesQueue[i], valuesArr[i]);
+      handleSetExecution(nodesQueue[i], valuesArr[i]);
     }
 
     if (root) {
-      executeSetters(root, nextValue);
+      handleSetExecution(root, nextValue);
     }
   }
 }

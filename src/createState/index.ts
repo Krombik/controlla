@@ -5,7 +5,7 @@ import type {
   StateInitializer,
   State,
 } from '../types';
-import executeSetters from '../utils/executeSetters';
+import handleSetExecution from '../utils/handleSetExecution';
 import handleState from '../utils/handleState';
 
 type _InternalUtils = StateInternalUtils & {
@@ -26,7 +26,7 @@ function _set(this: _InternalUtils, value: any) {
   if (this._value !== value) {
     this._value = value;
 
-    executeSetters(this._valueSet, value);
+    handleSetExecution(this._valueSet, value);
   }
 }
 

@@ -42,26 +42,26 @@ function _set(
 
   const isLoaded = isSet ? this._isLoaded(newValue, prevValue) : isError;
 
-  if (isSet && this._promise) {
-    this._promise._resolve(newValue);
-
-    this._promise = null;
-  }
-
-  if (!isError) {
-    this._errorUtils._set(undefined, EMPTY_ARR);
-  }
-
-  this._isLoadedUtils._set(isLoaded, path, false);
-
-  if (this._slowLoading) {
-    this._slowLoading._handle(this._isLoadedUtils);
-  }
+  this._isLoadedUtils._set(isLoaded, path);
 
   if (isLoaded) {
     this._isLoadable = false;
 
     handleUnload(this);
+  }
+
+  if (!isError) {
+    this._errorUtils._set(undefined, path);
+
+    if (isSet && this._promise) {
+      this._promise._resolve(newValue);
+
+      this._promise = null;
+    }
+  }
+
+  if (this._slowLoading) {
+    this._slowLoading._handle(this._isLoadedUtils);
   }
 }
 

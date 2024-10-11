@@ -1,9 +1,8 @@
-import { useLayoutEffect, useMemo } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import { AnyAsyncState, HandlePending, State } from '../types';
 import getValue from '../getValue';
 import onValueChange from '../onValueChange';
 import useForceRerender from 'react-helpful-utils/useForceRerender';
-
 import simpleIsEqual from '../utils/simpleIsEqual';
 
 const useMergedValue = ((
@@ -14,13 +13,11 @@ const useMergedValue = ((
     prevMergedValue: any
   ) => boolean = simpleIsEqual
 ) => {
-  const l = states.length;
-
   const forceRerender = useForceRerender();
 
   const deps = [];
 
-  for (let i = 0; i < l; i++) {
+  for (let i = 0; i < states.length; i++) {
     const state = states[i];
 
     deps.push(state._internal);
@@ -30,48 +27,41 @@ const useMergedValue = ((
     }
   }
 
-  const mergedValueRef = useMemo(
-    () => ({ _value: merger(...states.map(getValue)) }),
-    deps
-  );
+  const mergedValue = merger(...states.map(getValue));
+
+  const mergedValueRef = useRef(mergedValue);
+
+  mergedValueRef.current = mergedValue;
 
   useLayoutEffect(() => {
-    const values: any[] = [];
+    const valuesUnlistener = onValueChange(states, (...values) => {
+      if (!isEqual(merger(...values), mergedValueRef.current)) {
+        forceRerender();
+      }
+    });
 
-    const unlisteners: Array<() => void> = [];
+    const loadUnlisteners: Array<() => void> = [];
 
-    for (let i = 0; i < l; i++) {
+    for (let i = 0; i < states.length; i++) {
       const state = states[i];
 
-      values.push(getValue(state));
-
-      unlisteners.push(
-        onValueChange(state, (value) => {
-          values[i] = value;
-
-          const nextValue = merger(...values);
-
-          if (!isEqual(nextValue, mergedValueRef._value)) {
-            mergedValueRef._value = nextValue;
-
-            forceRerender();
-          }
-        })
-      );
-
       if ('load' in state && !state._withoutLoading) {
-        unlisteners.push(state.load());
+        loadUnlisteners.push(state.load());
       }
     }
 
-    return () => {
-      for (let i = 0; i < unlisteners.length; i++) {
-        unlisteners[i]();
-      }
-    };
+    return loadUnlisteners.length
+      ? () => {
+          valuesUnlistener();
+
+          for (let i = 0; i < loadUnlisteners.length; i++) {
+            loadUnlisteners[i]();
+          }
+        }
+      : valuesUnlistener;
   }, deps);
 
-  return mergedValueRef._value;
+  return mergedValue;
 }) as {
   <const S extends State<any>[], V>(
     states: S,

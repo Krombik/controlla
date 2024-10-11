@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import { AnyAsyncState, AsyncState, State } from '../types';
 import getValue from '../getValue';
 import onValueChange from '../onValueChange';
@@ -15,53 +15,40 @@ const useMappedValue = ((
 
   const error = mapper.length > 2 && state.error;
 
-  const deps = [state._internal, state._path && state._path.join('.')] as const;
-
   const forceRerender = useForceRerender();
 
-  const mappedValueRef = useMemo(
-    () => ({
-      _value: mapper(
-        getValue(state),
-        isLoaded && getValue(isLoaded),
-        error && getValue(error)
-      ),
-    }),
-    deps
+  const mappedValue = mapper(
+    getValue(state),
+    isLoaded && getValue(isLoaded),
+    error && getValue(error)
   );
+
+  const mappedValueRef = useRef(mappedValue);
+
+  mappedValueRef.current = mappedValue;
 
   useLayoutEffect(
     () =>
       handleListeners([
-        onValueChange(state, (value) => {
-          if (!error || value !== undefined || getValue(error) === undefined) {
-            const nextValue = mapper(value, isLoaded && getValue(isLoaded));
-
-            if (!isEqual(nextValue, mappedValueRef._value)) {
-              mappedValueRef._value = nextValue;
-
+        onValueChange<[State<any>, State<any>]>(
+          error ? [state, error] : (state as any),
+          (value: any, err: any) => {
+            if (
+              !isEqual(
+                mapper(value, isLoaded && getValue(isLoaded), err),
+                mappedValueRef.current
+              )
+            ) {
               forceRerender();
             }
           }
-        }),
+        ),
         'load' in state && !state._withoutLoading && state.load(),
-        error &&
-          onValueChange(error, (err) => {
-            if (err !== undefined || getValue(state) === undefined) {
-              const nextValue = mapper(undefined, err !== undefined, err);
-
-              if (!isEqual(nextValue, mappedValueRef._value)) {
-                mappedValueRef._value = nextValue;
-
-                forceRerender();
-              }
-            }
-          }),
       ]),
-    deps
+    [state._internal, state._path && state._path.join('.')]
   );
 
-  return mappedValueRef._value;
+  return mappedValue;
 }) as {
   /**
    * Hook to {@link mapper map} and retrieve a value from a {@link state}.
