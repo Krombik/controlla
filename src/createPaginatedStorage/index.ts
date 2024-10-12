@@ -29,6 +29,7 @@ import createPollableState from '../createPollableState';
 import createPollableNestedState from '../createPollableNestedState';
 import { useForceRerender } from 'react-helpful-utils';
 import getPromise from '../getPromise';
+import handleUnlisteners from '../utils/handleUnlisteners';
 
 type AdditionalUtils = {
   readonly _parent: PaginatedStateStorage<any>['_internal'];
@@ -38,25 +39,6 @@ type AdditionalUtils = {
 };
 
 type PaginatedState = AnyLoadableState<any> & Internal<AdditionalUtils>;
-
-const handleListener = (
-  state: AnyLoadableState<any>,
-  forceRerender: () => void
-) => {
-  const unlistenValue = onValueChange(state, forceRerender);
-
-  const unlistenError = onValueChange(state.error, forceRerender);
-
-  const unregister = state.load();
-
-  return () => {
-    unlistenValue();
-
-    unlistenError();
-
-    unregister();
-  };
-};
 
 function _set(
   this: PaginatedState['_internal'],
@@ -207,7 +189,15 @@ function usePages(
         if (fromDiff) {
           if (fromDiff > 0) {
             for (let i = 0; i < fromDiff; i++) {
-              cleanupMap.set(from + i, handleListener(states[i], callback));
+              const state = states[i];
+
+              cleanupMap.set(
+                from + i,
+                handleUnlisteners(
+                  onValueChange([state, state.error], callback),
+                  state.load()
+                )
+              );
             }
 
             if (!isUnstable) {
@@ -259,7 +249,15 @@ function usePages(
             }
 
             for (let i = start; i < states.length; i++) {
-              cleanupMap.set(from + i, handleListener(states[i], callback));
+              const state = states[i];
+
+              cleanupMap.set(
+                from + i,
+                handleUnlisteners(
+                  onValueChange([state, state.error], callback),
+                  state.load()
+                )
+              );
             }
           } else {
             for (let i = prevTo!; i < to; i++) {

@@ -1,6 +1,6 @@
 import type { PathKey, StateCallbackMap } from '../types';
 import alwaysFalse from './alwaysFalse';
-import handleSetExecution from './handleSetExecution';
+import addToBatch from './batching';
 
 const objectPrototype = Object.prototype;
 
@@ -33,7 +33,7 @@ const handleMandatoryCheck = (
       equalList = false;
 
       if (child._root) {
-        handleSetExecution(child._root, newValue);
+        addToBatch(child._root, newValue);
       }
     } else if (equalList) {
       equalList.add(key);
@@ -51,7 +51,7 @@ const handleNil = (
   const { _children, _root } = storage;
 
   if (_root) {
-    handleSetExecution(_root, nextValue);
+    addToBatch(_root, nextValue);
   }
 
   if (_children && prevValue != nextValue) {
@@ -102,7 +102,7 @@ const processStateChanges = (
   if (aPrototype != Object.getPrototypeOf(nextValue)) {
     if (storage) {
       if (root) {
-        handleSetExecution(root, nextValue);
+        addToBatch(root, nextValue);
       }
 
       if (children) {

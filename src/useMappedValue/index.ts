@@ -3,7 +3,7 @@ import { AnyAsyncState, AsyncState, State } from '../types';
 import getValue from '../getValue';
 import onValueChange from '../onValueChange';
 import useForceRerender from 'react-helpful-utils/useForceRerender';
-import handleListeners from '../utils/handleListeners';
+import handleUnlisteners from '../utils/handleUnlisteners';
 import simpleIsEqual from '../utils/simpleIsEqual';
 
 const useMappedValue = ((
@@ -29,7 +29,7 @@ const useMappedValue = ((
 
   useLayoutEffect(
     () =>
-      handleListeners([
+      handleUnlisteners(
         onValueChange<[State<any>, State<any>]>(
           error ? [state, error] : (state as any),
           (value: any, err: any) => {
@@ -43,8 +43,8 @@ const useMappedValue = ((
             }
           }
         ),
-        'load' in state && !state._withoutLoading && state.load(),
-      ]),
+        'load' in state && !state._withoutLoading && state.load()
+      ),
     [state._internal, state._path && state._path.join('.')]
   );
 

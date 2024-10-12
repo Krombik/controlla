@@ -12,7 +12,7 @@ import processStateChanges from '../utils/processStateChanges';
 import path from '../utils/path';
 import noop from 'lodash.noop';
 import handleState from '../utils/handleState';
-import handleSetExecution from '../utils/handleSetExecution';
+import addToBatch from '../utils/batching';
 
 interface _InternalUtils extends StateInternalUtils {
   _rootMap: StateCallbackMap;
@@ -177,11 +177,11 @@ function _set(this: _InternalUtils, nextValue: any, path: PathKey[]) {
     this._value = nextValue;
 
     for (let i = nodesQueue.length; i--; ) {
-      handleSetExecution(nodesQueue[i], valuesArr[i]);
+      addToBatch(nodesQueue[i], valuesArr[i]);
     }
 
     if (root) {
-      handleSetExecution(root, nextValue);
+      addToBatch(root, nextValue);
     }
   }
 }

@@ -4,7 +4,7 @@ import onValueChange from '../onValueChange';
 import useNoop from '../utils/useNoop';
 import getValue from '../getValue';
 import useForceRerender from 'react-helpful-utils/useForceRerender';
-import handleListeners from '../utils/handleListeners';
+import handleUnlisteners from '../utils/handleUnlisteners';
 
 const useValue = ((state: AnyAsyncState | Falsy) => {
   if (state) {
@@ -12,10 +12,10 @@ const useValue = ((state: AnyAsyncState | Falsy) => {
 
     useLayoutEffect(
       () =>
-        handleListeners([
+        handleUnlisteners(
           onValueChange(state, forceRerender),
-          'load' in state && !state._withoutLoading && state.load(),
-        ]),
+          'load' in state && !state._withoutLoading && state.load()
+        ),
       [state._internal, state._path && state._path.join('.')]
     );
 

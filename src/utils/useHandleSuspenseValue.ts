@@ -1,6 +1,6 @@
 import getValue from '../getValue';
 import { AnyAsyncState } from '../types';
-import handleListeners from './handleListeners';
+import handleUnlisteners from './handleUnlisteners';
 import onValueChange from '../onValueChange';
 import { handleUnload } from './handleSuspense';
 import { ContextType, useLayoutEffect } from 'react';
@@ -19,9 +19,9 @@ const useHandleSuspenseValue = (
 
   useLayoutEffect(
     () =>
-      handleListeners([
+      handleUnlisteners(
         onValueChange(
-          state,
+          [state, state.error],
           withValueWatching
             ? forceRerender
             : (value) => {
@@ -30,11 +30,10 @@ const useHandleSuspenseValue = (
                 }
               }
         ),
-        withValueWatching && onValueChange(state.error, forceRerender),
         'load' in state &&
           !state._withoutLoading &&
-          (handleUnload(utils, errorBoundaryCtx, suspenseCtx) || state.load()),
-      ]),
+          (handleUnload(utils, errorBoundaryCtx, suspenseCtx) || state.load())
+      ),
     [utils, state._path && state._path.join('.')]
   );
 

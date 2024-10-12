@@ -1,7 +1,7 @@
 import noop from 'lodash.noop';
 import getValue from '../getValue';
 import type { State, HandlePending } from '../types';
-import { RESOLVED_PROMISE } from '../utils/constants';
+import { postBatchCallbacks } from '../utils/batching';
 
 const onValueChange: {
   <T>(state: State<T>, cb: (value: HandlePending<T>) => void): () => void;
@@ -23,26 +23,24 @@ const onValueChange: {
 
     const values: any[] = [];
 
+    const fn = () => {
+      if (isAvailable) {
+        isAvailable = false;
+
+        postBatchCallbacks.push(() => {
+          cb(...state.map(getValue));
+
+          isAvailable = true;
+        });
+      }
+    };
+
     for (let i = 0; i < state.length; i++) {
       const item = state[i];
 
       values.push(getValue(item));
 
-      unlisteners.push(
-        item._internal._onValueChange((value) => {
-          values[i] = value;
-
-          if (isAvailable) {
-            isAvailable = false;
-
-            RESOLVED_PROMISE.then(() => {
-              cb(...values);
-
-              isAvailable = true;
-            });
-          }
-        }, item._path!)
-      );
+      unlisteners.push(item._internal._onValueChange(fn, item._path!));
     }
 
     return () => {

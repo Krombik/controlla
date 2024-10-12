@@ -22,6 +22,8 @@ export { default as useMergedValue } from './useMergedValue';
 export { default as use } from './use';
 export { default as useAll } from './useAll';
 
+export { default as batchedUpdates } from './batchedUpdates';
+
 export { default as awaitOnly } from './awaitOnly';
 export { default as withoutLoading } from './withoutLoading';
 
