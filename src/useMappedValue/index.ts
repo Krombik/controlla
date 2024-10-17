@@ -11,16 +11,16 @@ const useMappedValue = ((
   mapper: (value: any, isLoaded?: boolean, error?: any) => any,
   isEqual: (nextValue: any, prevValue: any) => boolean = simpleIsEqual
 ) => {
-  const { isLoaded } = state;
+  const isLoadedState = mapper.length > 1 && state.isLoaded;
 
-  const error = mapper.length > 2 && state.error;
+  const errorState = mapper.length > 2 && state.error;
 
   const forceRerender = useForceRerender();
 
   const mappedValue = mapper(
     getValue(state),
-    isLoaded && getValue(isLoaded),
-    error && getValue(error)
+    isLoadedState && getValue(isLoadedState),
+    errorState && getValue(errorState)
   );
 
   const mappedValueRef = useRef(mappedValue);
@@ -30,14 +30,15 @@ const useMappedValue = ((
   useLayoutEffect(
     () =>
       handleUnlisteners(
-        onValueChange<[State<any>, State<any>]>(
-          error ? [state, error] : (state as any),
-          (value: any, err: any) => {
+        onValueChange<[State<any>, State<any>, State<any>]>(
+          isLoadedState
+            ? errorState
+              ? [state, isLoadedState, errorState]
+              : [state, isLoadedState]
+            : (state as any),
+          (value: any, isLoaded: any, err: any) => {
             if (
-              !isEqual(
-                mapper(value, isLoaded && getValue(isLoaded), err),
-                mappedValueRef.current
-              )
+              !isEqual(mapper(value, isLoaded, err), mappedValueRef.current)
             ) {
               forceRerender();
             }

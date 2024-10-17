@@ -372,14 +372,6 @@ type WithCreatePaginatedStorage<T extends any[]> = [
 type WithCreateStateStorage<T extends any[]> = [CreateStateStorage, ...T];
 
 interface CreateStateStorage {
-  <
-    T extends StorageRecord,
-    Keys extends GenerateArr<C>,
-    C extends number = LengthOf<Keys>,
-  >(
-    ...args: WithDepth<[obj: StorageRecordArgs<T, Keys>], C>
-  ): NestedStateStorage<Keys, T>;
-
   <T, Keys extends PrimitiveOrNested[], E = any>(
     ...args: WithCreatePaginatedStorage<
       PaginatedRequestableStateArgs<T, E, Keys>
@@ -466,6 +458,14 @@ interface CreateStateStorage {
   <T, Keys extends GenerateArr<C>, C extends number = LengthOf<Keys>>(
     ...args: StateArgsWithDeepness<typeof createState, T, C>
   ): NestedStateStorage<Keys, State<T, Keys>>;
+
+  <
+    T extends StorageRecord,
+    Keys extends GenerateArr<C>,
+    C extends number = LengthOf<Keys>,
+  >(
+    ...args: WithDepth<[obj: StorageRecordArgs<T, Keys>], C>
+  ): NestedStateStorage<Keys, T>;
 }
 
 const getStorageUtils = (

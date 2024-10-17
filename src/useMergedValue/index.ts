@@ -20,11 +20,7 @@ const useMergedValue = ((
   for (let i = 0; i < states.length; i++) {
     const state = states[i];
 
-    deps.push(state._internal);
-
-    if (state._path) {
-      deps.push(state._path.join('.'));
-    }
+    deps.push(state._internal, state._path && state._path.join('.'));
   }
 
   const mergedValue = merger(...states.map(getValue));
