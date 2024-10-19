@@ -24,6 +24,17 @@ const handleUnload = (utils: _InternalUtils) => {
   }
 };
 
+const handleReloadOn = (
+  reloadData: NonNullable<_InternalUtils['_reloadIfStale']>,
+  utils: { _isLoadable: boolean }
+) => {
+  clearTimeout(reloadData._timeoutId);
+
+  reloadData._timeoutId = setTimeout(() => {
+    utils._isLoadable = true;
+  }, reloadData._timeout);
+};
+
 function _set(
   this: _InternalUtils,
   value: any,
@@ -40,7 +51,17 @@ function _set(
 
   const isSet = newValue !== undefined;
 
-  const isLoaded = isSet ? this._isLoaded(newValue, prevValue) : isError;
+  const isLoaded = isSet
+    ? this._isLoaded(newValue, prevValue, this._attempt)
+    : isError;
+
+  if (this._attempt != null) {
+    if (isLoaded) {
+      this._attempt = 0;
+    } else {
+      this._attempt++;
+    }
+  }
 
   this._isLoadedUtils._set(isLoaded, path);
 
@@ -48,6 +69,16 @@ function _set(
     this._isLoadable = false;
 
     handleUnload(this);
+
+    const { _reloadIfStale, _reloadOnFocus } = this;
+
+    if (_reloadIfStale) {
+      handleReloadOn(_reloadIfStale, this);
+    }
+
+    if (_reloadOnFocus) {
+      handleReloadOn(_reloadOnFocus, _reloadOnFocus);
+    }
   }
 
   if (!isError) {
@@ -99,6 +130,8 @@ function load(this: _State, reload?: boolean) {
 
   const utils = this._internal;
 
+  const { _reloadOnFocus } = utils;
+
   if (reload && !utils._isFetchInProgress) {
     handleUnload(utils);
 
@@ -114,6 +147,18 @@ function load(this: _State, reload?: boolean) {
       utils._slowLoading._handle(utils._isLoadedUtils);
     }
 
+    if (_reloadOnFocus && _reloadOnFocus._timeoutId != null) {
+      clearInterval(_reloadOnFocus._timeoutId);
+
+      _reloadOnFocus._timeoutId = undefined;
+    }
+
+    if (utils._reloadIfStale && utils._reloadIfStale._timeoutId != null) {
+      clearInterval(utils._reloadIfStale._timeoutId);
+
+      utils._reloadIfStale._timeoutId = undefined;
+    }
+
     const unload = utils._load!.apply(
       { ...this, _path: EMPTY_ARR },
       (this.keys as any) || EMPTY_ARR
@@ -122,6 +167,20 @@ function load(this: _State, reload?: boolean) {
     if (unload) {
       utils._unload = unload;
     }
+  }
+
+  if (_reloadOnFocus && !_reloadOnFocus._focusListener) {
+    const listener = () => {
+      if (!document.hidden && _reloadOnFocus._isLoadable) {
+        _reloadOnFocus._isLoadable = false;
+
+        this.load!(true)();
+      }
+    };
+
+    _reloadOnFocus._focusListener = listener;
+
+    document.addEventListener('visibilitychange', listener);
   }
 
   utils._counter++;
@@ -135,6 +194,13 @@ function load(this: _State, reload?: boolean) {
 
         if (!utils._isLoadedUtils._value) {
           utils._isLoadable = true;
+        }
+
+        if (utils._reloadOnFocus) {
+          document.removeEventListener(
+            'visibilitychange',
+            utils._reloadOnFocus._focusListener!
+          );
         }
       }
     }
@@ -152,6 +218,8 @@ const getAsyncStateCreator =
       resume,
       loadingTimeout,
       reset,
+      reloadIfStale,
+      reloadOnFocus,
     }: Partial<ControllableLoadableStateOptions<any>>,
     stateInitializer?: StateInitializer,
     keys?: any[],
@@ -175,7 +243,14 @@ const getAsyncStateCreator =
       ...createCommonState<AsyncStateUtils>(value, stateInitializer, keys, {
         _commonSet: undefined!,
         _isLoaded: isLoaded || alwaysTrue,
-        _slowLoading: null,
+        _slowLoading: loadingTimeout
+          ? {
+              _timeout: loadingTimeout,
+              _timeoutId: undefined,
+              _callbackSet: new Set(),
+              _handle: _handleSlowLoading,
+            }
+          : null,
         _counter: 0,
         _isFetchInProgress: false,
         _isLoadable: true,
@@ -184,6 +259,18 @@ const getAsyncStateCreator =
         _errorUtils: errorUtils,
         _promise: null,
         _unload: undefined,
+        _attempt: isLoaded && isLoaded.length > 2 ? 0 : undefined,
+        _reloadIfStale: reloadIfStale
+          ? { _timeout: reloadIfStale, _timeoutId: undefined }
+          : null,
+        _reloadOnFocus: reloadOnFocus
+          ? {
+              _timeout: reloadOnFocus,
+              _timeoutId: undefined,
+              _focusListener: undefined,
+              _isLoadable: false,
+            }
+          : null,
         ...parentUtils,
       }),
       error: errorState,
@@ -206,25 +293,14 @@ const getAsyncStateCreator =
       utils._isLoadable = false;
     }
 
-    if (_load) {
-      if (loadingTimeout) {
-        utils._slowLoading = {
-          _timeout: loadingTimeout,
-          _timeoutId: undefined,
-          _callbackSet: new Set(),
-          _handle: _handleSlowLoading,
-        };
-      }
-
-      return pause && resume && reset
+    return _load
+      ? pause && resume && reset
         ? { ...state, load, pause, resume, reset }
         : {
             ...state,
             load,
-          };
-    }
-
-    return state;
+          }
+      : state;
   };
 
 export default getAsyncStateCreator;

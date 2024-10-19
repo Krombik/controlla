@@ -38,7 +38,7 @@
     "@types/react": "^18.3.10",
     "prettier": "^3.3.3",
     "tsup": "^8.3.0",
-    "typescript": "^5.6.2"
+    "typescript": "^5.6.3"
   },
   "keywords": [],
   "sideEffects": false,
@@ -46,6 +46,6 @@
     "keyweaver": "^1.0.2",
     "lodash.identity": "^3.0.0",
     "lodash.noop": "^3.0.1",
-    "react-helpful-utils": "^1.0.5"
+    "react-helpful-utils": "^1.0.6"
   }
 }

@@ -96,13 +96,13 @@ export type ErrorStateUtils = {
 };
 
 export type AsyncStateUtils = {
-  _isLoaded(value: any, prevValue: any): boolean;
+  _isLoaded(value: any, prevValue: any, attempt: number | undefined): boolean;
   _commonSet: StateInternalUtils['_set'];
-  _slowLoading: {
+  readonly _slowLoading: {
     _handle(isLoadedUtils: StateInternalUtils): void;
-    _timeout: number;
+    readonly _timeout: number;
     _timeoutId: ReturnType<typeof setTimeout> | undefined;
-    _callbackSet: Set<() => void>;
+    readonly _callbackSet: Set<() => void>;
   } | null;
   _load: (() => (() => void) | void) | undefined;
   _counter: number;
@@ -116,6 +116,17 @@ export type AsyncStateUtils = {
     _reject(error: any): void;
   } | null;
   _unload: (() => void) | void | undefined;
+  _attempt: number | undefined;
+  readonly _reloadIfStale: {
+    readonly _timeout: number;
+    _timeoutId: ReturnType<typeof setTimeout> | undefined;
+  } | null;
+  readonly _reloadOnFocus: {
+    readonly _timeout: number;
+    _timeoutId: ReturnType<typeof setTimeout> | undefined;
+    _isLoadable: boolean;
+    _focusListener: (() => void) | undefined;
+  } | null;
 };
 
 export type AsyncState<
@@ -253,7 +264,8 @@ export type AsyncStateOptions<T, Keys extends PrimitiveOrNested[] = []> = {
   value?: ResolvedValue<T> | ((...keys: Keys) => ResolvedValue<T>);
   isLoaded?(
     value: ResolvedValue<T>,
-    prevValue: ResolvedValue<T> | undefined
+    prevValue: ResolvedValue<T> | undefined,
+    attempt: number
   ): boolean;
 };
 
@@ -264,6 +276,8 @@ export type LoadableStateOptions<
 > = AsyncStateOptions<T, Keys> & {
   load(this: AsyncState<T, E>, ...keys: Keys): void | (() => void);
   loadingTimeout?: number;
+  reloadIfStale?: number;
+  reloadOnFocus?: number;
 };
 
 export type ControllableLoadableStateOptions<
@@ -280,7 +294,10 @@ export type RequestableStateOptions<
   T,
   E = any,
   Keys extends PrimitiveOrNested[] = [],
-> = Pick<LoadableStateOptions<T, Keys>, 'value' | 'loadingTimeout'> & {
+> = Pick<
+  LoadableStateOptions<T, Keys>,
+  'value' | 'loadingTimeout' | 'reloadIfStale' | 'reloadOnFocus'
+> & {
   /** @internal */
   _beforeLoad?(
     args: PrimitiveOrNested[],

@@ -186,7 +186,7 @@ type PollableStateArgs<
   CreateState extends PollableStateCreator,
   T,
   E,
-  Keys extends any[],
+  Keys extends PrimitiveOrNested[],
   ParentKeys extends PrimitiveOrNested[] = [],
 > = WithInitModule<
   T,
@@ -427,6 +427,13 @@ interface CreateStateStorage {
   ): NestedStateStorage<Keys, AsyncState<T, E, Keys>>;
 
   <T, Keys extends PrimitiveOrNested[], E = any>(
+    ...args: PollableStateArgs<typeof createPollableNestedState, T, E, Keys>
+  ): NestedStateStorage<Keys, ControllableLoadableNestedState<T, E, Keys>>;
+  <T, Keys extends PrimitiveOrNested[], E = any>(
+    ...args: PollableStateArgs<typeof createPollableState, T, E, Keys>
+  ): NestedStateStorage<Keys, ControllableLoadableState<T, E, Keys>>;
+
+  <T, Keys extends PrimitiveOrNested[], E = any>(
     ...args: RequestableStateArgs<
       typeof createRequestableNestedState,
       T,
@@ -437,13 +444,6 @@ interface CreateStateStorage {
   <T, const Keys extends PrimitiveOrNested[], E = any>(
     ...args: RequestableStateArgs<typeof createRequestableState, T, E, Keys>
   ): NestedStateStorage<Keys, LoadableState<T, E, Keys>>;
-
-  <T, Keys extends PrimitiveOrNested[], E = any>(
-    ...args: PollableStateArgs<typeof createPollableNestedState, T, E, Keys>
-  ): NestedStateStorage<Keys, ControllableLoadableNestedState<T, E, Keys>>;
-  <T, Keys extends PrimitiveOrNested[], E = any>(
-    ...args: PollableStateArgs<typeof createPollableState, T, E, Keys>
-  ): NestedStateStorage<Keys, ControllableLoadableState<T, E, Keys>>;
 
   <T, Keys extends PrimitiveOrNested[]>(
     ...args: GetStateArgs<typeof createNestedState, T, Keys>
