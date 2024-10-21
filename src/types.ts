@@ -1,6 +1,5 @@
-import type { PrimitiveOrNested } from 'keyweaver';
-
-export type PathKey = number | string;
+// import type { NestedArray, NestedObject, PrimitiveOrNested } from 'keyweaver';
+import type { end$ } from './utils/constants';
 
 declare const PENDING: unique symbol;
 
@@ -12,35 +11,6 @@ export type HandlePending<Value> = [Extract<Value, typeof PENDING>] extends [
   ? Value
   : ResolvedValue<Value> | undefined;
 
-type ResolvePath<K, Path, O = ResolvedValue<K>> = Path extends [
-  infer Key,
-  ...infer Rest,
-]
-  ? Key extends keyof NonNullable<O>
-    ? ResolvePath<
-        | NonNullable<O>[Key]
-        | ([Extract<O, null | undefined>] extends [never] ? never : undefined),
-        Rest
-      >
-    : never
-  : O;
-
-type StringToNumber<T> = T extends `${infer K extends number}` ? K : never;
-
-type ArrayIndexes<T extends any[]> = T extends [infer _, ...any[]]
-  ? StringToNumber<Exclude<keyof T, keyof []>>
-  : number;
-
-type RecursivePath<O, K extends keyof O> = [] extends O
-  ? []
-  : {
-      [Key in K]: Partial<[Key, ...ObjectPath<O[Key]>]>;
-    }[K];
-
-type ObjectPath<K, O = ResolvedValue<K>> = O extends any[] | Record<any, any>
-  ? RecursivePath<Required<O>, O extends any[] ? ArrayIndexes<O> : keyof O>
-  : [];
-
 type Nil = null | undefined;
 
 export type Falsy = Nil | false | 0 | '';
@@ -49,15 +19,15 @@ export type ValueChangeCallbacks = Set<(value: any) => void>;
 
 export type StateCallbackMap = {
   _root: ValueChangeCallbacks | null;
-  _children: Map<PathKey, StateCallbackMap> | null;
+  _children: Map<string, StateCallbackMap> | null;
   readonly _parent?: StateCallbackMap;
 };
 
 export type StateInternalUtils = {
   _value: any;
-  _set(nextValue: any, path: PathKey[], isError?: boolean): void;
-  _get(path: PathKey[]): any;
-  _onValueChange(cb: (value: any) => void, path: PathKey[]): () => void;
+  _set(nextValue: any, path: string[], isError?: boolean): void;
+  _get(path: string[]): any;
+  _onValueChange(cb: (value: any) => void, path: string[]): () => void;
 };
 
 declare const STATE_IDENTIFIER: unique symbol;
@@ -166,63 +136,141 @@ export type ControllableLoadableState<
 
 export type InternalPathBase = {
   /** @internal */
-  readonly _path?: PathKey[];
+  readonly _path?: string[];
 };
 
-export type StatePath<Path extends (...path: any[]) => any> = {
-  path: Path;
+export type StateScope<Scope extends () => any> = {
+  scope: Scope;
 };
 
-export type NestedState<Value, Keys extends PrimitiveOrNested[] = []> = State<
-  Value,
-  Keys
-> &
-  StatePath<{
-    <P extends ObjectPath<Value>, T = ResolvePath<Value, P>>(
-      ...path: P
-    ): [] extends Required<ObjectPath<T>>
-      ? State<T, Keys>
-      : NestedState<T, Keys>;
-  }>;
+type EndOfScope<T, IsRoot extends boolean = false> = IsRoot extends false
+  ? {
+      readonly [end$]: T;
+    }
+  : {};
+
+type StringToNumber<T> = T extends `${infer K extends number}` ? K : never;
+
+type ToIndex<T> = [Exclude<T, keyof []>] extends [never]
+  ? number
+  : StringToNumber<T>;
+
+type ProcessStateScopeItem<
+  T,
+  key,
+  Keys extends PrimitiveOrNested[],
+  S extends State,
+  NS extends NestedState,
+  IsUndefined extends boolean,
+> = ProcessStateScope<
+  Exclude<T, Nil>[key extends keyof Exclude<T, Nil> ? key : never],
+  Keys,
+  S,
+  NS,
+  IsUndefined extends true
+    ? true
+    : [Extract<T, Nil>] extends [never]
+      ? false
+      : true,
+  false
+>;
+
+type NestedArray = Array<PrimitiveOrNested> | ReadonlyArray<PrimitiveOrNested>;
+
+type NestedObject = {
+  [key in string | number]?: PrimitiveOrNested;
+};
+
+type Primitive = boolean | string | number | undefined | null | bigint | Date;
+
+type PrimitiveOrNested = Primitive | NestedObject | NestedArray;
+
+type IsAny<T> = 0 extends 1 & T ? true : false;
+
+type AnyScope<S, IsRoot extends boolean = true> = {
+  readonly [key in string | number]: AnyScope<S, false>;
+} & EndOfScope<S, IsRoot>;
+
+type ProcessStateScope<
+  T,
+  Keys extends PrimitiveOrNested[],
+  S extends State,
+  NS extends NestedState,
+  IsUndefined extends boolean = false,
+  IsRoot extends boolean = true,
+> =
+  IsAny<T> extends true
+    ? AnyScope<S>
+    : Exclude<T, Nil> extends Primitive
+      ? EndOfScope<
+          ProcessState<
+            S,
+            T | (IsUndefined extends true ? undefined : never),
+            Keys
+          >
+        >
+      : (Exclude<T, Nil> extends any[]
+          ? {
+              readonly [key in ToIndex<
+                keyof Exclude<T, Nil>
+              >]-?: ProcessStateScopeItem<T, key, Keys, S, NS, IsUndefined>;
+            }
+          : {
+              readonly [key in keyof Exclude<T, Nil>]-?: ProcessStateScopeItem<
+                T,
+                key,
+                Keys,
+                S,
+                NS,
+                IsUndefined
+              >;
+            }) &
+          EndOfScope<
+            ProcessState<
+              NS,
+              T | (IsUndefined extends true ? undefined : never),
+              Keys
+            >,
+            IsRoot
+          >;
+
+export type NestedState<
+  Value = unknown,
+  Keys extends PrimitiveOrNested[] = [],
+> = State<Value, Keys> &
+  StateScope<() => ProcessStateScope<Value, Keys, State, NestedState>>;
 
 export type AsyncNestedState<
-  Value,
+  Value = unknown,
   Error = any,
   Keys extends PrimitiveOrNested[] = [],
 > = AsyncState<Value, Error, Keys> &
-  StatePath<{
-    <P extends ObjectPath<Value>, T = ResolvePath<Value, P>>(
-      ...path: P
-    ): [] extends Required<ObjectPath<T>>
-      ? AsyncState<T, Error, Keys>
-      : AsyncNestedState<T, Error, Keys>;
-  }>;
+  StateScope<
+    () => ProcessStateScope<Value, Keys, AsyncState, AsyncNestedState>
+  >;
 
 export type LoadableNestedState<
-  Value,
+  Value = unknown,
   Error = any,
   Keys extends PrimitiveOrNested[] = [],
 > = LoadableState<Value, Error, Keys> &
-  StatePath<{
-    <P extends ObjectPath<Value>, T = ResolvePath<Value, P>>(
-      ...path: P
-    ): [] extends Required<ObjectPath<T>>
-      ? LoadableState<T, Error, Keys>
-      : LoadableNestedState<T, Error, Keys>;
-  }>;
+  StateScope<
+    () => ProcessStateScope<Value, Keys, LoadableState, LoadableNestedState>
+  >;
 
 export type ControllableLoadableNestedState<
-  Value,
+  Value = unknown,
   Error = any,
   Keys extends PrimitiveOrNested[] = [],
 > = ControllableLoadableState<Value, Error, Keys> &
-  StatePath<{
-    <P extends ObjectPath<Value>, T = ResolvePath<Value, P>>(
-      ...path: P
-    ): [] extends Required<ObjectPath<T>>
-      ? ControllableLoadableState<T, Error, Keys>
-      : ControllableLoadableNestedState<T, Error, Keys>;
-  }>;
+  StateScope<
+    () => ProcessStateScope<
+      Value,
+      Keys,
+      ControllableLoadableState,
+      ControllableLoadableNestedState
+    >
+  >;
 
 export type AnyAsyncState<
   Value = any,
@@ -342,26 +390,29 @@ export type StorageKeysWithoutPagination<
 
 type StorageItem = State<any> | StateStorageMarker<PrimitiveOrNested, any>;
 
+type ProcessState<S extends State, V, Keys extends PrimitiveOrNested[] = []> =
+  S extends ControllableLoadableNestedState<any, infer E>
+    ? ControllableLoadableNestedState<V, E, Keys>
+    : S extends ControllableLoadableState<any, infer E>
+      ? ControllableLoadableState<V, E, Keys>
+      : S extends LoadableNestedState<any, infer E>
+        ? LoadableNestedState<V, E, Keys>
+        : S extends LoadableState<any, infer E>
+          ? LoadableState<V, E, Keys>
+          : S extends AsyncNestedState<any, infer E>
+            ? AsyncNestedState<V, E, Keys>
+            : S extends AsyncState<any, infer E>
+              ? AsyncState<V, E, Keys>
+              : S extends NestedState<any>
+                ? NestedState<V, Keys>
+                : State<V, Keys>;
+
 type ProcessStorageItem<
   T extends StorageItem,
   Keys extends PrimitiveOrNested[],
 > =
   T extends State<ResolvedValue<infer V>>
-    ? T extends ControllableLoadableNestedState<any, infer E>
-      ? ControllableLoadableNestedState<V, E, Keys>
-      : T extends ControllableLoadableState<any, infer E>
-        ? ControllableLoadableState<V, E, Keys>
-        : T extends LoadableNestedState<any, infer E>
-          ? LoadableNestedState<V, E, Keys>
-          : T extends LoadableState<any, infer E>
-            ? LoadableState<V, E, Keys>
-            : T extends AsyncNestedState<any, infer E>
-              ? AsyncNestedState<V, E, Keys>
-              : T extends AsyncState<any, infer E>
-                ? AsyncState<V, E, Keys>
-                : T extends NestedState<any>
-                  ? NestedState<V, Keys>
-                  : State<V, Keys>
+    ? ProcessState<T, V, Keys>
     : T extends StateStorage<infer K, infer T>
       ? StateStorage<K, T, Keys>
       : T;
@@ -434,30 +485,96 @@ export type PaginatedStorageUtils = StorageUtilsBase & {
   _shouldRevalidate(state: LoadableState<any>): boolean;
 };
 
-type GetNestedPathState<T, P extends PathKey[]> =
-  RetrieveState<T> extends infer S
-    ? S extends State<ResolvedValue<infer V>>
-      ? ResolvePath<V, P> extends infer V
-        ? ObjectPath<V> extends infer P
-          ? S extends ControllableLoadableState<any, infer E>
-            ? [] extends Required<P>
-              ? ControllableLoadableState<V, E>
-              : ControllableLoadableNestedState<V, E>
-            : S extends LoadableState<any, infer E>
-              ? [] extends Required<P>
-                ? LoadableState<V, E>
-                : LoadableNestedState<V, E>
-              : S extends AsyncState<any, infer E>
-                ? [] extends Required<P>
-                  ? AsyncState<V, E>
-                  : AsyncNestedState<V, E>
-                : [] extends Required<P>
-                  ? State<V>
-                  : NestedState<V>
-          : never
-        : never
-      : never
-    : never;
+type UnNestedState<S> =
+  S extends ControllableLoadableState<any, infer E>
+    ? ControllableLoadableState<any, E>
+    : S extends LoadableState<any, infer E>
+      ? LoadableState<any, E>
+      : S extends AsyncState<any, infer E>
+        ? AsyncState<any, E>
+        : S extends State
+          ? State
+          : never;
+
+type IsState<S> = S extends State ? S : never;
+
+type ProcessStateStorageScopeItem<
+  T,
+  S,
+  K extends PrimitiveOrNested,
+  ParentKeys extends PrimitiveOrNested[],
+  key,
+  IsUndefined extends boolean,
+> = ProcessStateStorageScope<
+  Exclude<T, Nil>[key extends keyof Exclude<T, Nil> ? key : never],
+  S,
+  K,
+  ParentKeys,
+  IsUndefined extends true
+    ? true
+    : [Extract<T, Nil>] extends [never]
+      ? false
+      : true,
+  false
+>;
+
+type ProcessStateStorageScope<
+  T,
+  S,
+  Key extends PrimitiveOrNested,
+  ParentKeys extends PrimitiveOrNested[],
+  IsUndefined extends boolean = false,
+  IsRoot extends boolean = true,
+> =
+  Exclude<T, Nil> extends infer K & (NestedArray | NestedObject)
+    ? (K extends NestedObject
+        ? {
+            readonly [key in keyof K]-?: ProcessStateStorageScopeItem<
+              T,
+              S,
+              Key,
+              ParentKeys,
+              key,
+              IsUndefined
+            >;
+          }
+        : {
+            readonly [key in ToIndex<keyof K>]-?: ProcessStateStorageScopeItem<
+              T,
+              S,
+              Key,
+              ParentKeys,
+              key,
+              IsUndefined
+            >;
+          }) &
+        EndOfScope<
+          StateStorage<
+            Key,
+            NestedStateStorage<
+              KeysOfStorage<S>,
+              ProcessState<
+                IsState<RetrieveState<S>>,
+                T | (IsUndefined extends true ? undefined : never)
+              >
+            >,
+            ParentKeys
+          >,
+          IsRoot
+        >
+    : EndOfScope<
+        StateStorage<
+          Key,
+          NestedStateStorage<
+            KeysOfStorage<S>,
+            ProcessState<
+              UnNestedState<RetrieveState<S>>,
+              T | (IsUndefined extends true ? undefined : never)
+            >
+          >,
+          ParentKeys
+        >
+      >;
 
 export type StateStorage<
   K extends PrimitiveOrNested,
@@ -481,21 +598,80 @@ export type StateStorage<
       [...ParentKeys, ...Keys]
     >;
     delete(key: K): void;
-  } & (T extends StatePath<(...path: any) => any>
-    ? StatePath<{
-        <
-          P extends ObjectPath<
-            RetrieveState<T> extends State<infer V> ? ResolvedValue<V> : never
-          >,
-        >(
-          ...path: P
-        ): StateStorage<
+  } & (T extends StateScope<() => any>
+    ? StateScope<
+        () => ProcessStateStorageScope<
+          RetrieveState<T> extends State<infer V> ? ResolvedValue<V> : never,
+          T,
           K,
-          NestedStateStorage<KeysOfStorage<T>, GetNestedPathState<T, P>>,
           ParentKeys
-        >;
-      }>
+        >
+      >
     : {});
+
+type ProcessPaginatedStorageScopeItem<
+  T,
+  S extends LoadableState,
+  ParentKeys extends PrimitiveOrNested[],
+  key,
+  IsUndefined extends boolean,
+> = ProcessPaginatedStorageScope<
+  Exclude<T, Nil>[key extends keyof Exclude<T, Nil> ? key : never],
+  S,
+  ParentKeys,
+  IsUndefined extends true
+    ? true
+    : [Extract<T, Nil>] extends [never]
+      ? false
+      : true,
+  false
+>;
+
+type ProcessPaginatedStorageScope<
+  T,
+  S extends LoadableState,
+  ParentKeys extends PrimitiveOrNested[],
+  IsUndefined extends boolean = false,
+  IsRoot extends boolean = true,
+> =
+  Exclude<T, Nil> extends infer K & (NestedArray | NestedObject)
+    ? (K extends NestedObject
+        ? {
+            readonly [key in keyof K]-?: ProcessPaginatedStorageScopeItem<
+              T,
+              S,
+              ParentKeys,
+              key,
+              IsUndefined
+            >;
+          }
+        : {
+            readonly [key in ToIndex<
+              keyof K
+            >]-?: ProcessPaginatedStorageScopeItem<
+              T,
+              S,
+              ParentKeys,
+              key,
+              IsUndefined
+            >;
+          }) &
+        EndOfScope<
+          PaginatedStateStorage<
+            ProcessState<S, T | (IsUndefined extends true ? undefined : never)>,
+            ParentKeys
+          >,
+          IsRoot
+        >
+    : EndOfScope<
+        PaginatedStateStorage<
+          ProcessState<
+            UnNestedState<S>,
+            T | (IsUndefined extends true ? undefined : never)
+          >,
+          ParentKeys
+        >
+      >;
 
 export type PaginatedStateStorage<
   T extends LoadableState<any>,
@@ -527,16 +703,14 @@ export type PaginatedStateStorage<
           errors: ReadonlyArray<E | undefined>,
         ]
       : never;
-  } & (T extends StatePath<(...path: any) => any>
-    ? StatePath<{
-        <
-          P extends ObjectPath<
-            T extends State<infer V> ? ResolvedValue<V> : never
-          >,
-        >(
-          ...path: P
-        ): PaginatedStateStorage<GetNestedPathState<T, P>, ParentKeys>;
-      }>
+  } & (T extends StateScope<() => any>
+    ? StateScope<
+        () => ProcessPaginatedStorageScope<
+          T extends LoadableState<infer V> ? V : never,
+          T,
+          ParentKeys
+        >
+      >
     : {});
 
 export type WithInitModule<T, Args extends any[]> = [

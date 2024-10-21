@@ -3,13 +3,12 @@ import type {
   ValueChangeCallbacks,
   StateInitializer,
   StateInternalUtils,
-  PathKey,
   StateCallbackMap,
   NestedState,
 } from '../types';
 import { EMPTY_ARR } from '../utils/constants';
 import processStateChanges from '../utils/processStateChanges';
-import path from '../utils/path';
+import scope from '../utils/scope';
 import noop from 'lodash.noop';
 import handleState from '../utils/handleState';
 import addToBatch from '../utils/batching';
@@ -21,7 +20,7 @@ interface _InternalUtils extends StateInternalUtils {
 const deepSet = (
   value: any,
   nextValue: any,
-  path: PathKey[],
+  path: string[],
   index: number,
   lastIndex: number,
   pushValueArr: ((value: any) => void)[]
@@ -45,11 +44,11 @@ const deepSet = (
 
   pushValueArr[index](nextValue);
 
-  if (typeof key == 'string') {
+  if (isNaN(+key)) {
     return value ? { ...value, [key]: nextValue } : { [key]: nextValue };
   }
 
-  const arr = value ? value.slice() : new Array(key + 1);
+  const arr = value ? value.slice() : new Array(+key + 1);
 
   arr[key] = nextValue;
 
@@ -59,7 +58,7 @@ const deepSet = (
 function _onValueChange(
   this: _InternalUtils,
   cb: (value: any) => void,
-  path: PathKey[]
+  path: string[]
 ) {
   let length = path.length;
 
@@ -132,7 +131,7 @@ function _onValueChange(
   };
 }
 
-function _set(this: _InternalUtils, nextValue: any, path: PathKey[]) {
+function _set(this: _InternalUtils, nextValue: any, path: string[]) {
   let currentNode: StateCallbackMap | null | undefined = this._rootMap;
 
   const root = currentNode._root;
@@ -186,7 +185,7 @@ function _set(this: _InternalUtils, nextValue: any, path: PathKey[]) {
   }
 }
 
-function _get(this: _InternalUtils, path: PathKey[]) {
+function _get(this: _InternalUtils, path: string[]) {
   const l = path.length;
 
   let value = this._value;
@@ -226,7 +225,7 @@ const createNestedState: {
   return {
     _internal: utils as _InternalUtils,
     _path: EMPTY_ARR,
-    path,
+    scope,
     _anchor: handleState(
       value,
       stateInitializer,

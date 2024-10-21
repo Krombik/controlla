@@ -7,7 +7,6 @@ import {
   StateInitializer,
   Internal,
   StateInternalUtils,
-  PathKey,
   LoadableNestedState,
   LoadableState,
   PaginatedStateStorage,
@@ -22,7 +21,7 @@ import useConst from 'react-helpful-utils/useConst';
 import alwaysFalse from '../utils/alwaysFalse';
 import alwaysTrue from '../utils/alwaysTrue';
 import { PrimitiveOrNested } from 'keyweaver';
-import path from '../utils/path';
+import scope from '../utils/scope';
 import createRequestableState from '../createRequestableState';
 import createRequestableNestedState from '../createRequestableNestedState';
 import createPollableState from '../createPollableState';
@@ -43,7 +42,7 @@ type PaginatedState = AnyLoadableState<any> & Internal<AdditionalUtils>;
 function _set(
   this: PaginatedState['_internal'],
   nextValue: any,
-  path: PathKey[],
+  path: string[],
   isError: boolean
 ) {
   this._originalSet(nextValue, path, isError);
@@ -381,7 +380,7 @@ const createPaginatedStorage: {
   createState: any,
   options: RequestableStateOptions<any, any, [number]> & Options<any>,
   stateInitializer?: StateInitializer
-) => {
+): any => {
   const { shouldRevalidate } = options;
 
   let resolve!: () => void;
@@ -411,7 +410,7 @@ const createPaginatedStorage: {
     },
     get,
     delete: _delete,
-    path,
+    scope,
     _path: EMPTY_ARR,
     keys: EMPTY_ARR,
     usePages,

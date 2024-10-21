@@ -1,6 +1,11 @@
 import noop from 'lodash.noop';
-import { ControllableLoadableNestedState, StateInternalUtils } from '../types';
+import {
+  ControllableLoadableNestedState,
+  StateInternalUtils,
+  StateScope,
+} from '../types';
 import alwaysFalse from '../utils/alwaysFalse';
+import { end$ } from '../utils/constants';
 
 const alwaysNoop = () => noop;
 
@@ -11,18 +16,37 @@ const utils: StateInternalUtils = {
   _onValueChange: alwaysNoop,
 };
 
+type Scope = StateScope<() => any>;
+
+type SkeletonState = Omit<
+  ControllableLoadableNestedState<any, any, any[]>,
+  keyof Scope
+> &
+  Scope;
+
 const SKELETON_STATE = {
   _internal: utils as any,
-  path() {
-    return this;
+  scope() {
+    const self = this;
+
+    const proxy = new Proxy(
+      {},
+      {
+        get(_, prop) {
+          return prop != end$ ? proxy : self;
+        },
+      }
+    );
+
+    return proxy;
   },
   load: alwaysNoop,
   pause: noop,
   reset: noop,
   resume: noop,
   error: { _internal: utils } as Partial<
-    ControllableLoadableNestedState<any>['error']
-  > as ControllableLoadableNestedState<any>['error'],
+    ControllableLoadableNestedState['error']
+  > as ControllableLoadableNestedState['error'],
   isLoaded: {
     _internal: {
       _value: undefined,
@@ -31,10 +55,8 @@ const SKELETON_STATE = {
       _onValueChange: alwaysNoop,
     },
   } as Partial<
-    ControllableLoadableNestedState<any>['isLoaded']
-  > as ControllableLoadableNestedState<any>['isLoaded'],
-} as Partial<
-  ControllableLoadableNestedState<any>
-> as ControllableLoadableNestedState<any>;
+    ControllableLoadableNestedState['isLoaded']
+  > as ControllableLoadableNestedState['isLoaded'],
+} as Partial<ControllableLoadableNestedState> as SkeletonState;
 
 export default SKELETON_STATE;

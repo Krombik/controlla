@@ -6,7 +6,6 @@ import type {
   ControllableLoadableStateOptions,
   ErrorStateUtils,
   StateInitializer,
-  PathKey,
 } from '../types';
 import { EMPTY_ARR } from './constants';
 import executeSetters from './executeSetters';
@@ -38,7 +37,7 @@ const handleReloadOn = (
 function _set(
   this: _InternalUtils,
   value: any,
-  path: PathKey[],
+  path: string[],
   isError: boolean
 ) {
   const prevValue = this._value;

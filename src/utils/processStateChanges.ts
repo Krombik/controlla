@@ -1,12 +1,12 @@
-import type { PathKey, StateCallbackMap } from '../types';
+import type { StateCallbackMap } from '../types';
 import alwaysFalse from './alwaysFalse';
 import addToBatch from './batching';
 
 const objectPrototype = Object.prototype;
 
 const forEachChild = (
-  storage: Map<PathKey, StateCallbackMap>,
-  fn: (key: PathKey) => void
+  storage: Map<string, StateCallbackMap>,
+  fn: (key: string) => void
 ) => {
   const it = storage.keys();
 
@@ -20,9 +20,9 @@ const forEachChild = (
 const handleMandatoryCheck = (
   prevValue: any,
   nextValue: any,
-  storage: Map<PathKey, StateCallbackMap>
-): ((key: PathKey) => boolean) | false => {
-  let equalList: Set<PathKey> | false = new Set();
+  storage: Map<string, StateCallbackMap>
+): ((key: string) => boolean) | false => {
+  let equalList: Set<string> | false = new Set();
 
   forEachChild(storage, (key) => {
     const child = storage.get(key)!;
@@ -164,9 +164,11 @@ const processStateChanges = (
     const getStorage = children ? children.get.bind(children) : alwaysFalse;
 
     for (let i = 0; i < l; i++) {
+      const key = '' + i;
+
       if (
-        !isChecked(i) &&
-        processStateChanges(prevValue[i], nextValue[i], getStorage(i))
+        !isChecked(key) &&
+        processStateChanges(prevValue[i], nextValue[i], getStorage(key))
       ) {
         return true;
       }

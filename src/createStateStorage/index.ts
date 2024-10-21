@@ -25,7 +25,7 @@ import type {
   ResolvedValue,
 } from '../types';
 import { EMPTY_ARR } from '../utils/constants';
-import path from '../utils/path';
+import scope from '../utils/scope';
 import type createState from '../createState';
 import type createAsyncState from '../createAsyncState';
 import type createNestedState from '../createNestedState';
@@ -491,7 +491,7 @@ const toStorage = (utils: StorageUtils, keys: PrimitiveOrNested[]) =>
     get,
     delete: _delete,
     keys,
-    path,
+    scope,
     _path: EMPTY_ARR,
   }) as Partial<StateStorage<any, any, any[]>> as StateStorage<any, any, any[]>;
 
