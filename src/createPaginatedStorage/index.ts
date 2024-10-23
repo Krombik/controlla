@@ -174,7 +174,7 @@ function usePages(
             let inProgressCount = l;
 
             const onDone = () => {
-              if (--inProgressCount) {
+              if (!--inProgressCount) {
                 forceRerender();
               }
             };
@@ -211,8 +211,8 @@ function usePages(
                   cleanupMap.set(page, state.load(true));
 
                   prev();
-                } else if ('reset' in state) {
-                  state.reset();
+                } else if ('loading' in state) {
+                  state.loading.reset();
                 }
               }
             }
@@ -241,8 +241,8 @@ function usePages(
                   cleanupMap.set(page, state.load(true));
 
                   prev();
-                } else if ('reset' in state) {
-                  state.reset();
+                } else if ('loading' in state) {
+                  state.loading.reset();
                 }
               }
             }

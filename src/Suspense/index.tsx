@@ -1,49 +1,51 @@
 import {
   ContextType,
   FC,
+  PropsWithChildren,
   Suspense as ReactSuspense,
-  SuspenseProps as ReactSuspenseProps,
+  SuspenseProps,
   useContext,
   useEffect,
   useRef,
 } from 'react';
 import SuspenseContext from '../utils/SuspenseContext';
-import SkeletonContext from '../utils/SkeletonContext';
+import ErrorBoundaryContext from '../utils/ErrorBoundaryContext';
 import noop from 'lodash.noop';
 
-export type SuspenseProps = ReactSuspenseProps & {
-  isSkeleton?: boolean;
+type Ctx = NonNullable<ContextType<typeof SuspenseContext>>;
+
+const Fallback: FC<PropsWithChildren<{ _ctx: Ctx }>> = (props) => {
+  const ctx = props._ctx;
+
+  const errorBoundaryCtx = useContext(ErrorBoundaryContext) || { delete: noop };
+
+  useEffect(
+    () => () => {
+      for (let i = ctx.length; i--; ) {
+        const unload = ctx[i];
+
+        unload();
+
+        errorBoundaryCtx.delete(unload);
+      }
+
+      ctx.length = 0;
+    },
+    []
+  );
+
+  return props.children;
 };
 
 const Suspense: FC<SuspenseProps> = (props) => {
-  const isNotSkeleton =
-    props.isSkeleton == null ? !useContext(SkeletonContext) : !props.isSkeleton;
+  const ctx = useRef<Ctx>([]).current;
 
-  const ctx = useRef<NonNullable<ContextType<typeof SuspenseContext>>>(
-    new Map()
-  ).current;
-
-  useEffect(
-    isNotSkeleton
-      ? () => () => {
-          const it = ctx.values();
-
-          for (let i = ctx.size; i--; ) {
-            it.next().value();
-          }
-
-          ctx.clear();
-        }
-      : noop,
-    [isNotSkeleton]
-  );
-
-  return isNotSkeleton ? (
-    <SuspenseContext.Provider value={ctx}>
-      <ReactSuspense {...props} />
-    </SuspenseContext.Provider>
-  ) : (
-    props.fallback
+  return (
+    <ReactSuspense fallback={<Fallback _ctx={ctx}>{props.fallback}</Fallback>}>
+      <SuspenseContext.Provider value={ctx}>
+        {props.children}
+      </SuspenseContext.Provider>
+    </ReactSuspense>
   );
 };
 

@@ -9,22 +9,14 @@ const ORIGINAL_WILL_UNMOUNT = Symbol();
 
 const CTX = Symbol();
 
-declare class ErrorBoundary extends Component {
-  /** @internal */
-  readonly [CTX]: ContextType<typeof ErrorBoundaryContext>;
-  readonly [ORIGINAL_RENDER]: Component['render'];
-  readonly [ORIGINAL_DID_CATCH]: Component['componentDidCatch'];
-  readonly [ORIGINAL_WILL_UNMOUNT]: Component['componentWillUnmount'];
-}
-
-const wrapErrorBoundary = (
-  component: typeof Component
-): typeof ErrorBoundary => {
+const wrapErrorBoundary = <T extends typeof Component>(component: T): T => {
   const { render, componentDidCatch, componentWillUnmount } =
     component.prototype;
 
+  //@ts-expect-error
   return class extends component {
-    readonly [CTX]: ContextType<typeof ErrorBoundaryContext> = new Map();
+    readonly [CTX]: NonNullable<ContextType<typeof ErrorBoundaryContext>> =
+      new Set();
 
     readonly [ORIGINAL_RENDER] = render;
 

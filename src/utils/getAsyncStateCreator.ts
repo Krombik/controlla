@@ -40,18 +40,18 @@ function _set(
   path: string[],
   isError: boolean
 ) {
-  const prevValue = this._value;
+  const prevRootValue = this._value;
 
   this._isFetchInProgress = false;
 
   this._commonSet(value, path);
 
-  const newValue = this._value;
+  const newRootValue = this._value;
 
-  const isSet = newValue !== undefined;
+  const isSet = newRootValue !== undefined;
 
   const isLoaded = isSet
-    ? this._isLoaded(newValue, prevValue, this._attempt)
+    ? this._isLoaded(newRootValue, prevRootValue, this._attempt)
     : isError;
 
   if (this._attempt != null) {
@@ -84,7 +84,7 @@ function _set(
     this._errorUtils._set(undefined, path);
 
     if (isSet && this._promise) {
-      this._promise._resolve(newValue);
+      this._promise._resolve(newRootValue);
 
       this._promise = null;
     }
@@ -294,7 +294,15 @@ const getAsyncStateCreator =
 
     return _load
       ? pause && resume && reset
-        ? { ...state, load, pause, resume, reset }
+        ? {
+            ...state,
+            load,
+            loading: {
+              pause,
+              resume,
+              reset,
+            },
+          }
         : {
             ...state,
             load,

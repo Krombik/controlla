@@ -3,7 +3,7 @@ import type { AnyAsyncState, AsyncState, Falsy } from '../types';
 import useNoop from '../utils/useNoop';
 import ErrorBoundaryContext from '../utils/ErrorBoundaryContext';
 import SuspenseContext from '../utils/SuspenseContext';
-import { handleLoad } from '../utils/handleSuspense';
+import handleSuspense from '../utils/handleSuspense';
 import useHandleSuspenseValue from '../utils/useHandleSuspenseValue';
 import useForceRerender from 'react-helpful-utils/useForceRerender';
 
@@ -27,17 +27,12 @@ const use = ((
     }
 
     if (utils._value !== undefined || isError) {
-      const value = useHandleSuspenseValue(
-        state,
-        errorBoundaryCtx,
-        suspenseCtx,
-        useForceRerender()
-      );
+      const value = useHandleSuspenseValue(state, useForceRerender());
 
       return safeReturn ? [value, err] : value;
     }
 
-    throw handleLoad(state, errorBoundaryCtx, suspenseCtx);
+    throw handleSuspense(state, errorBoundaryCtx, suspenseCtx);
   }
 
   useNoop();

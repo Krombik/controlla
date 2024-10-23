@@ -30,7 +30,6 @@ export { default as withoutLoading } from './withoutLoading';
 export { default as wrapErrorBoundary } from './wrapErrorBoundary';
 
 export { default as PaginationController } from './PaginationController';
-export { default as SkeletonMode } from './SkeletonMode';
 export { default as MappedController } from './MappedController';
 export { default as MergedController } from './MergedController';
 export { default as Controller } from './Controller';

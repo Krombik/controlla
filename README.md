@@ -33,7 +33,7 @@ pnpm add react-state-forge
 
 ## API
 
-- [createState / createNestedState](#createstate)
+- [createState](#createstate) / [createNestedState](#createnstedstate)
 - [createAsyncState / createAsyncNestedState](#createasyncstate)
 - [createRequestableState / createRequestableNestedState](#createrequestablestate)
 - [createPollableState / createPollableNestedState](#createpollablestate)
@@ -55,9 +55,9 @@ pnpm add react-state-forge
 | [.isLoaded](#.isLoaded)                                                                                                               |       ❌        |            ✅             |               ✅                |                           ✅                            |
 | [.load](#.load)                                                                                                                       |       ❌        |            ❌             |               ✅                |                           ✅                            |
 | [withoutLoading](#withoutloading)                                                                                                     |       ❌        |            ❌             |               ✅                |                           ✅                            |
-| [.pause](#.pause)                                                                                                                     |       ❌        |            ❌             |               ❌                |                           ✅                            |
-| [.resume](#.resume)                                                                                                                   |       ❌        |            ❌             |               ❌                |                           ✅                            |
-| [.reset](#.reset)                                                                                                                     |       ❌        |            ❌             |               ❌                |                           ✅                            |
+| [.loading.pause](#.loading.pause)                                                                                                     |       ❌        |            ❌             |               ❌                |                           ✅                            |
+| [.loading.resume](#.loading.resume)                                                                                                   |       ❌        |            ❌             |               ❌                |                           ✅                            |
+| [.loading.reset](#.loading.reset)                                                                                                     |       ❌        |            ❌             |               ❌                |                           ✅                            |
 
 - [createStateStorage](#createstatestorage)
 
@@ -66,10 +66,287 @@ pnpm add react-state-forge
 - [Suspense](#suspense)
 - [wrapErrorBoundary](#wraperrorboundary)
 
-- [SkeletonMode](#skeletonmode)
+- [bachedUpdates](#butchedupdates)
+
 - [SKELETON_STATE](#skeleton_state)
 
-### method
+### createState
+
+```ts
+createState<T>(): State<T | undefined>;
+
+createState<T>(initialValue: T): State<T>;
+
+createState<T>(getInitialValue: () => T): State<T>;
+```
+
+Creates a basic state with an initial value.
+
+```tsx
+import createState from 'react-state-forge/createState';
+import useValue from 'react-state-forge/useValue';
+import setValue from 'react-state-forge/setValue';
+
+const togglerState = createState(false);
+
+const Togglers = () => (
+  <div>
+    <button
+      onClick={() => {
+        setValue(togglerState, true);
+      }}
+    >
+      turn on
+    </button>
+    <button
+      onClick={() => {
+        setValue(togglerState, false);
+      }}
+    >
+      turn off
+    </button>
+    <button
+      onClick={() => {
+        setValue(togglerState, (prevValue) => !prevValue);
+      }}
+    >
+      switch
+    </button>
+  </div>
+);
+
+const Light = () => {
+  const value = useValue(togglerState);
+
+  return <div>light {value ? 'on' : 'off'}</div>;
+};
+
+const Component = () => (
+  <div>
+    <div>
+      <Light />
+    </div>
+    <div>
+      <Togglers />
+    </div>
+  </div>
+);
+```
+
+---
+
+### createNestedState
+
+```ts
+createNestedState<T>(): NestedState<T | undefined>;
+
+createNestedState<T>(initialValue: T): NestedState<T>;
+
+createNestedState<T>(getInitialValue: () => T): NestedState<T>;
+```
+
+Creates a **nested state**, where individual parts behave independently, triggering updates only when specific parts change. It allows for more efficient reactivity in complex data structures by minimizing unnecessary rerenders.
+
+```tsx
+import createNestedState from 'react-state-forge/createNestedState';
+import useValue from 'react-state-forge/useValue';
+import setValue from 'react-state-forge/setValue';
+
+const userState = createNestedState({
+  profile: { name: 'Alice', age: 25 },
+});
+
+const Name = () => {
+  const nameState = userState.scope().profile.name.end$;
+
+  const name = useValue(nameState);
+
+  return (
+    <input
+      value={name}
+      onChange={(e) => {
+        setValue(nameState, e.target.value);
+      }}
+    />
+  );
+};
+
+const Age = () => {
+  const ageState = userState.scope().profile.age.end$;
+
+  const age = useValue(ageState);
+
+  return (
+    <input
+      value={age}
+      type='number'
+      onChange={(e) => {
+        setValue(ageState, +e.target.value);
+      }}
+    />
+  );
+};
+
+const Component = () => (
+  <div>
+    <div>
+      <Name />
+    </div>
+    <div>
+      <Age />
+    </div>
+  </div>
+);
+```
+
+---
+
+### createAsyncState
+
+```ts
+createAsyncState<T, E = any>(
+  options?: AsyncStateOptions<T>,
+  stateInitializer?: StateInitializer<T>
+): AsyncState<T, E>;
+
+createAsyncState<T, E = any>(
+  options: LoadableStateOptions<T, E>,
+  stateInitializer?: StateInitializer<T>
+): LoadableState<T, E>;
+
+createAsyncState<T, E = any>(
+  options: ControllableLoadableStateOptions<T, E>,
+  stateInitializer?: StateInitializer<T>
+): ControllableLoadableState<T, E>;
+
+type AsyncStateOptions<T> = {
+  value?: T | (() => T);
+  isLoaded?(value: T, prevValue: T | undefined, attempt: number): boolean;
+};
+
+type LoadableStateOptions<T, E = any> = AsyncStateOptions<T> & {
+  load(this: AsyncState<T, E>): void | (() => void);
+  loadingTimeout?: number;
+  reloadIfStale?: number;
+  reloadOnFocus?: number;
+};
+
+type ControllableLoadableStateOptions<T, E = any> = LoadableStateOptions<
+  T,
+  E
+> & {
+  pause(): void;
+  resume(): void;
+  reset(): void;
+};
+```
+
+Creates a state with varying levels of capabilities based on the provided options:
+
+<ul>
+<li>
+AsyncState: A basic asynchronous state that resolves a value once it’s set.
+
+```ts
+createAsyncState<T, E = any>(
+  options?: AsyncStateOptions<T>
+): AsyncState<T, E>;
+
+type AsyncStateOptions<T> = {
+  value?: T | (() => T);
+  isLoaded?(value: T, prevValue: T | undefined, attempt: number): boolean;
+};
+```
+
+</li>
+<li>
+LoadableState: Adds explicit loading functionality, allowing the state to be loaded or reloaded.
+
+```ts
+createAsyncState<T, E = any>(
+  options: LoadableStateOptions<T, E>
+): LoadableState<T, E>;
+
+type LoadableStateOptions<T, E = any> = AsyncStateOptions<T> & {
+  load(this: AsyncState<T, E>): void | (() => void);
+  loadingTimeout?: number;
+  reloadIfStale?: number;
+  reloadOnFocus?: number;
+};
+```
+
+</li>
+<li id="controllableloadablestate">
+ControllableLoadableState: Extends LoadableState with additional control over the loading process, including pause, resume, and reset.
+
+```ts
+createAsyncState<T, E = any>(
+  options: ControllableLoadableStateOptions<T, E>
+): ControllableLoadableState<T, E>;
+
+type ControllableLoadableStateOptions<T, E = any> = LoadableStateOptions<
+  T,
+  E
+> & {
+  pause(): void;
+  resume(): void;
+  reset(): void;
+};
+```
+
+</li>
+</ul>
+
+```tsx
+import createState from 'react-state-forge/createState';
+import useValue from 'react-state-forge/useValue';
+import setValue from 'react-state-forge/setValue';
+
+const togglerState = createState(false);
+
+const Togglers = () => (
+  <div>
+    <button
+      onClick={() => {
+        setValue(togglerState, true);
+      }}
+    >
+      turn on
+    </button>
+    <button
+      onClick={() => {
+        setValue(togglerState, false);
+      }}
+    >
+      turn off
+    </button>
+    <button
+      onClick={() => {
+        setValue(togglerState, (prevValue) => !prevValue);
+      }}
+    >
+      switch
+    </button>
+  </div>
+);
+
+const Light = () => {
+  const value = useValue(togglerState);
+
+  return <div>light {value ? 'on' : 'off'}</div>;
+};
+
+const Component = () => (
+  <div>
+    <div>
+      <Light />
+    </div>
+    <div>
+      <Togglers />
+    </div>
+  </div>
+);
+```
 
 ---
 

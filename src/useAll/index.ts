@@ -1,4 +1,4 @@
-import { ContextType, useContext, useLayoutEffect } from 'react';
+import { useContext, useLayoutEffect } from 'react';
 import type {
   AnyAsyncState,
   Falsy,
@@ -9,37 +9,10 @@ import type {
 } from '../types';
 import noop from 'lodash.noop';
 import ErrorBoundaryContext from '../utils/ErrorBoundaryContext';
-import { handleLoad } from '../utils/handleSuspense';
+import handleSuspense from '../utils/handleSuspense';
 import SuspenseContext from '../utils/SuspenseContext';
 import useForceRerender from 'react-helpful-utils/useForceRerender';
 import useHandleSuspenseValue from '../utils/useHandleSuspenseValue';
-
-const awaitAll = (
-  states: AnyAsyncState[],
-  errorBoundaryCtx: ContextType<typeof ErrorBoundaryContext>,
-  suspenseCtx: ContextType<typeof SuspenseContext>,
-  settle?: boolean
-) =>
-  new Promise<void>((res) => {
-    const l = states.length;
-
-    let inProgressCount = l;
-
-    const onResolve = () => {
-      if (--inProgressCount) {
-        res();
-      }
-    };
-
-    const onReject = settle ? onResolve : res;
-
-    for (let i = 0; i < l; i++) {
-      handleLoad(states[i], errorBoundaryCtx, suspenseCtx).then(
-        onResolve,
-        onReject
-      );
-    }
-  });
 
 const useAll = ((states: (AnyAsyncState | Falsy)[], safeReturn?: boolean) => {
   const l = states.length;
@@ -69,14 +42,7 @@ const useAll = ((states: (AnyAsyncState | Falsy)[], safeReturn?: boolean) => {
       }
 
       if (utils._value !== undefined || isError) {
-        values.push(
-          useHandleSuspenseValue(
-            state,
-            errorBoundaryCtx,
-            suspenseCtx,
-            forceRerender
-          )
-        );
+        values.push(useHandleSuspenseValue(state, forceRerender));
 
         errors.push(err);
       } else {
@@ -100,12 +66,27 @@ const useAll = ((states: (AnyAsyncState | Falsy)[], safeReturn?: boolean) => {
           }
         }
 
-        throw awaitAll(
-          unloadedStates,
-          errorBoundaryCtx,
-          suspenseCtx,
-          safeReturn
-        );
+        throw new Promise<void>((res) => {
+          const l = unloadedStates.length;
+
+          let inProgressCount = l;
+
+          const onResolve = () => {
+            if (!--inProgressCount) {
+              res();
+            }
+          };
+
+          const onReject = safeReturn ? onResolve : res;
+
+          for (let i = 0; i < l; i++) {
+            handleSuspense(
+              unloadedStates[i],
+              errorBoundaryCtx,
+              suspenseCtx
+            ).then(onResolve, onReject);
+          }
+        });
       }
     } else {
       values.length++;

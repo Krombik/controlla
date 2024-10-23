@@ -2,15 +2,10 @@ import getValue from '../getValue';
 import { AnyAsyncState } from '../types';
 import handleUnlisteners from './handleUnlisteners';
 import onValueChange from '../onValueChange';
-import { handleUnload } from './handleSuspense';
-import { ContextType, useLayoutEffect } from 'react';
-import ErrorBoundaryContext from './ErrorBoundaryContext';
-import SuspenseContext from './SuspenseContext';
+import { useLayoutEffect } from 'react';
 
 const useHandleSuspenseValue = (
   state: AnyAsyncState,
-  errorBoundaryCtx: ContextType<typeof ErrorBoundaryContext>,
-  suspenseCtx: ContextType<typeof SuspenseContext>,
   forceRerender: () => void
 ) => {
   const utils = state._internal;
@@ -30,9 +25,7 @@ const useHandleSuspenseValue = (
                 }
               }
         ),
-        'load' in state &&
-          !state._withoutLoading &&
-          (handleUnload(utils, errorBoundaryCtx, suspenseCtx) || state.load())
+        'load' in state && !state._withoutLoading && state.load()
       ),
     [utils, state._path && state._path.join('.')]
   );

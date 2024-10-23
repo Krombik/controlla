@@ -1,6 +1,6 @@
-import { FC, PropsWithChildren } from 'react';
+import { FC, PropsWithChildren, SuspenseProps } from 'react';
 import { AsyncState, ExtractErrors, Falsy } from '../types';
-import Suspense, { SuspenseProps } from '../Suspense';
+import Suspense from '../Suspense';
 import useAll from '../useAll';
 import awaitOnly from '../awaitOnly';
 
@@ -9,7 +9,7 @@ type Props<S extends (AsyncState<any> | Falsy)[]> = PropsWithChildren & {
   renderIfError?:
     | ((errors: ExtractErrors<S>) => ReturnType<FC>)
     | ReturnType<FC>;
-} & Pick<SuspenseProps, 'fallback' | 'isSkeleton'>;
+} & Pick<SuspenseProps, 'fallback'>;
 
 const AllStatesValue: FC<Props<any[]>> = ({
   states,
@@ -38,7 +38,7 @@ const SuspenseOnlyAllController = <
 >(
   props: Props<S>
 ) => (
-  <Suspense fallback={props.fallback} isSkeleton={props.isSkeleton}>
+  <Suspense fallback={props.fallback}>
     <AllStatesValue {...(props as any)} />
   </Suspense>
 );

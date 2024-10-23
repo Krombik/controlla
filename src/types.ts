@@ -81,7 +81,7 @@ export type AsyncStateUtils = {
   readonly _errorUtils: ErrorStateUtils & StateInternalUtils;
   readonly _isLoadedUtils: StateInternalUtils;
   _promise: {
-    _promise: Promise<any>;
+    readonly _promise: Promise<any>;
     _resolve(value: any): void;
     _reject(error: any): void;
   } | null;
@@ -129,9 +129,11 @@ export type ControllableLoadableState<
   Error = any,
   Keys extends PrimitiveOrNested[] = [],
 > = LoadableState<Value, Error, Keys> & {
-  pause(): void;
-  resume(): void;
-  reset(): void;
+  readonly loading: {
+    pause(): void;
+    resume(): void;
+    reset(): void;
+  };
 };
 
 export type InternalPathBase = {

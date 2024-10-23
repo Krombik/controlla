@@ -1,9 +1,5 @@
 import { createContext } from 'react';
-import type { StateInternalUtils } from '../types';
 
-const SuspenseContext = createContext<Map<
-  StateInternalUtils,
-  () => void
-> | null>(null);
+const SuspenseContext = createContext<Array<() => void> | null>(null);
 
 export default SuspenseContext;

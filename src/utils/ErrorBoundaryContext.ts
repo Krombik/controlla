@@ -1,8 +1,5 @@
 import { createContext } from 'react';
-import type { StateInternalUtils } from '../types';
 
-const ErrorBoundaryContext = createContext<Map<StateInternalUtils, () => void>>(
-  new Map()
-);
+const ErrorBoundaryContext = createContext<Set<() => void> | null>(null);
 
 export default ErrorBoundaryContext;

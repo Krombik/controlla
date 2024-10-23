@@ -1,7 +1,7 @@
-import { FC, PropsWithChildren } from 'react';
+import { FC, PropsWithChildren, SuspenseProps } from 'react';
 import { AsyncState } from '../types';
 import use from '../use';
-import Suspense, { SuspenseProps } from '../Suspense';
+import Suspense from '../Suspense';
 import awaitOnly from '../awaitOnly';
 
 type Props<S extends AsyncState<any>> = PropsWithChildren & {
@@ -11,7 +11,7 @@ type Props<S extends AsyncState<any>> = PropsWithChildren & {
         error: S extends AsyncState<any, infer E> ? E : never
       ) => ReturnType<FC>)
     | ReturnType<FC>;
-} & Pick<SuspenseProps, 'fallback' | 'isSkeleton'>;
+} & Pick<SuspenseProps, 'fallback'>;
 
 const StateValue: FC<Props<AsyncState<any>>> = ({
   state,
@@ -34,7 +34,7 @@ const StateValue: FC<Props<AsyncState<any>>> = ({
 };
 
 const SuspenseOnlyController = <S extends AsyncState<any>>(props: Props<S>) => (
-  <Suspense fallback={props.fallback} isSkeleton={props.isSkeleton}>
+  <Suspense fallback={props.fallback}>
     <StateValue {...props} />
   </Suspense>
 );

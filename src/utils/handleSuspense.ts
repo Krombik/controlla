@@ -1,61 +1,34 @@
 import { ContextType } from 'react';
-import { AnyAsyncState, AsyncState } from '../types';
-import ErrorBoundaryContext from './ErrorBoundaryContext';
-import SuspenseContext from './SuspenseContext';
+import { AnyAsyncState } from '../types';
+import type ErrorBoundaryContext from './ErrorBoundaryContext';
+import type SuspenseContext from './SuspenseContext';
 import getPromise from '../getPromise';
+import { SkeletonState } from '../SKELETON_STATE';
 
-export const handleLoad = (
-  state: AnyAsyncState,
+const handleSuspense = (
+  state: AnyAsyncState | SkeletonState,
   errorBoundaryCtx: ContextType<typeof ErrorBoundaryContext>,
   suspenseCtx: ContextType<typeof SuspenseContext>
 ) => {
+  if ('_fakeSuspense' in state) {
+    return state._fakeSuspense(suspenseCtx, errorBoundaryCtx);
+  }
+
   if ('load' in state && !state._withoutLoading) {
-    const utils = state._internal;
+    if (suspenseCtx) {
+      const unload = state.load();
 
-    if (!errorBoundaryCtx.has(utils)) {
-      let unload: () => void;
+      suspenseCtx.push(unload);
 
-      if (suspenseCtx) {
-        if (suspenseCtx.has(utils)) {
-          unload = suspenseCtx.get(utils)!;
-        } else {
-          unload = state.load();
-
-          suspenseCtx.set(utils, unload);
-        }
-      } else {
-        unload = state.load();
+      if (errorBoundaryCtx) {
+        errorBoundaryCtx.add(unload);
       }
-
-      errorBoundaryCtx.set(utils, unload);
-    } else if (suspenseCtx && !suspenseCtx.has(utils)) {
-      suspenseCtx.set(utils, errorBoundaryCtx.get(utils)!);
+    } else {
+      throw new Error('No Suspense Wrapper');
     }
   }
 
   return getPromise(state, true);
 };
 
-export const handleUnload = (
-  utils: AsyncState['_internal'],
-  errorBoundaryCtx: ContextType<typeof ErrorBoundaryContext>,
-  suspenseCtx: ContextType<typeof SuspenseContext>
-) => {
-  let unload: (() => void) | undefined;
-
-  if (errorBoundaryCtx.has(utils)) {
-    unload = errorBoundaryCtx.get(utils)!;
-
-    errorBoundaryCtx.delete(utils);
-
-    if (suspenseCtx) {
-      suspenseCtx.delete(utils);
-    }
-  } else if (suspenseCtx && suspenseCtx.has(utils)) {
-    unload = suspenseCtx.get(utils)!;
-
-    suspenseCtx.delete(utils);
-  }
-
-  return unload;
-};
+export default handleSuspense;
