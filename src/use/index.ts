@@ -37,6 +37,12 @@ const use = ((
 
   useNoop();
 }) as {
+  /**
+   * Hook to retrieve the current value of the loaded {@link state}.
+   * If the {@link state} isn't loaded, the component using this hook suspends.
+   * Ensure the component is wrapped in a <Suspense> component to handle the loading state.
+   * If loading fails and {@link safeReturn} is not enabled, an error is thrown.
+   */
   <S extends AsyncState<any> | Falsy, SafeReturn extends boolean = false>(
     state: S,
     safeReturn?: SafeReturn

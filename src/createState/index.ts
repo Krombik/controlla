@@ -5,7 +5,7 @@ import type {
   StateInitializer,
   State,
 } from '../types';
-import addToBatch from '../utils/batching';
+import { addToBatch } from '../utils/batching';
 import handleState from '../utils/handleState';
 
 type _InternalUtils = StateInternalUtils & {

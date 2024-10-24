@@ -1,7 +1,7 @@
-import { postBatchCallbacks, scheduleBatch } from '../utils/batching';
+import { postBatchCallbacksPush, scheduleBatch } from '../utils/batching';
 
 const batchedUpdates = (callback: () => void) => {
-  postBatchCallbacks.push(callback);
+  postBatchCallbacksPush(callback);
 
   scheduleBatch();
 };

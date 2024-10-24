@@ -11,7 +11,7 @@ import processStateChanges from '../utils/processStateChanges';
 import scope from '../utils/scope';
 import noop from 'lodash.noop';
 import handleState from '../utils/handleState';
-import addToBatch from '../utils/batching';
+import { addToBatch } from '../utils/batching';
 
 interface _InternalUtils extends StateInternalUtils {
   _rootMap: StateCallbackMap;
@@ -44,7 +44,7 @@ const deepSet = (
 
   pushValueArr[index](nextValue);
 
-  if (isNaN(+key)) {
+  if (value != null ? !Array.isArray(value) : isNaN(+key)) {
     return value ? { ...value, [key]: nextValue } : { [key]: nextValue };
   }
 

@@ -1,6 +1,6 @@
 import type { StateCallbackMap } from '../types';
 import alwaysFalse from './alwaysFalse';
-import addToBatch from './batching';
+import { addToBatch } from './batching';
 
 const objectPrototype = Object.prototype;
 

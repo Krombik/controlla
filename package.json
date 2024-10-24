@@ -43,7 +43,7 @@
   "keywords": [],
   "sideEffects": false,
   "dependencies": {
-    "keyweaver": "^1.0.2",
+    "keyweaver": "^1.0.3",
     "lodash.identity": "^3.0.0",
     "lodash.noop": "^3.0.1",
     "react-helpful-utils": "^1.0.6"

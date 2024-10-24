@@ -24,5 +24,5 @@
     "types": ["node"]
   },
   "include": ["src", "tsup.config.ts"],
-  "exclude": ["node_modules", "build", "example"]
+  "exclude": ["node_modules", "example", "build"]
 }

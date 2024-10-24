@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       keyweaver:
-        specifier: ^1.0.2
-        version: 1.0.2
+        specifier: ^1.0.3
+        version: 1.0.3
       lodash.identity:
         specifier: ^3.0.0
         version: 3.0.0
@@ -487,8 +487,8 @@ packages:
     resolution: {integrity: sha512-34wB/Y7MW7bzjKRjUKTa46I2Z7eV62Rkhva+KkopW7Qvv/OSWBqvkSY7vusOPrNuZcUG3tApvdVgNB8POj3SPw==}
     engines: {node: '>=10'}
 
-  keyweaver@1.0.2:
-    resolution: {integrity: sha512-DBzI110GfjGP8IpjV7j35lXYBZxiPXfR+Pof4pKsDwBx7KtKqz1NrO0I2gQ1iUaRQZsfvKeit0HxIKgl6BdcvA==}
+  keyweaver@1.0.3:
+    resolution: {integrity: sha512-SGIjcNeSvhQyYGWvSkgWC0rqvZicJNOKiivT/ZVTroE+vZ50jbipXFOpx+rKUAtFS8/YLEm9oM3cL0leqWFp3Q==}
     engines: {node: '>=10'}
 
   lilconfig@3.1.2:
@@ -1090,7 +1090,7 @@ snapshots:
 
   joycon@3.1.1: {}
 
-  keyweaver@1.0.2: {}
+  keyweaver@1.0.3: {}
 
   lilconfig@3.1.2: {}
 

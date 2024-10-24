@@ -1,4 +1,4 @@
-// import type { NestedArray, NestedObject, PrimitiveOrNested } from 'keyweaver';
+import type { Primitive, PrimitiveOrNested } from 'keyweaver';
 import type { end$ } from './utils/constants';
 
 declare const PENDING: unique symbol;
@@ -99,6 +99,7 @@ export type AsyncStateUtils = {
   } | null;
 };
 
+/** State that supports asynchronous operations, extends {@link State} */
 export type AsyncState<
   Value = unknown,
   Error = any,
@@ -108,9 +109,11 @@ export type AsyncState<
   Internal<AsyncStateUtils> & {
     /** @internal */
     readonly _awaitOnly?: true;
+    /** A state that holds the latest error, if one occurred during loading. */
     readonly error: State<Error | undefined> &
       /** @internal */
       Internal<ErrorStateUtils>;
+    /** A state that indicates whether the state has successfully loaded */
     readonly isLoaded: State<boolean>;
   };
 
@@ -176,16 +179,6 @@ type ProcessStateScopeItem<
       : true,
   false
 >;
-
-type NestedArray = Array<PrimitiveOrNested> | ReadonlyArray<PrimitiveOrNested>;
-
-type NestedObject = {
-  [key in string | number]?: PrimitiveOrNested;
-};
-
-type Primitive = boolean | string | number | undefined | null | bigint | Date;
-
-type PrimitiveOrNested = Primitive | NestedObject | NestedArray;
 
 type IsAny<T> = 0 extends 1 & T ? true : false;
 
@@ -528,55 +521,62 @@ type ProcessStateStorageScope<
   IsUndefined extends boolean = false,
   IsRoot extends boolean = true,
 > =
-  Exclude<T, Nil> extends infer K & (NestedArray | NestedObject)
-    ? (K extends NestedObject
-        ? {
-            readonly [key in keyof K]-?: ProcessStateStorageScopeItem<
-              T,
-              S,
-              Key,
-              ParentKeys,
-              key,
-              IsUndefined
-            >;
-          }
-        : {
-            readonly [key in ToIndex<keyof K>]-?: ProcessStateStorageScopeItem<
-              T,
-              S,
-              Key,
-              ParentKeys,
-              key,
-              IsUndefined
-            >;
-          }) &
-        EndOfScope<
+  IsAny<T> extends true
+    ? AnyScope<S>
+    : Exclude<T, Nil> extends Primitive
+      ? EndOfScope<
           StateStorage<
             Key,
             NestedStateStorage<
               KeysOfStorage<S>,
               ProcessState<
-                IsState<RetrieveState<S>>,
+                UnNestedState<RetrieveState<S>>,
                 T | (IsUndefined extends true ? undefined : never)
               >
             >,
             ParentKeys
-          >,
-          IsRoot
+          >
         >
-    : EndOfScope<
-        StateStorage<
-          Key,
-          NestedStateStorage<
-            KeysOfStorage<S>,
-            ProcessState<
-              UnNestedState<RetrieveState<S>>,
-              T | (IsUndefined extends true ? undefined : never)
-            >
-          >,
-          ParentKeys
-        >
-      >;
+      : (Exclude<T, Nil> extends any[]
+          ? {
+              readonly [key in ToIndex<
+                keyof Exclude<T, Nil>
+              >]-?: ProcessStateStorageScopeItem<
+                T,
+                S,
+                Key,
+                ParentKeys,
+                key,
+                IsUndefined
+              >;
+            }
+          : {
+              readonly [key in keyof Exclude<
+                T,
+                Nil
+              >]-?: ProcessStateStorageScopeItem<
+                T,
+                S,
+                Key,
+                ParentKeys,
+                key,
+                IsUndefined
+              >;
+            }) &
+          EndOfScope<
+            StateStorage<
+              Key,
+              NestedStateStorage<
+                KeysOfStorage<S>,
+                ProcessState<
+                  IsState<RetrieveState<S>>,
+                  T | (IsUndefined extends true ? undefined : never)
+                >
+              >,
+              ParentKeys
+            >,
+            IsRoot
+          >;
 
 export type StateStorage<
   K extends PrimitiveOrNested,
@@ -636,44 +636,52 @@ type ProcessPaginatedStorageScope<
   IsUndefined extends boolean = false,
   IsRoot extends boolean = true,
 > =
-  Exclude<T, Nil> extends infer K & (NestedArray | NestedObject)
-    ? (K extends NestedObject
-        ? {
-            readonly [key in keyof K]-?: ProcessPaginatedStorageScopeItem<
-              T,
-              S,
-              ParentKeys,
-              key,
-              IsUndefined
-            >;
-          }
-        : {
-            readonly [key in ToIndex<
-              keyof K
-            >]-?: ProcessPaginatedStorageScopeItem<
-              T,
-              S,
-              ParentKeys,
-              key,
-              IsUndefined
-            >;
-          }) &
-        EndOfScope<
+  IsAny<T> extends true
+    ? AnyScope<PaginatedStateStorage<S, ParentKeys>>
+    : Exclude<T, Nil> extends Primitive
+      ? EndOfScope<
           PaginatedStateStorage<
-            ProcessState<S, T | (IsUndefined extends true ? undefined : never)>,
+            ProcessState<
+              UnNestedState<S>,
+              T | (IsUndefined extends true ? undefined : never)
+            >,
             ParentKeys
-          >,
-          IsRoot
+          >
         >
-    : EndOfScope<
-        PaginatedStateStorage<
-          ProcessState<
-            UnNestedState<S>,
-            T | (IsUndefined extends true ? undefined : never)
-          >,
-          ParentKeys
-        >
-      >;
+      : (Exclude<T, Nil> extends any[]
+          ? {
+              readonly [key in ToIndex<
+                keyof Exclude<T, Nil>
+              >]-?: ProcessPaginatedStorageScopeItem<
+                T,
+                S,
+                ParentKeys,
+                key,
+                IsUndefined
+              >;
+            }
+          : {
+              readonly [key in keyof Exclude<
+                T,
+                Nil
+              >]-?: ProcessPaginatedStorageScopeItem<
+                T,
+                S,
+                ParentKeys,
+                key,
+                IsUndefined
+              >;
+            }) &
+          EndOfScope<
+            PaginatedStateStorage<
+              ProcessState<
+                S,
+                T | (IsUndefined extends true ? undefined : never)
+              >,
+              ParentKeys
+            >,
+            IsRoot
+          >;
 
 export type PaginatedStateStorage<
   T extends LoadableState<any>,

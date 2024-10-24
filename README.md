@@ -33,7 +33,7 @@ pnpm add react-state-forge
 
 ## API
 
-- [createState](#createstate) / [createNestedState](#createnstedstate)
+- [createState](#createstate) / [createNestedState](#createnestedstate)
 - [createAsyncState / createAsyncNestedState](#createasyncstate)
 - [createRequestableState / createRequestableNestedState](#createrequestablestate)
 - [createPollableState / createPollableNestedState](#createpollablestate)
@@ -52,7 +52,7 @@ pnpm add react-state-forge
 | [onSlowLoading](#onslowloading)                                                                                                       |       ❌        |            ✅             |               ✅                |                           ✅                            |
 | [awaitOnly](#awaitonly) / [SuspenseOnlyController](#suspenseonlycontroller) / [SuspenseOnlyAllController](#suspenseonlyallcontroller) |       ❌        |            ✅             |               ✅                |                           ✅                            |
 | [.error](#.error)                                                                                                                     |       ❌        |            ✅             |               ✅                |                           ✅                            |
-| [.isLoaded](#.isLoaded)                                                                                                               |       ❌        |            ✅             |               ✅                |                           ✅                            |
+| [.isLoaded](#.isloaded)                                                                                                               |       ❌        |            ✅             |               ✅                |                           ✅                            |
 | [.load](#.load)                                                                                                                       |       ❌        |            ❌             |               ✅                |                           ✅                            |
 | [withoutLoading](#withoutloading)                                                                                                     |       ❌        |            ❌             |               ✅                |                           ✅                            |
 | [.loading.pause](#.loading.pause)                                                                                                     |       ❌        |            ❌             |               ❌                |                           ✅                            |
@@ -203,49 +203,11 @@ const Component = () => (
 
 ### createAsyncState
 
-```ts
-createAsyncState<T, E = any>(
-  options?: AsyncStateOptions<T>,
-  stateInitializer?: StateInitializer<T>
-): AsyncState<T, E>;
-
-createAsyncState<T, E = any>(
-  options: LoadableStateOptions<T, E>,
-  stateInitializer?: StateInitializer<T>
-): LoadableState<T, E>;
-
-createAsyncState<T, E = any>(
-  options: ControllableLoadableStateOptions<T, E>,
-  stateInitializer?: StateInitializer<T>
-): ControllableLoadableState<T, E>;
-
-type AsyncStateOptions<T> = {
-  value?: T | (() => T);
-  isLoaded?(value: T, prevValue: T | undefined, attempt: number): boolean;
-};
-
-type LoadableStateOptions<T, E = any> = AsyncStateOptions<T> & {
-  load(this: AsyncState<T, E>): void | (() => void);
-  loadingTimeout?: number;
-  reloadIfStale?: number;
-  reloadOnFocus?: number;
-};
-
-type ControllableLoadableStateOptions<T, E = any> = LoadableStateOptions<
-  T,
-  E
-> & {
-  pause(): void;
-  resume(): void;
-  reset(): void;
-};
-```
-
 Creates a state with varying levels of capabilities based on the provided options:
 
 <ul>
 <li>
-AsyncState: A basic asynchronous state that resolves a value once it’s set.
+<h3 id="asyncstate">AsyncState</h3>
 
 ```ts
 createAsyncState<T, E = any>(
@@ -258,9 +220,14 @@ type AsyncStateOptions<T> = {
 };
 ```
 
+represents a state that supports asynchronous operations. It extends a regular state by introducing the following additional internal states:
+
+- <b id=".error">.error</b>: A state that holds the latest error, if one occurred during loading.
+- <b id=".isloaded">.isLoaded</b>: A state that indicates whether the state has successfully loaded.
+
 </li>
 <li>
-LoadableState: Adds explicit loading functionality, allowing the state to be loaded or reloaded.
+<h3 id="laodablestate">LoadableState</h3>
 
 ```ts
 createAsyncState<T, E = any>(
@@ -275,9 +242,13 @@ type LoadableStateOptions<T, E = any> = AsyncStateOptions<T> & {
 };
 ```
 
+Extends [AsyncState](#asyncstate) with additional loading functionality, allowing the state to be loaded or reloaded.
+
 </li>
-<li id="controllableloadablestate">
-ControllableLoadableState: Extends LoadableState with additional control over the loading process, including pause, resume, and reset.
+<li>
+<h3 id="controllableloadablestate">ControllableLoadableState</h3>
+
+Extends [LoadableState](#laodablestate) with additional control over the loading process, including pause, resume, and reset.
 
 ```ts
 createAsyncState<T, E = any>(
@@ -296,57 +267,6 @@ type ControllableLoadableStateOptions<T, E = any> = LoadableStateOptions<
 
 </li>
 </ul>
-
-```tsx
-import createState from 'react-state-forge/createState';
-import useValue from 'react-state-forge/useValue';
-import setValue from 'react-state-forge/setValue';
-
-const togglerState = createState(false);
-
-const Togglers = () => (
-  <div>
-    <button
-      onClick={() => {
-        setValue(togglerState, true);
-      }}
-    >
-      turn on
-    </button>
-    <button
-      onClick={() => {
-        setValue(togglerState, false);
-      }}
-    >
-      turn off
-    </button>
-    <button
-      onClick={() => {
-        setValue(togglerState, (prevValue) => !prevValue);
-      }}
-    >
-      switch
-    </button>
-  </div>
-);
-
-const Light = () => {
-  const value = useValue(togglerState);
-
-  return <div>light {value ? 'on' : 'off'}</div>;
-};
-
-const Component = () => (
-  <div>
-    <div>
-      <Light />
-    </div>
-    <div>
-      <Togglers />
-    </div>
-  </div>
-);
-```
 
 ---
 

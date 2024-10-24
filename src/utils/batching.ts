@@ -6,7 +6,7 @@ const setsQueue: ValueChangeCallbacks[] = [];
 
 const valuesQueue: any[] = [];
 
-export const postBatchCallbacks: Array<() => void> = [];
+const postBatchCallbacks: Array<() => void> = [];
 
 let batchInPending = true;
 
@@ -15,26 +15,28 @@ export const scheduleBatch = () => {
     batchInPending = false;
 
     RESOLVED_PROMISE.then(() => {
-      for (let i = 0; i < setsQueue.length; i++) {
-        executeSetters(setsQueue[i], valuesQueue[i]);
-      }
+      do {
+        for (let i = 0; i < setsQueue.length; i++) {
+          executeSetters(setsQueue[i], valuesQueue[i]);
+        }
 
-      for (let i = 0; i < postBatchCallbacks.length; i++) {
-        postBatchCallbacks[i]();
-      }
+        setsQueue.length = 0;
 
-      postBatchCallbacks.length = 0;
+        valuesQueue.length = 0;
 
-      setsQueue.length = 0;
+        for (let i = 0; i < postBatchCallbacks.length; i++) {
+          postBatchCallbacks[i]();
+        }
 
-      valuesQueue.length = 0;
+        postBatchCallbacks.length = 0;
+      } while (setsQueue.length);
 
       batchInPending = true;
     });
   }
 };
 
-const addToBatch = (set: ValueChangeCallbacks, value: any) => {
+export const addToBatch = (set: ValueChangeCallbacks, value: any) => {
   setsQueue.push(set);
 
   valuesQueue.push(value);
@@ -42,4 +44,5 @@ const addToBatch = (set: ValueChangeCallbacks, value: any) => {
   scheduleBatch();
 };
 
-export default addToBatch;
+export const postBatchCallbacksPush =
+  postBatchCallbacks.push.bind(postBatchCallbacks);

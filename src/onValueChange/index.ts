@@ -1,7 +1,7 @@
 import noop from 'lodash.noop';
 import getValue from '../getValue';
 import type { State, HandlePending } from '../types';
-import { postBatchCallbacks } from '../utils/batching';
+import { postBatchCallbacksPush } from '../utils/batching';
 
 const onValueChange: {
   <T>(state: State<T>, cb: (value: HandlePending<T>) => void): () => void;
@@ -27,7 +27,7 @@ const onValueChange: {
       if (isAvailable) {
         isAvailable = false;
 
-        postBatchCallbacks.push(() => {
+        postBatchCallbacksPush(() => {
           cb(...state.map(getValue));
 
           isAvailable = true;
