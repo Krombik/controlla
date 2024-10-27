@@ -1,5 +1,6 @@
 import toKey from 'keyweaver';
 import { StateInitializer } from '../types';
+import alwaysTrue from '../utils/alwaysTrue';
 
 type SafeStorage = {
   getItem(key: string): string | undefined | null;
@@ -69,7 +70,7 @@ const getPersistInitializer = <T>({
   name,
   storage,
   converter,
-  isValid,
+  isValid = alwaysTrue,
   sharable,
 }: Options<T>): StateInitializer<T> | undefined =>
   storage &&
@@ -89,7 +90,7 @@ const getPersistInitializer = <T>({
             return;
           }
 
-          return !isValid || isValid(value) ? value : undefined;
+          return isValid(value) ? value : undefined;
         }
       },
       set(value) {
@@ -111,7 +112,7 @@ const getPersistInitializer = <T>({
                   return;
                 }
 
-                if (!isValid || isValid(parsedValue)) {
+                if (isValid(parsedValue)) {
                   setState(parsedValue);
                 }
               })

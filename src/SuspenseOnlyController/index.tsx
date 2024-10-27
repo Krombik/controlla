@@ -3,8 +3,9 @@ import { AsyncState } from '../types';
 import use from '../use';
 import Suspense from '../Suspense';
 import awaitOnly from '../awaitOnly';
+import { jsx } from 'react/jsx-runtime';
 
-type Props<S extends AsyncState<any>> = PropsWithChildren & {
+type Props<S extends AsyncState> = PropsWithChildren & {
   state: S;
   renderIfError?:
     | ((
@@ -13,7 +14,7 @@ type Props<S extends AsyncState<any>> = PropsWithChildren & {
     | ReturnType<FC>;
 } & Pick<SuspenseProps, 'fallback'>;
 
-const StateValue: FC<Props<AsyncState<any>>> = ({
+const Controller: FC<Props<AsyncState>> = ({
   state,
   renderIfError,
   children,
@@ -33,10 +34,8 @@ const StateValue: FC<Props<AsyncState<any>>> = ({
       : renderIfError;
 };
 
-const SuspenseOnlyController = <S extends AsyncState<any>>(props: Props<S>) => (
-  <Suspense fallback={props.fallback}>
-    <StateValue {...props} />
-  </Suspense>
+const SuspenseOnlyController = <S extends AsyncState>(props: Props<S>) => (
+  <Suspense fallback={props.fallback}>{jsx(Controller, props)}</Suspense>
 );
 
 export default SuspenseOnlyController;

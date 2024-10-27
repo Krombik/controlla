@@ -1,21 +1,17 @@
 import getValue from '../getValue';
-import type { HandlePending, State } from '../types';
+import type { HandlePending, ResolvedValue, State } from '../types';
 
-const setValue = <S extends State<any>>(
-  state: S,
-  value: S extends State<infer Value>
-    ?
-        | HandlePending<Value>
-        | ((prevValue: HandlePending<Value>) => HandlePending<Value>)
-    : never
-): S => {
+const setValue = <Value>(
+  state: State<Value>,
+  value:
+    | ResolvedValue<Value>
+    | ((prevValue: HandlePending<Value>) => ResolvedValue<Value>)
+) => {
   state._internal._set(
-    typeof value != 'function' ? value : value(getValue(state)),
+    typeof value != 'function' ? value : (value as Function)(getValue(state)),
     state._path!,
     false
   );
-
-  return state;
 };
 
 export default setValue;

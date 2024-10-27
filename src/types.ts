@@ -1,5 +1,5 @@
 import type { Primitive, PrimitiveOrNested } from 'keyweaver';
-import type { end$ } from './utils/constants';
+import type { $tate } from './utils/constants';
 
 declare const PENDING: unique symbol;
 
@@ -25,9 +25,9 @@ export type StateCallbackMap = {
 
 export type StateInternalUtils = {
   _value: any;
-  _set(nextValue: any, path: string[], isError?: boolean): void;
-  _get(path: string[]): any;
-  _onValueChange(cb: (value: any) => void, path: string[]): () => void;
+  _set(nextValue: any, path: readonly string[], isError?: boolean): void;
+  _get(path: readonly string[]): any;
+  _onValueChange(cb: (value: any) => void, path: readonly string[]): () => void;
 };
 
 declare const STATE_IDENTIFIER: unique symbol;
@@ -141,7 +141,7 @@ export type ControllableLoadableState<
 
 export type InternalPathBase = {
   /** @internal */
-  readonly _path?: string[];
+  readonly _path?: readonly string[];
 };
 
 export type StateScope<Scope extends () => any> = {
@@ -150,7 +150,7 @@ export type StateScope<Scope extends () => any> = {
 
 type EndOfScope<T, IsRoot extends boolean = false> = IsRoot extends false
   ? {
-      readonly [end$]: T;
+      readonly [$tate]: T;
     }
   : {};
 
@@ -285,7 +285,7 @@ export type AnyLoadableState<
   | ControllableLoadableState<Value, Error, Keys>;
 
 export type ExtractValues<
-  T extends Array<AsyncState<any> | Falsy>,
+  T extends Array<AsyncState | Falsy>,
   Nullable extends boolean = false,
 > = Readonly<{
   [index in keyof T]: T[index] extends AsyncState<infer K>
@@ -293,7 +293,7 @@ export type ExtractValues<
     : undefined;
 }>;
 
-export type ExtractErrors<T extends Array<AsyncState<any> | Falsy>> = Readonly<{
+export type ExtractErrors<T extends Array<AsyncState | Falsy>> = Readonly<{
   [index in keyof T]: T[index] extends AsyncState<any, infer K>
     ? K | undefined
     : undefined;
@@ -342,14 +342,11 @@ export type RequestableStateOptions<
   'value' | 'loadingTimeout' | 'reloadIfStale' | 'reloadOnFocus'
 > & {
   /** @internal */
-  _beforeLoad?(
-    args: PrimitiveOrNested[],
-    utils: AsyncState<any>['_internal']
-  ): void;
+  _beforeLoad?(args: PrimitiveOrNested[], utils: AsyncState['_internal']): void;
   /** @internal */
   _afterLoad?(
     args: PrimitiveOrNested[] | void,
-    utils: AsyncState<any>['_internal']
+    utils: AsyncState['_internal']
   ): Promise<PrimitiveOrNested[] | void>;
   load(...args: Keys): Promise<ResolvedValue<T>>;
   shouldRetryOnError?(err: E, attempt: number): number;
@@ -383,7 +380,7 @@ export type StorageKeysWithoutPagination<
       ? StorageKeysWithoutPagination<Item, [...Acc, Key]>
       : Acc;
 
-type StorageItem = State<any> | StateStorageMarker<PrimitiveOrNested, any>;
+type StorageItem = State | StateStorageMarker<PrimitiveOrNested, any>;
 
 type ProcessState<S extends State, V, Keys extends PrimitiveOrNested[] = []> =
   S extends ControllableLoadableNestedState<any, infer E>
@@ -398,7 +395,7 @@ type ProcessState<S extends State, V, Keys extends PrimitiveOrNested[] = []> =
             ? AsyncNestedState<V, E, Keys>
             : S extends AsyncState<any, infer E>
               ? AsyncState<V, E, Keys>
-              : S extends NestedState<any>
+              : S extends NestedState
                 ? NestedState<V, Keys>
                 : State<V, Keys>;
 
@@ -477,7 +474,7 @@ export type PaginatedStorageUtils = StorageUtilsBase & {
   _resolvePage(page: number): void;
   _promise: Promise<void>;
   _resolve(): void;
-  _shouldRevalidate(state: LoadableState<any>): boolean;
+  _shouldRevalidate(state: LoadableState): boolean;
 };
 
 type UnNestedState<S> =
@@ -684,7 +681,7 @@ type ProcessPaginatedStorageScope<
           >;
 
 export type PaginatedStateStorage<
-  T extends LoadableState<any>,
+  T extends LoadableState,
   ParentKeys extends PrimitiveOrNested[] = [],
 > = StorageKeys<ParentKeys> &
   /** @internal */

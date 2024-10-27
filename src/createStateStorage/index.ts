@@ -199,20 +199,20 @@ type PollableStateArgs<
 type StateStorageItem =
   | StorageRecord
   | PaginatedStateStorage<any>
-  | State<any>
+  | State
   | {
       [STATE_STORAGE_IDENTIFIER]: [PrimitiveOrNested, StateStorageItem];
     };
 
 type StorageRecord = {
   [key: string]:
-    | State<any>
+    | State
     | PaginatedStateStorage<any>
     | StateStorage<PrimitiveOrNested, StateStorageItem>;
 };
 
 type StateCreationArguments<
-  T extends State<any>,
+  T extends State,
   Keys extends PrimitiveOrNested[],
   ParentKeys extends PrimitiveOrNested[],
 > =
@@ -220,7 +220,7 @@ type StateCreationArguments<
     ? T extends ControllableLoadableState<any, infer E>
       ?
           | PollableStateArgs<
-              T extends ControllableLoadableNestedState<any>
+              T extends ControllableLoadableNestedState
                 ? typeof createPollableNestedState
                 : typeof createPollableState,
               V,
@@ -229,7 +229,7 @@ type StateCreationArguments<
               ParentKeys
             >
           | ControllableStateArgs<
-              T extends ControllableLoadableNestedState<any>
+              T extends ControllableLoadableNestedState
                 ? typeof createAsyncNestedState
                 : typeof createAsyncState,
               V,
@@ -240,7 +240,7 @@ type StateCreationArguments<
       : T extends LoadableState<any, infer E>
         ?
             | RequestableStateArgs<
-                T extends LoadableNestedState<any>
+                T extends LoadableNestedState
                   ? typeof createRequestableNestedState
                   : typeof createRequestableState,
                 V,
@@ -249,7 +249,7 @@ type StateCreationArguments<
                 ParentKeys
               >
             | LoadableStateArgs<
-                T extends LoadableNestedState<any>
+                T extends LoadableNestedState
                   ? typeof createAsyncNestedState
                   : typeof createAsyncState,
                 V,
@@ -257,10 +257,10 @@ type StateCreationArguments<
                 Keys,
                 ParentKeys
               >
-        : T extends AsyncState<any>
+        : T extends AsyncState
           ?
               | AsyncGetStateArgs<
-                  T extends AsyncNestedState<any>
+                  T extends AsyncNestedState
                     ? typeof createAsyncNestedState
                     : typeof createAsyncState,
                   V,
@@ -268,7 +268,7 @@ type StateCreationArguments<
                   ParentKeys
                 >
               | AsyncStateArgsWithDeepness<
-                  T extends AsyncNestedState<any>
+                  T extends AsyncNestedState
                     ? typeof createAsyncNestedState
                     : typeof createAsyncState,
                   V,
@@ -276,7 +276,7 @@ type StateCreationArguments<
                 >
           :
               | GetStateArgs<
-                  T extends NestedState<any>
+                  T extends NestedState
                     ? typeof createNestedState
                     : typeof createState,
                   V,
@@ -284,7 +284,7 @@ type StateCreationArguments<
                   ParentKeys
                 >
               | StateArgsWithDeepness<
-                  T extends NestedState<any>
+                  T extends NestedState
                     ? typeof createNestedState
                     : typeof createState,
                   V,
@@ -337,7 +337,7 @@ type StorageRecordArgs<
 > = {
   [key in keyof T]: T[key] extends PaginatedStateStorage<any>
     ? PaginatedStorageArgs<T[key], Keys, ParentKeys>
-    : T[key] extends State<any>
+    : T[key] extends State
       ? RemoveDepth<StateCreationArguments<T[key], Keys, ParentKeys>>
       : T[key] extends StateStorage<any, StateStorageItem>
         ? RetrieveStateOrPaginatedStorage<T[key]> extends infer S
@@ -350,7 +350,7 @@ type StorageRecordArgs<
                   >,
                   LengthOf<K>
                 >
-              : S extends State<any>
+              : S extends State
                 ? WithCreateStateStorage<
                     StateCreationArguments<S, K, [...ParentKeys, ...Keys]>
                   >
@@ -542,7 +542,7 @@ function _get(
   key: PrimitiveOrNested,
   keys: PrimitiveOrNested[]
 ) {
-  type Item = State<any> | StateStorage<any, any> | { [key: string]: Item };
+  type Item = State | StateStorage<any, any> | { [key: string]: Item };
 
   const storage = this._storage;
 

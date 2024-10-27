@@ -14,7 +14,18 @@ import SuspenseContext from '../utils/SuspenseContext';
 import useForceRerender from 'react-helpful-utils/useForceRerender';
 import useHandleSuspenseValue from '../utils/useHandleSuspenseValue';
 
-const useAll = ((states: (AnyAsyncState | Falsy)[], safeReturn?: boolean) => {
+const useAll = <
+  const S extends Array<AsyncState | Falsy>,
+  SafeReturn extends boolean = false,
+>(
+  states: S,
+  safeReturn?: SafeReturn
+): SafeReturn extends false
+  ? ExtractValues<S>
+  : Readonly<
+      | [values: ExtractValues<S>, errors: ArrayOfUndefined<S>]
+      | [values: ExtractValues<S, true>, errors: ExtractErrors<S>]
+    > => {
   const l = states.length;
 
   const values: any[] = [];
@@ -97,20 +108,7 @@ const useAll = ((states: (AnyAsyncState | Falsy)[], safeReturn?: boolean) => {
     }
   }
 
-  return safeReturn ? [values, errors] : (values as ReadonlyArray<any>);
-}) as {
-  <
-    const S extends (AsyncState<any> | Falsy)[],
-    SafeReturn extends boolean = false,
-  >(
-    states: S,
-    safeReturn?: SafeReturn
-  ): SafeReturn extends false
-    ? ExtractValues<S>
-    : Readonly<
-        | [values: ExtractValues<S>, errors: ArrayOfUndefined<S>]
-        | [values: ExtractValues<S, true>, errors: ExtractErrors<S>]
-      >;
+  return safeReturn ? [values, errors] : (values as any);
 };
 
 export default useAll;

@@ -1,6 +1,6 @@
 import { LoadableState } from '../types';
 
-const withoutLoading = <S extends LoadableState<any>>(state: S): S => ({
+const withoutLoading = <S extends LoadableState>(state: S): S => ({
   ...state,
   _withoutLoading: true,
 });

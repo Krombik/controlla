@@ -3,19 +3,16 @@ import { AsyncState, ExtractErrors, Falsy } from '../types';
 import Suspense from '../Suspense';
 import useAll from '../useAll';
 import awaitOnly from '../awaitOnly';
+import { jsx } from 'react/jsx-runtime';
 
-type Props<S extends (AsyncState<any> | Falsy)[]> = PropsWithChildren & {
+type Props<S extends Array<AsyncState | Falsy>> = PropsWithChildren & {
   states: S;
   renderIfError?:
     | ((errors: ExtractErrors<S>) => ReturnType<FC>)
     | ReturnType<FC>;
 } & Pick<SuspenseProps, 'fallback'>;
 
-const AllStatesValue: FC<Props<any[]>> = ({
-  states,
-  renderIfError,
-  children,
-}) => {
+const Controller: FC<Props<any[]>> = ({ states, renderIfError, children }) => {
   states = states.map((state) => state && awaitOnly(state));
 
   if (renderIfError === undefined) {
@@ -33,14 +30,8 @@ const AllStatesValue: FC<Props<any[]>> = ({
       : renderIfError;
 };
 
-const SuspenseOnlyAllController = <
-  const S extends Array<AsyncState<any> | Falsy>,
->(
+const SuspenseOnlyAllController = <const S extends Array<AsyncState | Falsy>>(
   props: Props<S>
-) => (
-  <Suspense fallback={props.fallback}>
-    <AllStatesValue {...(props as any)} />
-  </Suspense>
-);
+) => <Suspense fallback={props.fallback}>{jsx(Controller, props)}</Suspense>;
 
 export default SuspenseOnlyAllController;

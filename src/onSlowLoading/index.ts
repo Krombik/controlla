@@ -1,6 +1,6 @@
-import type { LoadableState } from '../types';
+import type { AsyncState } from '../types';
 
-const onSlowLoading = (state: LoadableState<any>, cb: () => void) => {
+const onSlowLoading = (state: AsyncState, cb: () => void) => {
   const slowLoading = state._internal._slowLoading;
 
   if (!slowLoading) {

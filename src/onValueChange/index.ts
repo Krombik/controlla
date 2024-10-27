@@ -5,7 +5,7 @@ import { postBatchCallbacksPush } from '../utils/batching';
 
 const onValueChange: {
   <T>(state: State<T>, cb: (value: HandlePending<T>) => void): () => void;
-  <const S extends State<any>[]>(
+  <const S extends State[]>(
     states: S,
     cb: (
       ...values: {

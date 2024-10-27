@@ -4,8 +4,8 @@ import type { AsyncState } from '../types';
 const getPromise: {
   <T>(state: AsyncState<T>): Promise<T>;
   /** @internal */
-  (state: AsyncState<any>, isRoot: true): Promise<any>;
-} = (state: AsyncState<any>, isRoot?: true) => {
+  (state: AsyncState, isRoot: true): Promise<any>;
+} = (state: AsyncState, isRoot?: true) => {
   const utils = state._internal;
 
   if (!('_promise' in utils)) {

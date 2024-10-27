@@ -2,8 +2,9 @@ import { ComponentType, FC, PropsWithChildren, SuspenseProps } from 'react';
 import { AsyncState } from '../types';
 import use from '../use';
 import Suspense from '../Suspense';
+import { jsx } from 'react/jsx-runtime';
 
-type Props<S extends AsyncState<any>> = {
+type Props<S extends AsyncState> = {
   state: S;
   render(value: S extends AsyncState<infer V> ? V : never): ReturnType<FC>;
   renderIfError?:
@@ -14,7 +15,7 @@ type Props<S extends AsyncState<any>> = {
   container?: ComponentType<PropsWithChildren> | keyof JSX.IntrinsicElements;
 } & Pick<SuspenseProps, 'fallback'>;
 
-const StateValue: FC<Props<AsyncState<any>>> = ({
+const Controller: FC<Props<AsyncState>> = ({
   render,
   state,
   renderIfError,
@@ -42,7 +43,7 @@ const StateValue: FC<Props<AsyncState<any>>> = ({
   );
 };
 
-const SuspenseController = <S extends AsyncState<any>>(props: Props<S>) => {
+const SuspenseController = <S extends AsyncState>(props: Props<S>) => {
   const { container: Container, fallback } = props;
 
   return (
@@ -55,7 +56,7 @@ const SuspenseController = <S extends AsyncState<any>>(props: Props<S>) => {
         )
       }
     >
-      <StateValue {...(props as any)} />
+      {jsx(Controller, props)}
     </Suspense>
   );
 };

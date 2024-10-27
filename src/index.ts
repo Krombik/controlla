@@ -12,6 +12,7 @@ export { default as createStateStorage } from './createStateStorage';
 
 export { default as getValue } from './getValue';
 export { default as setValue } from './setValue';
+export { default as clear } from './clear';
 export { default as onValueChange } from './onValueChange';
 export { default as getPromise } from './getPromise';
 export { default as onSlowLoading } from './onSlowLoading';

@@ -2,7 +2,7 @@ import { FC } from 'react';
 import { HandlePending, State } from '../types';
 import useMergedValue from '../useMergedValue';
 
-type Props<S extends State<any>[], V> = {
+type Props<S extends State[], V> = {
   states: S;
   /** Function that merge the values from the states. */
   merger(
@@ -19,9 +19,9 @@ type Props<S extends State<any>[], V> = {
 };
 
 /** A controller that merges a values from states and passes it to a render function. Component wrapper of {@link useMergedValue} hook */
-const MergedController: {
-  <const S extends State<any>[], V>(props: Props<S, V>): ReturnType<FC>;
-} = (props: Props<any, any>) =>
+const MergedController = <const S extends State[], V>(
+  props: Props<S, V>
+): ReturnType<FC> =>
   props.render(useMergedValue(props.states, props.merger, props.isEqual));
 
 export default MergedController;

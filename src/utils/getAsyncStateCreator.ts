@@ -12,8 +12,8 @@ import executeSetters from './executeSetters';
 import createState from '../createState';
 import alwaysTrue from './alwaysTrue';
 
-type _State = AsyncState<any> &
-  Partial<Omit<ControllableLoadableState, keyof AsyncState<any>>>;
+type _State = AsyncState &
+  Partial<Omit<ControllableLoadableState, keyof AsyncState>>;
 
 type _InternalUtils = _State['_internal'];
 
@@ -223,7 +223,7 @@ const getAsyncStateCreator =
     stateInitializer?: StateInitializer,
     keys?: any[],
     parentUtils?: Record<string, any>
-  ): AnyAsyncState<any> => {
+  ): AnyAsyncState => {
     const errorState = createState<ErrorStateUtils>(
       undefined,
       undefined,

@@ -68,7 +68,7 @@ const createState: {
       keys,
       utils as _InternalUtils
     ),
-  } as Partial<State<any>> as State<any>;
+  } as Partial<State> as State;
 };
 
 export type { State };

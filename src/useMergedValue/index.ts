@@ -6,7 +6,7 @@ import useForceRerender from 'react-helpful-utils/useForceRerender';
 import simpleIsEqual from '../utils/simpleIsEqual';
 
 const useMergedValue = ((
-  states: AnyAsyncState<any>[],
+  states: AnyAsyncState[],
   merger: (...values: any[]) => any,
   isEqual: (
     nextMergedValue: any,
@@ -59,7 +59,7 @@ const useMergedValue = ((
 
   return mergedValue;
 }) as {
-  <const S extends State<any>[], V>(
+  <const S extends State[], V>(
     states: S,
     merger: (
       ...values: {

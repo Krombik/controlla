@@ -6,7 +6,7 @@ import {
   StateScope,
 } from '../types';
 import alwaysFalse from '../utils/alwaysFalse';
-import { end$ } from '../utils/constants';
+import { $tate } from '../utils/constants';
 import { ContextType } from 'react';
 import type SuspenseContext from '../utils/SuspenseContext';
 import type ErrorBoundaryContext from '../utils/ErrorBoundaryContext';
@@ -72,7 +72,7 @@ const SKELETON_STATE = {
       {},
       {
         get(_, prop) {
-          return prop != end$ ? proxy : self;
+          return prop != $tate ? proxy : self;
         },
       }
     );

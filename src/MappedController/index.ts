@@ -2,7 +2,7 @@ import { FC } from 'react';
 import { AsyncState, State } from '../types';
 import useMappedValue from '../useMappedValue';
 
-type Props<S extends State<any>, V> = {
+type Props<S extends State, V> = {
   state: S;
   /** Function that maps the value from the state. */
   mapper(
@@ -18,9 +18,9 @@ type Props<S extends State<any>, V> = {
   isEqual?(nextMappedValue: V, prevMappedValue: V): boolean;
 };
 
-/** A controller that maps a value from state and passes it to a render function. Component wrapper of {@link useMappedValue} hook */
 const MappedController: {
-  <S extends State<any>, V>(props: Props<S, V>): ReturnType<FC>;
+  /** A controller that maps a value from state and passes it to a render function. Component wrapper of {@link useMappedValue} hook */
+  <S extends State, V>(props: Props<S, V>): ReturnType<FC>;
 } = (props: Props<any, any>) =>
   props.render(useMappedValue(props.state, props.mapper, props.isEqual));
 

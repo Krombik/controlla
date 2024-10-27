@@ -37,7 +37,7 @@ type AdditionalUtils = {
   readonly _stable: Pick<StateInternalUtils, '_get' | '_value'>;
 };
 
-type PaginatedState = AnyLoadableState<any> & Internal<AdditionalUtils>;
+type PaginatedState = AnyLoadableState & Internal<AdditionalUtils>;
 
 function _set(
   this: PaginatedState['_internal'],
@@ -414,9 +414,9 @@ const createPaginatedStorage: {
     _path: EMPTY_ARR,
     keys: EMPTY_ARR,
     usePages,
-  } as Partial<PaginatedStateStorage<any, any[]>> as PaginatedStateStorage<
-    ControllableLoadableNestedState<any>
-  >;
+  } as Partial<
+    PaginatedStateStorage<any, any[]>
+  > as PaginatedStateStorage<ControllableLoadableNestedState>;
 };
 
 export type { PaginatedStateStorage };

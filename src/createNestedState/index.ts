@@ -232,7 +232,7 @@ const createNestedState: {
       keys,
       utils as _InternalUtils
     ),
-  } as Partial<NestedState<any>> as NestedState<any>;
+  } as Partial<NestedState> as NestedState;
 };
 
 export type { NestedState };

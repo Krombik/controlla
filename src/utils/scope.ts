@@ -1,29 +1,31 @@
-import type { InternalPathBase, StateScope } from '../types';
-import { end$ } from './constants';
+import type { InternalPathBase } from '../types';
+import { $tate } from './constants';
 
-function scope<T extends StateScope<any> & InternalPathBase>(this: T): any {
+function scope(this: InternalPathBase): any {
   const self = this;
 
-  const prevPath = self._path!;
+  return new Proxy(self._path!, {
+    get(target, prop) {
+      if (prop == $tate) {
+        return {
+          ...self,
+          _path: target,
+        };
+      }
 
-  const path = prevPath.length ? prevPath.slice() : [];
+      const l = target.length;
 
-  const proxy = new Proxy(
-    {},
-    {
-      get(_, prop) {
-        if (prop == end$) {
-          return { ...self, _path: path } as T;
-        }
+      const path = new Array(l + 1);
 
-        path.push(prop as string);
+      for (let i = 0; i < l; i++) {
+        path[i] = target[i];
+      }
 
-        return proxy;
-      },
-    }
-  );
+      path[l] = prop;
 
-  return proxy;
+      return new Proxy(path, this);
+    },
+  });
 }
 
 export default scope;

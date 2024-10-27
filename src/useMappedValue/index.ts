@@ -7,7 +7,7 @@ import handleUnlisteners from '../utils/handleUnlisteners';
 import simpleIsEqual from '../utils/simpleIsEqual';
 
 const useMappedValue = ((
-  state: AnyAsyncState<any>,
+  state: AnyAsyncState,
   mapper: (value: any, isLoaded?: boolean, error?: any) => any,
   isEqual: (nextValue: any, prevValue: any) => boolean = simpleIsEqual
 ) => {
@@ -30,7 +30,7 @@ const useMappedValue = ((
   useLayoutEffect(
     () =>
       handleUnlisteners(
-        onValueChange<[State<any>, State<any>, State<any>]>(
+        onValueChange<[State, State, State]>(
           isLoadedState
             ? errorState
               ? [state, isLoadedState, errorState]
