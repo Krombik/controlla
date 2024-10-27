@@ -311,6 +311,7 @@ export type AsyncStateOptions<T, Keys extends PrimitiveOrNested[] = []> = {
     prevValue: ResolvedValue<T> | undefined,
     attempt: number
   ): boolean;
+  loadingTimeout?: number;
 };
 
 export type LoadableStateOptions<
@@ -319,7 +320,6 @@ export type LoadableStateOptions<
   Keys extends PrimitiveOrNested[] = [],
 > = AsyncStateOptions<T, Keys> & {
   load(this: AsyncState<T, E>, ...keys: Keys): void | (() => void);
-  loadingTimeout?: number;
   reloadIfStale?: number;
   reloadOnFocus?: number;
 };

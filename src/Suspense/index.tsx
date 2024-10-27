@@ -37,6 +37,15 @@ const Fallback: FC<PropsWithChildren<{ _ctx: Ctx }>> = (props) => {
   return props.children;
 };
 
+/**
+ * A custom `Suspense` component that extends React's {@link React.Suspense Suspense} to manage loading and error handling across multiple components.
+ * @example
+ * ```tsx
+ * <Suspense fallback={<div>Loading...</div>}>
+ *   <SomeAsyncComponent />
+ * </Suspense>
+ * ```
+ */
 const Suspense: FC<SuspenseProps> = (props) => {
   const ctx = useRef<Ctx>([]).current;
 

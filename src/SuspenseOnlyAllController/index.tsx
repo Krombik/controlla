@@ -30,6 +30,11 @@ const Controller: FC<Props<any[]>> = ({ states, renderIfError, children }) => {
       : renderIfError;
 };
 
+/**
+ * A controller component for rendering multiple {@link Props.states states} using `awaitOnly` to avoid unnecessary re-renders.
+ * It utilizes the {@link useAll} hook under the hood to monitor the resolution or failure of all provided states.
+ * This component integrates with the {@link Suspense} component, deferring rendering until all states are ready or an error occurs.
+ */
 const SuspenseOnlyAllController = <const S extends Array<AsyncState | Falsy>>(
   props: Props<S>
 ) => <Suspense fallback={props.fallback}>{jsx(Controller, props)}</Suspense>;

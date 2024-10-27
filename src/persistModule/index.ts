@@ -3,9 +3,16 @@ import { StateInitializer } from '../types';
 import alwaysTrue from '../utils/alwaysTrue';
 
 type SafeStorage = {
+  /** Retrieves a value by key. */
   getItem(key: string): string | undefined | null;
+  /** Stores a value with the given key. */
   setItem(key: string, value: string): void;
+  /** Removes a value by key. */
   removeItem(key: string): void;
+  /**
+   * listener to observe storage changes
+   * @returns a function to unsubscribe.
+   */
   listen?(key: string, onChange: (value: string) => void): () => void;
 };
 
@@ -15,10 +22,12 @@ type Converter<T> = {
 };
 
 type Options<T> = {
+  /** The key used to store and retrieve the value from storage. */
   name: string;
   storage: SafeStorage | undefined;
   isValid?(value: T): boolean;
   converter: Converter<T>;
+  /** If `true`, enables observing storage changes */
   sharable?: boolean;
 };
 
@@ -66,6 +75,11 @@ export const safeLocalStorage =
 export const safeSessionStorage =
   isStorageAvailable('session') && (sessionStorage satisfies SafeStorage);
 
+/**
+ * A utility for persisting state using a specified storage mechanism such as
+ * {@link localStorage} or {@link sessionStorage}. It provides a customizable way to store,
+ * retrieve, and observe state changes of provided persistent {@link Options.storage storage}
+ */
 const getPersistInitializer = <T>({
   name,
   storage,

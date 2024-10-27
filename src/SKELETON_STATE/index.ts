@@ -34,6 +34,23 @@ const errorUtils: Partial<StateInternalUtils> = {
   _onValueChange: alwaysNoop,
 };
 
+/**
+ * A special state that remains permanently in a pending state.
+ * This state never resolves, its {@link SkeletonState.isLoaded isLoaded} is always `false`, and it triggers Suspense indefinitely.
+ * It supports all state methods, such as {@link SkeletonState.load load} or {@link SkeletonState.loading pause},
+ * although these methods are implemented as no-ops.
+ *
+ * @example
+ * ```jsx
+ * const Card = ({ asyncState }) => (
+ *    <SuspenseController
+ *      state={asyncState || SKELETON_STATE}
+ *      fallback='Loading...' // if no asyncState was provided fallback always be shown
+ *      render={(value) => <Content value={value} />}
+ *    />
+ * );
+ * ```
+ */
 const SKELETON_STATE = {
   _fakeSuspense(suspenseCtx, errorBoundaryCtx) {
     if (suspenseCtx) {
@@ -64,20 +81,16 @@ const SKELETON_STATE = {
     _get: noop,
     _set: noop,
     _onValueChange: alwaysNoop,
+    _slowLoading: {
+      _callbackSet: { add: noop, delete: noop },
+    } as AsyncStateUtils['_slowLoading'],
   } as Partial<AsyncStateUtils>,
   scope() {
-    const self = this;
-
-    const proxy = new Proxy(
-      {},
-      {
-        get(_, prop) {
-          return prop != $tate ? proxy : self;
-        },
-      }
-    );
-
-    return proxy;
+    return new Proxy(this, {
+      get(target, prop, proxy) {
+        return prop != $tate ? proxy : target;
+      },
+    });
   },
   load: alwaysNoop,
   loading: { pause: noop, reset: noop, resume: noop },

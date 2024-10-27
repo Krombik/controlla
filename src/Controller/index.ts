@@ -4,7 +4,7 @@ import useValue from '../useValue';
 
 type Props<S extends State> = {
   state: S;
-  /** Function that renders the value of the state. */
+  /** Function that renders the state’s value. */
   render(
     ...args: S extends AsyncState<infer V, infer E>
       ? [value: V | undefined, isLoaded: boolean, error: E | undefined]
@@ -20,7 +20,31 @@ const Controller = (({ render, state }: Props<AsyncState>) =>
     render.length > 1 && useValue(state.isLoaded),
     render.length > 2 && useValue(state.error)
   )) as {
-  /** A controller that renders the value from state. Component wrapper of {@link useValue} hook */
+  /**
+   * A controller component that renders the value from the given {@link Props.state state}.
+   * This component wraps the {@link useValue} hook and provides a flexible way
+   * to render state values along with their loading and error statuses when applicable.
+   * @example
+   * ```jsx
+   * <Controller
+   *   state={state}
+   *   render={(value) => <div>{value}</div>}
+   * />
+   *
+   * <Controller
+   *   state={asyncState}
+   *   render={(value, isLoaded, error) => (
+   *     <div>
+   *       {isLoaded ? (
+   *         error ? <span>Error: {error}</span> : <span>Value: {value}</span>
+   *       ) : (
+   *         <span>Loading...</span>
+   *       )}
+   *     </div>
+   *   )}
+   * />
+   * ```
+   */
   <S extends State>(props: Props<S>): ReturnType<FC>;
 };
 
