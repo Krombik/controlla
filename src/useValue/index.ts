@@ -5,18 +5,15 @@ import useNoop from '../utils/useNoop';
 import getValue from '../getValue';
 import useForceRerender from 'react-helpful-utils/useForceRerender';
 import handleUnlisteners from '../utils/handleUnlisteners';
+import toDeps from '../toDeps';
 
 const useValue = ((state: AnyAsyncState | Falsy) => {
   if (state) {
     const forceRerender = useForceRerender();
 
     useLayoutEffect(
-      () =>
-        handleUnlisteners(
-          onValueChange(state, forceRerender),
-          'load' in state && !state._withoutLoading && state.load()
-        ),
-      [state._internal, state._path && state._path.join('.')]
+      () => handleUnlisteners(onValueChange(state, forceRerender), state),
+      toDeps(state)
     );
 
     return getValue(state);

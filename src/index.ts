@@ -24,6 +24,8 @@ export { default as use } from './use';
 export { default as useAll } from './useAll';
 
 export { default as batchedUpdates } from './batchedUpdates';
+export { default as areStatesEqual } from './areStatesEqual';
+export { default as toDeps } from './toDeps';
 
 export { default as awaitOnly } from './awaitOnly';
 export { default as withoutLoading } from './withoutLoading';

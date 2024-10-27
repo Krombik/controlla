@@ -5,6 +5,7 @@ import onValueChange from '../onValueChange';
 import useForceRerender from 'react-helpful-utils/useForceRerender';
 import handleUnlisteners from '../utils/handleUnlisteners';
 import simpleIsEqual from '../utils/simpleIsEqual';
+import toDeps from '../toDeps';
 
 const useMappedValue = ((
   state: AnyAsyncState,
@@ -44,9 +45,9 @@ const useMappedValue = ((
             }
           }
         ),
-        'load' in state && !state._withoutLoading && state.load()
+        state
       ),
-    [state._internal, state._path && state._path.join('.')]
+    toDeps(state)
   );
 
   return mappedValue;

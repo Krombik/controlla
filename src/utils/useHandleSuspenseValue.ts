@@ -3,13 +3,12 @@ import { AnyAsyncState } from '../types';
 import handleUnlisteners from './handleUnlisteners';
 import onValueChange from '../onValueChange';
 import { useLayoutEffect } from 'react';
+import toDeps from '../toDeps';
 
 const useHandleSuspenseValue = (
   state: AnyAsyncState,
   forceRerender: () => void
 ) => {
-  const utils = state._internal;
-
   const withValueWatching = !state._awaitOnly;
 
   useLayoutEffect(
@@ -25,9 +24,9 @@ const useHandleSuspenseValue = (
                 }
               }
         ),
-        'load' in state && !state._withoutLoading && state.load()
+        state
       ),
-    [utils, state._path && state._path.join('.')]
+    toDeps(state)
   );
 
   if (withValueWatching) {

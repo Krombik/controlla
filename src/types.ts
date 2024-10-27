@@ -1,5 +1,6 @@
 import type { Primitive, PrimitiveOrNested } from 'keyweaver';
 import type { $tate } from './utils/constants';
+import { ComponentType, PropsWithChildren } from 'react';
 
 declare const PENDING: unique symbol;
 
@@ -46,7 +47,7 @@ export type Internal<T> = {
 declare class StateBase {}
 
 export type State<
-  Value = unknown,
+  Value = any,
   Keys extends PrimitiveOrNested[] = [],
 > = StateBase & {
   readonly [STATE_IDENTIFIER]: Value;
@@ -101,7 +102,7 @@ export type AsyncStateUtils = {
 
 /** State that supports asynchronous operations, extends {@link State} */
 export type AsyncState<
-  Value = unknown,
+  Value = any,
   Error = any,
   Keys extends PrimitiveOrNested[] = [],
 > = State<Value | typeof PENDING, Keys> &
@@ -118,7 +119,7 @@ export type AsyncState<
   };
 
 export type LoadableState<
-  Value = unknown,
+  Value = any,
   Error = any,
   Keys extends PrimitiveOrNested[] = [],
 > = AsyncState<Value, Error, Keys> & {
@@ -230,13 +231,13 @@ type ProcessStateScope<
           >;
 
 export type NestedState<
-  Value = unknown,
+  Value = any,
   Keys extends PrimitiveOrNested[] = [],
 > = State<Value, Keys> &
   StateScope<() => ProcessStateScope<Value, Keys, State, NestedState>>;
 
 export type AsyncNestedState<
-  Value = unknown,
+  Value = any,
   Error = any,
   Keys extends PrimitiveOrNested[] = [],
 > = AsyncState<Value, Error, Keys> &
@@ -245,7 +246,7 @@ export type AsyncNestedState<
   >;
 
 export type LoadableNestedState<
-  Value = unknown,
+  Value = any,
   Error = any,
   Keys extends PrimitiveOrNested[] = [],
 > = LoadableState<Value, Error, Keys> &
@@ -254,7 +255,7 @@ export type LoadableNestedState<
   >;
 
 export type ControllableLoadableNestedState<
-  Value = unknown,
+  Value = any,
   Error = any,
   Keys extends PrimitiveOrNested[] = [],
 > = ControllableLoadableState<Value, Error, Keys> &
@@ -725,10 +726,14 @@ export type WithInitModule<T, Args extends any[]> = [
   stateInitializer?: StateInitializer<T>,
 ];
 
-export type StateInitializer<T = unknown> = (
+export type StateInitializer<T = any> = (
   keys: PrimitiveOrNested[] | undefined
 ) => {
   set(value: T): void;
   get(): T | undefined;
   observe?(setState: (value: T) => void): () => void;
 };
+
+export type ContainerType =
+  | ComponentType<PropsWithChildren>
+  | keyof JSX.IntrinsicElements;

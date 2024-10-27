@@ -29,6 +29,7 @@ import createPollableNestedState from '../createPollableNestedState';
 import { useForceRerender } from 'react-helpful-utils';
 import getPromise from '../getPromise';
 import handleUnlisteners from '../utils/handleUnlisteners';
+import concat from '../utils/concat';
 
 type AdditionalUtils = {
   readonly _parent: PaginatedStateStorage<any>['_internal'];
@@ -51,7 +52,7 @@ function _set(
 }
 
 function get(this: PaginatedStateStorage<any, any[]>, page: number) {
-  const keys = this.keys ? this.keys.concat(page) : [page];
+  const keys = this.keys.length ? concat(this.keys, page) : [page];
 
   return {
     ...this._internal._get(page, keys),
@@ -194,7 +195,7 @@ function usePages(
                 from + i,
                 handleUnlisteners(
                   onValueChange([state, state.error], callback),
-                  state.load()
+                  state
                 )
               );
             }
@@ -254,7 +255,7 @@ function usePages(
                 from + i,
                 handleUnlisteners(
                   onValueChange([state, state.error], callback),
-                  state.load()
+                  state
                 )
               );
             }

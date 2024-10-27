@@ -3,6 +3,7 @@ import { AsyncState } from '../types';
 import use from '../use';
 import Suspense from '../Suspense';
 import { jsx } from 'react/jsx-runtime';
+import handleContainerChildren from '../utils/handleContainerChildren';
 
 type Props<S extends AsyncState> = {
   state: S;
@@ -19,46 +20,28 @@ const Controller: FC<Props<AsyncState>> = ({
   render,
   state,
   renderIfError,
-  container: Container,
+  container,
 }) => {
-  let children;
-
   if (renderIfError === undefined) {
-    children = render(use(state));
-  } else {
-    const [value, err] = use(state, true);
-
-    children =
-      err === undefined
-        ? render(value)
-        : typeof renderIfError == 'function'
-          ? renderIfError(err)
-          : renderIfError;
+    return handleContainerChildren(container, render(use(state)));
   }
 
-  return Container && (children || children === 0) ? (
-    <Container>{children}</Container>
-  ) : (
-    children
+  const [value, err] = use(state, true);
+
+  return handleContainerChildren(
+    container,
+    err === undefined
+      ? render(value)
+      : typeof renderIfError == 'function'
+        ? renderIfError(err)
+        : renderIfError
   );
 };
 
-const SuspenseController = <S extends AsyncState>(props: Props<S>) => {
-  const { container: Container, fallback } = props;
-
-  return (
-    <Suspense
-      fallback={
-        Container && (fallback || fallback === 0) ? (
-          <Container>{fallback as any}</Container>
-        ) : (
-          (fallback as any)
-        )
-      }
-    >
-      {jsx(Controller, props)}
-    </Suspense>
-  );
-};
+const SuspenseController = <S extends AsyncState>(props: Props<S>) => (
+  <Suspense fallback={handleContainerChildren(props.container, props.fallback)}>
+    {jsx(Controller, props)}
+  </Suspense>
+);
 
 export default SuspenseController;

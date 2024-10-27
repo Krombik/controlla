@@ -1,31 +1,21 @@
 import type { InternalPathBase } from '../types';
+import concat from './concat';
 import { $tate } from './constants';
 
 function scope(this: InternalPathBase): any {
   const self = this;
 
-  return new Proxy(self._path!, {
-    get(target, prop) {
-      if (prop == $tate) {
-        return {
-          ...self,
-          _path: target,
-        };
-      }
+  const handler: ProxyHandler<readonly string[]> = {
+    get: (path, prop) =>
+      prop != $tate
+        ? new Proxy(concat(path, prop), handler)
+        : {
+            ...self,
+            _path: path,
+          },
+  };
 
-      const l = target.length;
-
-      const path = new Array(l + 1);
-
-      for (let i = 0; i < l; i++) {
-        path[i] = target[i];
-      }
-
-      path[l] = prop;
-
-      return new Proxy(path, this);
-    },
-  });
+  return new Proxy(self._path!, handler);
 }
 
 export default scope;
