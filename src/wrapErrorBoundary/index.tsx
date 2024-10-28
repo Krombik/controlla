@@ -1,4 +1,4 @@
-import { Component, type ContextType } from 'react';
+import type { Component, ContextType } from 'react';
 import ErrorBoundaryContext from '../utils/ErrorBoundaryContext';
 
 const ORIGINAL_RENDER = Symbol();
@@ -9,6 +9,7 @@ const ORIGINAL_WILL_UNMOUNT = Symbol();
 
 const CTX = Symbol();
 
+/** A higher-order function that wraps a React class component with additional error boundary handling. */
 const wrapErrorBoundary = <T extends typeof Component>(component: T): T => {
   const { render, componentDidCatch, componentWillUnmount } =
     component.prototype;

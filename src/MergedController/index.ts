@@ -1,5 +1,5 @@
-import { FC } from 'react';
-import { HandlePending, State } from '../types';
+import type { FC } from 'react';
+import type { HandlePending, State } from '../types';
 import useMergedValue from '../useMergedValue';
 
 type Props<S extends State[], V> = {

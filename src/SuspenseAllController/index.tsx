@@ -1,5 +1,5 @@
-import { FC, SuspenseProps } from 'react';
-import {
+import type { FC, SuspenseProps } from 'react';
+import type {
   AsyncState,
   ContainerType,
   ExtractErrors,

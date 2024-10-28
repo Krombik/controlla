@@ -1,4 +1,3 @@
-import { NestedArray, NestedObject } from 'keyweaver';
 import type {
   ValueChangeCallbacks,
   StateInitializer,
@@ -201,8 +200,8 @@ function _get(this: _InternalUtils, path: string[]) {
 
 /** Creates a nested state for managing complex state. */
 const createNestedState: {
-  <T extends NestedArray | NestedObject>(): NestedState<T | undefined>;
-  <T extends NestedArray | NestedObject>(
+  <T>(): NestedState<T | undefined>;
+  <T>(
     value: T | (() => T),
     stateInitializer?: StateInitializer<T>
   ): NestedState<T>;

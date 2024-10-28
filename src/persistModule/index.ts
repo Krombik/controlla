@@ -1,5 +1,5 @@
 import toKey from 'keyweaver';
-import { StateInitializer } from '../types';
+import type { StateInitializer } from '../types';
 import alwaysTrue from '../utils/alwaysTrue';
 
 type SafeStorage = {
@@ -26,7 +26,7 @@ type Options<T> = {
   name: string;
   storage: SafeStorage | undefined;
   isValid?(value: T): boolean;
-  converter: Converter<T>;
+  converter?: Converter<T>;
   /** If `true`, enables observing storage changes */
   sharable?: boolean;
 };
@@ -83,7 +83,7 @@ export const safeSessionStorage =
 const getPersistInitializer = <T>({
   name,
   storage,
-  converter,
+  converter = JSON,
   isValid = alwaysTrue,
   sharable,
 }: Options<T>): StateInitializer<T> | undefined =>

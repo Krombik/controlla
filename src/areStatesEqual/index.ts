@@ -1,4 +1,4 @@
-import { State } from '../types';
+import type { State } from '../types';
 
 /** Compares two states to determine if they are equal. */
 const areStatesEqual = (state1: State, state2: State) =>

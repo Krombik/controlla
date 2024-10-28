@@ -1,5 +1,5 @@
-import { ReactNode } from 'react';
-import { ContainerType } from '../types';
+import type { ReactNode } from 'react';
+import type { ContainerType } from '../types';
 
 const handleContainerChildren = (
   Container: ContainerType | undefined,

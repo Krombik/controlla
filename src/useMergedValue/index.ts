@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef } from 'react';
-import { AnyAsyncState, HandlePending, State } from '../types';
+import type { AnyAsyncState, HandlePending, State } from '../types';
 import getValue from '../getValue';
 import onValueChange from '../onValueChange';
 import useForceRerender from 'react-helpful-utils/useForceRerender';
@@ -59,6 +59,15 @@ const useMergedValue = ((
 
   return mergedValue;
 }) as {
+  /**
+   * A hook to merge values from multiple {@link states}.
+   * It applies a provided {@link merger} function to combine the state values, ensuring the component re-renders only when the merged value changes.
+   * This hook ensures efficient updates using an optional equality function ({@link isEqual}) to prevent unnecessary re-renders.
+   *
+   * @param merger - A function that merges the values from the provided {@link states}.
+   * @param isEqual - An optional comparison function to determine if the merged value has changed
+   * @returns The merged value.
+   */
   <const S extends State[], V>(
     states: S,
     merger: (

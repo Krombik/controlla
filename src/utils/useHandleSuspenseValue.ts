@@ -1,5 +1,5 @@
 import getValue from '../getValue';
-import { AnyAsyncState } from '../types';
+import type { AnyAsyncState } from '../types';
 import handleUnlisteners from './handleUnlisteners';
 import onValueChange from '../onValueChange';
 import { useLayoutEffect } from 'react';

@@ -13,6 +13,36 @@ const use: {
    * If the {@link state} isn't loaded, the component using this hook suspends.
    * Ensure the component is wrapped in a <Suspense> component to handle the loading state.
    * If loading fails and {@link safeReturn} is not enabled, an error is thrown.
+   *
+   * @example
+   * ```jsx
+   * const DataComponent = () => {
+   *   const data = use(asyncState); // Suspends if not loaded
+   *
+   *   return <div>Data: {JSON.stringify(data)}</div>;
+   * };
+   *
+   * const SafeComponent = () => {
+   *   const [data, error] = use(asyncState, true); // Safely returns a tuple
+   *
+   *   if (error) {
+   *     return <div>Error: {error.message}</div>;
+   *   }
+   *
+   *   return <div>Data: {JSON.stringify(data)}</div>;
+   * };
+   *
+   * const App = () => (
+   *   <>
+   *     <Suspense fallback={<div>Loading...</div>}>
+   *       <DataComponent />
+   *     </Suspense>
+   *     <Suspense fallback={<div>Loading...</div>}>
+   *       <SafeComponent />
+   *     </Suspense>
+   *   </>
+   * );
+   * ```
    */
   <S extends AsyncState | Falsy, SafeReturn extends boolean = false>(
     state: S,

@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef } from 'react';
-import { AnyAsyncState, AsyncState, State } from '../types';
+import type { AnyAsyncState, AsyncState, State } from '../types';
 import getValue from '../getValue';
 import onValueChange from '../onValueChange';
 import useForceRerender from 'react-helpful-utils/useForceRerender';

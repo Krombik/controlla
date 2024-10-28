@@ -3,7 +3,7 @@ import setValue from '../setValue';
 import type { LoadableStateOptions, RequestableStateOptions } from '../types';
 import becomingOnline from './becomingOnline';
 import { RESOLVED_PROMISE } from './constants';
-import { PrimitiveOrNested } from 'keyweaver';
+import type { PrimitiveOrNested } from 'keyweaver';
 
 const createFetcher = (
   handleLoad: (

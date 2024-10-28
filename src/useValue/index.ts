@@ -21,7 +21,11 @@ const useValue = ((state: AnyAsyncState | Falsy) => {
 
   useNoop();
 }) as {
-  /** Hook to retrieve the current value from the {@link state}. */
+  /**
+   * A hook to retrieve the current value from the provided {@link state}.
+   * It ensures that the component re-renders whenever the {@link state} value changes.
+   * If the provided {@link state} is falsy, the hook returns `undefined` and performs no operations.
+   */
   <S extends State | Falsy>(
     state: S
   ): S extends State<infer T> ? HandlePending<T> : undefined;

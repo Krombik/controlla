@@ -1,9 +1,9 @@
 import {
-  ContextType,
-  FC,
-  PropsWithChildren,
+  type ContextType,
+  type FC,
+  type PropsWithChildren,
   Suspense as ReactSuspense,
-  SuspenseProps,
+  type SuspenseProps,
   useContext,
   useEffect,
   useRef,

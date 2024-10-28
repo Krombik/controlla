@@ -1,5 +1,5 @@
-import { FC, SuspenseProps } from 'react';
-import { AsyncState, ContainerType } from '../types';
+import type { FC, SuspenseProps } from 'react';
+import type { AsyncState, ContainerType } from '../types';
 import use from '../use';
 import Suspense from '../Suspense';
 import { jsx } from 'react/jsx-runtime';

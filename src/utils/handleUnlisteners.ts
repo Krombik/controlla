@@ -1,4 +1,4 @@
-import { AnyAsyncState } from '../types';
+import type { AnyAsyncState } from '../types';
 
 const handleUnlisteners = (
   valueUnlistener: () => void,

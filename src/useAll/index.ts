@@ -14,6 +14,52 @@ import SuspenseContext from '../utils/SuspenseContext';
 import useForceRerender from 'react-helpful-utils/useForceRerender';
 import useHandleSuspenseValue from '../utils/useHandleSuspenseValue';
 
+/**
+ * A hook to retrieve the current values and errors from multiple {@link states}.
+ * If any of {@link states} isn't loaded, the component using this hook suspends.
+ * Ensure the component is wrapped in a <Suspense> component to handle the loading state.
+ * If any of {@link states} fails and {@link safeReturn} is not enabled, an error is thrown.
+ *
+ * @example
+ * ```jsx
+ * const DataComponent = () => {
+ *   const [data1, data2] = useAll([asyncState1, asyncState2]);
+ *
+ *   return (
+ *     <div>
+ *       <div>Data: {JSON.stringify(data1)}</div>
+ *       <div>Data: {JSON.stringify(data2)}</div>
+ *     </div>
+ *   );
+ * };
+ *
+ * const SafeComponent = () => {
+ *   const [[data1, data2], errors] = useAll([asyncState1, asyncState2], true);
+ *
+ *   if (errors.some((error) => error)) {
+ *     return <div>Error occurred</div>;
+ *   }
+ *
+ *   return (
+ *     <div>
+ *       <div>Data: {JSON.stringify(data1)}</div>
+ *       <div>Data: {JSON.stringify(data2)}</div>
+ *     </div>
+ *   );
+ * };
+ *
+ * const App = () => (
+ *   <>
+ *     <Suspense fallback={<div>Loading...</div>}>
+ *       <DataComponent />
+ *     </Suspense>
+ *     <Suspense fallback={<div>Loading...</div>}>
+ *       <SafeComponent />
+ *     </Suspense>
+ *   </>
+ * );
+ * ```
+ */
 const useAll = <
   const S extends Array<AsyncState | Falsy>,
   SafeReturn extends boolean = false,

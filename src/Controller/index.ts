@@ -1,5 +1,5 @@
-import { FC } from 'react';
-import { AsyncState, State } from '../types';
+import type { FC } from 'react';
+import type { AsyncState, State } from '../types';
 import useValue from '../useValue';
 
 type Props<S extends State> = {

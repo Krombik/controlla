@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import getValue from '../getValue';
-import {
+import type {
   AnyLoadableState,
   ControllableLoadableNestedState,
   ControllableLoadableState,
@@ -20,12 +20,12 @@ import onValueChange from '../onValueChange';
 import useConst from 'react-helpful-utils/useConst';
 import alwaysFalse from '../utils/alwaysFalse';
 import alwaysTrue from '../utils/alwaysTrue';
-import { PrimitiveOrNested } from 'keyweaver';
+import type { PrimitiveOrNested } from 'keyweaver';
 import scope from '../utils/scope';
-import createRequestableState from '../createRequestableState';
-import createRequestableNestedState from '../createRequestableNestedState';
-import createPollableState from '../createPollableState';
-import createPollableNestedState from '../createPollableNestedState';
+import type createRequestableState from '../createRequestableState';
+import type createRequestableNestedState from '../createRequestableNestedState';
+import type createPollableState from '../createPollableState';
+import type createPollableNestedState from '../createPollableNestedState';
 import { useForceRerender } from 'react-helpful-utils';
 import getPromise from '../getPromise';
 import handleUnlisteners from '../utils/handleUnlisteners';

@@ -1,6 +1,6 @@
 import type { Primitive, PrimitiveOrNested } from 'keyweaver';
 import type { $tate } from './utils/constants';
-import { ComponentType, PropsWithChildren } from 'react';
+import type { ComponentType, PropsWithChildren } from 'react';
 
 declare const PENDING: unique symbol;
 

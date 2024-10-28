@@ -1,4 +1,4 @@
-import { ValueChangeCallbacks } from '../types';
+import type { ValueChangeCallbacks } from '../types';
 import { RESOLVED_PROMISE } from './constants';
 import executeSetters from './executeSetters';
 

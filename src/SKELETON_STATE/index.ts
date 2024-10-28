@@ -1,5 +1,5 @@
 import noop from 'lodash.noop';
-import {
+import type {
   AsyncStateUtils,
   ControllableLoadableNestedState,
   StateInternalUtils,

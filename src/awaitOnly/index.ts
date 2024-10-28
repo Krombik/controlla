@@ -1,4 +1,8 @@
-import { AsyncState, ControllableLoadableState, LoadableState } from '../types';
+import type {
+  AsyncState,
+  ControllableLoadableState,
+  LoadableState,
+} from '../types';
 
 /** Makes the given {@link state} to be awaited only, without triggering re-renders on state changes. */
 const awaitOnly = <S extends AsyncState>(
