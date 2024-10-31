@@ -6,6 +6,7 @@ import SuspenseContext from '../utils/SuspenseContext';
 import handleSuspense from '../utils/handleSuspense';
 import useHandleSuspenseValue from '../utils/useHandleSuspenseValue';
 import useForceRerender from 'react-helpful-utils/useForceRerender';
+import getValue from '../getValue';
 
 const use: {
   /**
@@ -58,9 +59,7 @@ const use: {
   const suspenseCtx = useContext(SuspenseContext);
 
   if (state) {
-    const utils = state._internal;
-
-    const err = utils._errorUtils._value;
+    const err = getValue(state.error);
 
     const isError = err !== undefined;
 
@@ -68,7 +67,7 @@ const use: {
       throw err;
     }
 
-    if (utils._value !== undefined || isError) {
+    if (state._internal._value !== undefined || isError) {
       const value = useHandleSuspenseValue(state, useForceRerender());
 
       return safeReturn ? [value, err] : value;

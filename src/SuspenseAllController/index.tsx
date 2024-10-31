@@ -18,8 +18,8 @@ type Props<S extends Array<AsyncState | Falsy>> = {
   /** A function or element to render if any of the {@link Props.states states} fail */
   renderIfError?:
     | ((
-        values: ExtractValues<S, true>,
-        errors: ExtractErrors<S>
+        errors: ExtractErrors<S>,
+        values: ExtractValues<S, true>
       ) => ReturnType<FC>)
     | ReturnType<FC>;
   /** If provided, it wraps the rendered content or fallback only if they exist. */
@@ -43,7 +43,7 @@ const Controller: FC<Props<any[]>> = ({
     errors.every((item) => item === undefined)
       ? render(...values)
       : typeof renderIfError == 'function'
-        ? renderIfError(values, errors)
+        ? renderIfError(errors, values)
         : renderIfError
   );
 };

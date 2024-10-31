@@ -219,6 +219,7 @@ const getAsyncStateCreator =
       reset,
       reloadIfStale,
       reloadOnFocus,
+      isExpectedError,
     }: Partial<ControllableLoadableStateOptions<any>>,
     stateInitializer?: StateInitializer,
     keys?: any[],
@@ -230,6 +231,7 @@ const getAsyncStateCreator =
       undefined,
       {
         _commonSet: undefined!,
+        _isExpectedError: isExpectedError || alwaysTrue,
         _parentUtils: undefined!,
       }
     );
@@ -287,6 +289,16 @@ const getAsyncStateCreator =
     errorUtils._set = _setError;
 
     errorUtils._parentUtils = utils;
+
+    errorUtils._get = function () {
+      const err = this._value;
+
+      if (err === undefined || this._isExpectedError(err)) {
+        return err;
+      }
+
+      throw err;
+    };
 
     if (utils._value !== undefined) {
       utils._isLoadable = false;

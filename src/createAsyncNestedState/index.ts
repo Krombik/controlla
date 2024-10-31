@@ -20,7 +20,7 @@ const createAsyncNestedState = getAsyncStateCreator(createNestedState) as {
     stateInitializer?: StateInitializer<T>
   ): LoadableNestedState<T, E>;
   <T, E = any>(
-    options?: AsyncStateOptions<T>,
+    options?: AsyncStateOptions<T, E>,
     stateInitializer?: StateInitializer<T>
   ): AsyncNestedState<T, E>;
 };

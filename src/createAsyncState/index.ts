@@ -20,7 +20,7 @@ const createAsyncState = getAsyncStateCreator(createState) as {
     stateInitializer?: StateInitializer<T>
   ): LoadableState<T, E>;
   <T, E = any>(
-    options?: AsyncStateOptions<T>,
+    options?: AsyncStateOptions<T, E>,
     stateInitializer?: StateInitializer<T>
   ): AsyncState<T, E>;
 };

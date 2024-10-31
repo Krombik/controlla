@@ -13,6 +13,7 @@ import handleSuspense from '../utils/handleSuspense';
 import SuspenseContext from '../utils/SuspenseContext';
 import useForceRerender from 'react-helpful-utils/useForceRerender';
 import useHandleSuspenseValue from '../utils/useHandleSuspenseValue';
+import getValue from '../getValue';
 
 /**
  * A hook to retrieve the current values and errors from multiple {@link states}.
@@ -74,9 +75,9 @@ const useAll = <
     > => {
   const l = states.length;
 
-  const values: any[] = [];
+  const values = new Array(l);
 
-  const errors: any[] = [];
+  const errors = new Array(l);
 
   const errorBoundaryCtx = useContext(ErrorBoundaryContext);
 
@@ -88,9 +89,7 @@ const useAll = <
     const state = states[i];
 
     if (state) {
-      const utils = state._internal;
-
-      const err = utils._errorUtils._value;
+      const err = getValue(state.error);
 
       const isError = err !== undefined;
 
@@ -98,10 +97,10 @@ const useAll = <
         throw err;
       }
 
-      if (utils._value !== undefined || isError) {
-        values.push(useHandleSuspenseValue(state, forceRerender));
+      if (state._internal._value !== undefined || isError) {
+        values[i] = useHandleSuspenseValue(state, forceRerender);
 
-        errors.push(err);
+        errors[i] = err;
       } else {
         const unloadedStates: AnyAsyncState[] = [state];
 
@@ -109,12 +108,10 @@ const useAll = <
           const state = states[i];
 
           if (state) {
-            const utils = state._internal;
-
-            const err = utils._errorUtils._value;
+            const err = getValue(state.error);
 
             if (err === undefined) {
-              if (utils._value === undefined) {
+              if (state._internal._value === undefined) {
                 unloadedStates.push(state);
               }
             } else if (!safeReturn) {
@@ -134,22 +131,25 @@ const useAll = <
             }
           };
 
-          const onReject = safeReturn ? onResolve : res;
-
           for (let i = 0; i < l; i++) {
-            handleSuspense(
-              unloadedStates[i],
-              errorBoundaryCtx,
-              suspenseCtx
-            ).then(onResolve, onReject);
+            const state = unloadedStates[i];
+
+            handleSuspense(state, errorBoundaryCtx, suspenseCtx).then(
+              onResolve,
+              safeReturn
+                ? (err) => {
+                    if (state.error._internal._isExpectedError(err)) {
+                      onResolve();
+                    } else {
+                      res();
+                    }
+                  }
+                : res
+            );
           }
         });
       }
     } else {
-      values.length++;
-
-      errors.length++;
-
       useLayoutEffect(noop, [0, 0]);
     }
   }

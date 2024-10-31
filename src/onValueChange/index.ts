@@ -34,30 +34,54 @@ const onValueChange: {
   if ('length' in state) {
     let isAvailable = true;
 
-    const unlisteners: Array<() => void> = [];
+    const l = state.length;
 
-    const fn = () => {
-      if (isAvailable) {
-        isAvailable = false;
+    const unlisteners: Array<() => void> = new Array(l);
 
-        postBatchCallbacksPush(() => {
-          cb(...state.map(getValue));
+    if (cb.length) {
+      const values = state.map(getValue);
 
-          isAvailable = true;
-        });
+      for (let i = 0; i < l; i++) {
+        const item = state[i];
+
+        unlisteners[i] = item._internal._onValueChange((value) => {
+          values[i] = value;
+
+          if (isAvailable) {
+            isAvailable = false;
+
+            postBatchCallbacksPush(() => {
+              cb(...values);
+
+              isAvailable = true;
+            });
+          }
+        }, item._path!);
       }
-    };
+    } else {
+      const fn = () => {
+        if (isAvailable) {
+          isAvailable = false;
 
-    for (let i = 0; i < state.length; i++) {
-      const item = state[i];
+          postBatchCallbacksPush(() => {
+            cb();
 
-      unlisteners.push(item._internal._onValueChange(fn, item._path!));
+            isAvailable = true;
+          });
+        }
+      };
+
+      for (let i = 0; i < l; i++) {
+        const item = state[i];
+
+        unlisteners[i] = item._internal._onValueChange(fn, item._path!);
+      }
     }
 
     return () => {
       cb = noop;
 
-      for (let i = 0; i < unlisteners.length; i++) {
+      for (let i = 0; i < l; i++) {
         unlisteners[i]();
       }
     };

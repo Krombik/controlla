@@ -37,10 +37,22 @@ const useMappedValue = ((
               ? [state, isLoadedState, errorState]
               : [state, isLoadedState]
             : (state as any),
-          (value: any, isLoaded: any, err: any) => {
-            if (
-              !isEqual(mapper(value, isLoaded, err), mappedValueRef.current)
-            ) {
+          () => {
+            let nextValue;
+
+            try {
+              nextValue = mapper(
+                getValue(state),
+                isLoadedState && getValue(isLoadedState),
+                errorState && getValue(errorState)
+              );
+            } catch {
+              forceRerender();
+
+              return;
+            }
+
+            if (!isEqual(nextValue, mappedValueRef.current)) {
               forceRerender();
             }
           }

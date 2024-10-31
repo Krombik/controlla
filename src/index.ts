@@ -22,6 +22,7 @@ export { default as useMappedValue } from './useMappedValue';
 export { default as useMergedValue } from './useMergedValue';
 export { default as use } from './use';
 export { default as useAll } from './useAll';
+export { default as useOnValueChange } from './useOnValueChange';
 
 export { default as batchedUpdates } from './batchedUpdates';
 export { default as areStatesEqual } from './areStatesEqual';

@@ -63,6 +63,7 @@ export type State<
 
 export type ErrorStateUtils = {
   _parentUtils: StateInternalUtils & AsyncStateUtils;
+  _isExpectedError(error: any): boolean;
   _commonSet: StateInternalUtils['_set'];
 };
 
@@ -304,7 +305,11 @@ export type ArrayOfUndefined<T extends any[]> = Readonly<{
   [index in keyof T]: undefined;
 }>;
 
-export type AsyncStateOptions<T, Keys extends PrimitiveOrNested[] = []> = {
+export type AsyncStateOptions<
+  T,
+  E = any,
+  Keys extends PrimitiveOrNested[] = [],
+> = {
   value?: ResolvedValue<T> | ((...keys: Keys) => ResolvedValue<T>);
   isLoaded?(
     value: ResolvedValue<T>,
@@ -312,13 +317,14 @@ export type AsyncStateOptions<T, Keys extends PrimitiveOrNested[] = []> = {
     attempt: number
   ): boolean;
   loadingTimeout?: number;
+  isExpectedError?(error: any): error is E;
 };
 
 export type LoadableStateOptions<
   T,
   E = any,
   Keys extends PrimitiveOrNested[] = [],
-> = AsyncStateOptions<T, Keys> & {
+> = AsyncStateOptions<T, E, Keys> & {
   load(this: AsyncState<T, E>, ...keys: Keys): void | (() => void);
   reloadIfStale?: number;
   reloadOnFocus?: number;
@@ -339,8 +345,12 @@ export type RequestableStateOptions<
   E = any,
   Keys extends PrimitiveOrNested[] = [],
 > = Pick<
-  LoadableStateOptions<T, Keys>,
-  'value' | 'loadingTimeout' | 'reloadIfStale' | 'reloadOnFocus'
+  LoadableStateOptions<T, E, Keys>,
+  | 'value'
+  | 'loadingTimeout'
+  | 'reloadIfStale'
+  | 'reloadOnFocus'
+  | 'isExpectedError'
 > & {
   /** @internal */
   _beforeLoad?(args: PrimitiveOrNested[], utils: AsyncState['_internal']): void;

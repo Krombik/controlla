@@ -30,8 +30,18 @@ const useMergedValue = ((
   mergedValueRef.current = mergedValue;
 
   useLayoutEffect(() => {
-    const valuesUnlistener = onValueChange(states, (...values) => {
-      if (!isEqual(merger(...values), mergedValueRef.current)) {
+    const valuesUnlistener = onValueChange(states, () => {
+      let nextValue;
+
+      try {
+        nextValue = merger(...states.map(getValue));
+      } catch {
+        forceRerender();
+
+        return;
+      }
+
+      if (!isEqual(nextValue, mergedValueRef.current)) {
         forceRerender();
       }
     });
