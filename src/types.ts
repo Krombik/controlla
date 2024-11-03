@@ -36,6 +36,7 @@ declare const STATE_IDENTIFIER: unique symbol;
 type StorageKeys<Keys extends PrimitiveOrNested[]> = Keys['length'] extends 0
   ? {}
   : {
+      /** Represents the keys that define the hierarchical structure of the storage. */
       readonly keys: Readonly<Keys>;
     };
 
@@ -46,6 +47,14 @@ export type Internal<T> = {
 
 declare class StateBase {}
 
+/**
+ * Represents a basic reactive state that holds a value.
+ *
+ * @example
+ * ```ts
+ * const state: State<number> = createState(0);
+ * ```
+ */
 export type State<
   Value = any,
   Keys extends PrimitiveOrNested[] = [],
@@ -63,7 +72,7 @@ export type State<
 
 export type ErrorStateUtils = {
   _parentUtils: StateInternalUtils & AsyncStateUtils;
-  _isExpectedError(error: any): boolean;
+  readonly _isExpectedError?: (error: any) => boolean;
   _commonSet: StateInternalUtils['_set'];
 };
 
@@ -101,7 +110,10 @@ export type AsyncStateUtils = {
   } | null;
 };
 
-/** State that supports asynchronous operations, extends {@link State} */
+/**
+ * Represents a state that manages an asynchronous value, including {@link AsyncState.isLoaded loading} and {@link AsyncState.error error} states.
+ * Extends {@link State}.
+ */
 export type AsyncState<
   Value = any,
   Error = any,
@@ -119,6 +131,10 @@ export type AsyncState<
     readonly isLoaded: State<boolean>;
   };
 
+/**
+ * Represents a state that supports loading functionality, extending {@link AsyncState}
+ * with a method to initiate and manage the loading process.
+ */
 export type LoadableState<
   Value = any,
   Error = any,
@@ -126,17 +142,45 @@ export type LoadableState<
 > = AsyncState<Value, Error, Keys> & {
   /** @internal */
   readonly _withoutLoading?: true;
+  /**
+   * Initiates the loading process for the state if it has not already started.
+   * If the loading process is already active, it increases the load listener count.
+   *
+   * The returned function decreases the load listener count, and the loading process
+   * will only be canceled if there are no remaining load listeners.
+   *
+   * @param {boolean} [force=false] - If `true`, forces the loading process to reload,
+   * even if it has previously completed or is in progress.
+   * @returns - A function to decrease the load listener count. The loading
+   * process is only marked as cancelable when all listeners have been removed.
+   *
+   * @example
+   * ```ts
+   * const decreaseLoadListener = state.load();
+   *
+   * // Call decreaseLoadListener to decrease the load listener count.
+   * // The loading process is only canceled if no other listeners remain.
+   * decreaseLoadListener();
+   * ```
+   */
   load(force?: boolean): () => void;
 };
 
+/**
+ * Represents a loadable state whose loading process can be controlled. Extends {@link LoadableState}.
+ */
 export type ControllableLoadableState<
   Value = any,
   Error = any,
   Keys extends PrimitiveOrNested[] = [],
 > = LoadableState<Value, Error, Keys> & {
+  /** Provides control methods for managing the loading process of the state. */
   readonly loading: {
+    /** Pauses the current loading process. */
     pause(): void;
+    /** Resumes a paused loading process. */
     resume(): void;
+    /** Resets the loading process, starting it from the beginning. */
     reset(): void;
   };
 };
@@ -147,6 +191,14 @@ export type InternalPathBase = {
 };
 
 export type StateScope<Scope extends () => any> = {
+  /**
+   * @returns scoped version of the state, allowing access to nested state values.
+   *
+   * @example
+   * ```js
+   * const state = nestedState.scope().some.nested.path.$tate;
+   * ```
+   */
   scope: Scope;
 };
 
@@ -231,12 +283,23 @@ type ProcessStateScope<
             IsRoot
           >;
 
+/**
+ * Represents a state that supports nested structures, allowing access to
+ * and management of deeper state values. Extends {@link State} and provides
+ * a {@link NestedState.scope scope} method for working with nested parts of the state.
+ */
 export type NestedState<
   Value = any,
   Keys extends PrimitiveOrNested[] = [],
 > = State<Value, Keys> &
   StateScope<() => ProcessStateScope<Value, Keys, State, NestedState>>;
 
+/**
+ * Represents an asynchronous state that supports nested structures, allowing
+ * for the management of asynchronous values within a hierarchical state setup.
+ * Extends {@link AsyncState} and provides a {@link AsyncNestedState.scope scope} method for accessing nested
+ * parts of the state.
+ */
 export type AsyncNestedState<
   Value = any,
   Error = any,
@@ -246,6 +309,12 @@ export type AsyncNestedState<
     () => ProcessStateScope<Value, Keys, AsyncState, AsyncNestedState>
   >;
 
+/**
+ * Represents a loadable state that supports nested structures, allowing
+ * for organized and hierarchical management of loadable values. Extends
+ * {@link LoadableState} and provides a {@link LoadableNestedState.scope scope} method for accessing and managing
+ * nested parts of the state.
+ */
 export type LoadableNestedState<
   Value = any,
   Error = any,
@@ -255,6 +324,11 @@ export type LoadableNestedState<
     () => ProcessStateScope<Value, Keys, LoadableState, LoadableNestedState>
   >;
 
+/**
+ * Represents a loadable state that supports nested structures and allows
+ * control over the loading process. Extends {@link ControllableLoadableState}
+ * and provides a {@link ControllableLoadableNestedState.scope scope} method for managing and accessing nested parts of the state.
+ */
 export type ControllableLoadableNestedState<
   Value = any,
   Error = any,
@@ -310,13 +384,23 @@ export type AsyncStateOptions<
   E = any,
   Keys extends PrimitiveOrNested[] = [],
 > = {
+  /** The initial value of the state or a function to resolve it using keys. */
   value?: ResolvedValue<T> | ((...keys: Keys) => ResolvedValue<T>);
+  /** A function to determine if the state is considered loaded, based on the {@link value current} and {@link prevValue previous} values and the number of loading {@link attempt attempts}. */
   isLoaded?(
     value: ResolvedValue<T>,
     prevValue: ResolvedValue<T> | undefined,
     attempt: number
   ): boolean;
+  /** The timeout in milliseconds for considering the loading process slow. */
   loadingTimeout?: number;
+  /**
+   * A type guard function used to determine if an error is considered an expected error.
+   *
+   * If `isExpectedError` returns `false` for an error, subsequent attempts to retrieve
+   * the value of the associated error state using `getValue` or any hook will throw the error.
+   * This ensures that unexpected errors are surfaced when accessing the error state.
+   */
   isExpectedError?(error: any): error is E;
 };
 
@@ -325,8 +409,20 @@ export type LoadableStateOptions<
   E = any,
   Keys extends PrimitiveOrNested[] = [],
 > = AsyncStateOptions<T, E, Keys> & {
+  /**
+   * A function to initiate the loading process. This method can optionally return
+   * a cleanup function to be called when the loading is complete or canceled.
+   */
   load(this: AsyncState<T, E>, ...keys: Keys): void | (() => void);
+  /**
+   * The duration in milliseconds. If set, the state will reload
+   * if accessed again after this time has passed since the last load.
+   */
   reloadIfStale?: number;
+  /**
+   * The duration in milliseconds. If set, the state will reload
+   * when the tab gains focus after this duration has passed since the last load.
+   */
   reloadOnFocus?: number;
 };
 
@@ -335,8 +431,11 @@ export type ControllableLoadableStateOptions<
   E = any,
   Keys extends PrimitiveOrNested[] = [],
 > = LoadableStateOptions<T, E, Keys> & {
+  /** Pauses the current loading process, preventing further progress until resumed. */
   pause(): void;
+  /** Resumes a paused loading process, allowing it to continue. */
   resume(): void;
+  /** Resets the loading process, starting it over from the beginning. */
   reset(): void;
 };
 
@@ -359,7 +458,17 @@ export type RequestableStateOptions<
     args: PrimitiveOrNested[] | void,
     utils: AsyncState['_internal']
   ): Promise<PrimitiveOrNested[] | void>;
+  /**
+   * A function that starts the loading process for the state and returns a promise
+   * that resolves with the loaded value.
+   */
   load(...args: Keys): Promise<ResolvedValue<T>>;
+  /**
+   * A function that determines whether the loading process should be retried after an error occurs.
+   * @param err - The error encountered during the loading attempt.
+   * @param attempt - The number of loading attempts made so far.
+   * @returns The delay in milliseconds before retrying, or `0` to stop retrying.
+   */
   shouldRetryOnError?(err: E, attempt: number): number;
 };
 
@@ -369,7 +478,12 @@ export type PollableStateOptions<
   Keys extends PrimitiveOrNested[] = [],
 > = RequestableStateOptions<T, E, Keys> &
   Pick<AsyncStateOptions<T>, 'isLoaded'> & {
+    /** The interval in milliseconds at which the state should poll for new data. */
     interval: number;
+    /**
+     * The interval in milliseconds for polling when the document is hidden (e.g., when the tab is not in focus).
+     * If set to `0`, polling is disabled while the tab is hidden.
+     */
     hiddenInterval?: number;
   };
 
@@ -450,6 +564,10 @@ export type RetrieveStateOrPaginatedStorage<T> =
       ? RetrieveStateOrPaginatedStorage<Child>
       : T;
 
+/**
+ * Represents a nested structure for state storage, recursively creating
+ * a hierarchy of state storages based on the provided keys.
+ */
 export type NestedStateStorage<
   Keys extends PrimitiveOrNested[],
   T,
@@ -586,6 +704,10 @@ type ProcessStateStorageScope<
             IsRoot
           >;
 
+/**
+ * Represents a structured state storage system that allows retrieval and deletion
+ * of state entries using specified keys.
+ */
 export type StateStorage<
   K extends PrimitiveOrNested,
   T,
@@ -596,6 +718,14 @@ export type StateStorage<
   /** @internal */
   InternalPathBase &
   StateStorageMarker<K, T> & {
+    /**
+     * Retrieves a state within the storage using the provided keys.
+     *
+     * @example
+     * ```js
+     * const state = storage.get('key', { some: { nested: ['key'] } });
+     * ```
+     */
     get<Keys extends [K, ...Partial<KeysOfStorage<T>>]>(
       ...keys: Keys
     ): StateWithNestedStorageKeys<
@@ -607,6 +737,12 @@ export type StateStorage<
       >,
       [...ParentKeys, ...Keys]
     >;
+    /**
+     * Deletes a state entry from the storage associated with the given key.
+     *
+     * **Warning**: This is an unsafe method. It only removes the state entry from
+     * the storage but does not clear or reset the state itself.
+     */
     delete(key: K): void;
   } & (T extends StateScope<() => any>
     ? StateScope<
@@ -691,6 +827,9 @@ type ProcessPaginatedStorageScope<
             IsRoot
           >;
 
+/**
+ * Represents a paginated state storage system for managing state entries across multiple pages.
+ */
 export type PaginatedStateStorage<
   T extends LoadableState,
   ParentKeys extends PrimitiveOrNested[] = [],
@@ -700,10 +839,26 @@ export type PaginatedStateStorage<
   /** @internal */
   InternalPathBase &
   StateStorageMarker<number, T> & {
+    /** Retrieves a state entry for the specified page number within the paginated storage. */
     get(
       page: number
     ): StateWithNestedStorageKeys<T, [...ParentKeys, page: number]>;
+    /**
+     * Deletes a state entry for the specified page number from the paginated storage.
+     *
+     * **Warning**: This is an unsafe method. It only removes the state entry from
+     * the storage but does not clear or reset the state itself.
+     */
     delete(page: number): void;
+    /**
+     * A hook that retrieves an tuple of items and errors for the specified {@link count} of pages in the paginated storage.
+     * @param count - The number of pages to retrieve starting from the first page.
+     *
+     * @example
+     * ```js
+     * const [items, errors] = paginatedStorage.usePages(5);
+     * ```
+     */
     usePages(
       count: number
     ): T extends LoadableState<infer V, infer E>
@@ -712,6 +867,16 @@ export type PaginatedStateStorage<
           errors: ReadonlyArray<E | undefined>,
         ]
       : never;
+    /**
+     * A hook that retrieves an tuple of items and errors for the specified range of pages in the paginated storage.
+     * @param from - The starting page number (starts from `0`).
+     * @param to - The ending page number.
+     *
+     * @example
+     * ```js
+     * const [items, errors] = paginatedStorage.usePages(2, 5);
+     * ```
+     */
     usePages(
       from: number,
       to: number

@@ -7,6 +7,7 @@ import type {
 import getPollableStateCreator from '../utils/getPollableStateCreator';
 
 const createPollableState = getPollableStateCreator(createAsyncState) as {
+  /** Creates a {@link ControllableLoadableState controllable loadable state} with polling capabilities. */
   <T, E = any>(
     options: PollableStateOptions<T, E>,
     stateInitializer?: StateInitializer<T>

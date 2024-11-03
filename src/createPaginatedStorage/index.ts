@@ -363,6 +363,11 @@ export type PaginatedPollableNestedStateArgs<
   PollableStateOptions<T, E, [...ParentKeys, ...Keys, page: number]>
 >;
 
+/**
+ * Creates a paginated state storage to manage and load data efficiently across multiple pages.
+ * The created storage allows the loading and handling of data in a paginated structure, with support
+ * for {@link createRequestableState requestable} and {@link createPollableState pollable} states.
+ */
 const createPaginatedStorage: {
   <T, Error = any>(
     ...args: PaginatedRequestableStateArgs<T, Error>

@@ -124,6 +124,16 @@ function _setError(this: _InternalUtils['_errorUtils'], value: any) {
   }
 }
 
+function _getExpectedError(this: _InternalUtils['_errorUtils']) {
+  const err = this._value;
+
+  if (err === undefined || this._isExpectedError!(err)) {
+    return err;
+  }
+
+  throw err;
+}
+
 function load(this: _State, reload?: boolean) {
   let isNotCanceled = true;
 
@@ -225,15 +235,23 @@ const getAsyncStateCreator =
     keys?: any[],
     parentUtils?: Record<string, any>
   ): AnyAsyncState => {
-    const errorState = createState<ErrorStateUtils>(
+    const errorState = createState<
+      ErrorStateUtils & Partial<Pick<_InternalUtils, '_get'>>
+    >(
       undefined,
       undefined,
       undefined,
-      {
-        _commonSet: undefined!,
-        _isExpectedError: isExpectedError || alwaysTrue,
-        _parentUtils: undefined!,
-      }
+      isExpectedError
+        ? {
+            _commonSet: undefined!,
+            _parentUtils: undefined!,
+            _isExpectedError: isExpectedError,
+            _get: _getExpectedError,
+          }
+        : {
+            _commonSet: undefined!,
+            _parentUtils: undefined!,
+          }
     );
 
     const errorUtils = errorState._internal;
@@ -289,16 +307,6 @@ const getAsyncStateCreator =
     errorUtils._set = _setError;
 
     errorUtils._parentUtils = utils;
-
-    errorUtils._get = function () {
-      const err = this._value;
-
-      if (err === undefined || this._isExpectedError(err)) {
-        return err;
-      }
-
-      throw err;
-    };
 
     if (utils._value !== undefined) {
       utils._isLoadable = false;

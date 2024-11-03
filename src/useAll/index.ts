@@ -134,16 +134,20 @@ const useAll = <
           for (let i = 0; i < l; i++) {
             const state = unloadedStates[i];
 
+            const errorUtils = state.error._internal;
+
             handleSuspense(state, errorBoundaryCtx, suspenseCtx).then(
               onResolve,
               safeReturn
-                ? (err) => {
-                    if (state.error._internal._isExpectedError(err)) {
-                      onResolve();
-                    } else {
-                      res();
+                ? errorUtils._isExpectedError
+                  ? (err) => {
+                      if (errorUtils._isExpectedError!(err)) {
+                        onResolve();
+                      } else {
+                        res();
+                      }
                     }
-                  }
+                  : onResolve
                 : res
             );
           }

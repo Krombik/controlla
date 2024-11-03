@@ -198,7 +198,18 @@ function _get(this: _InternalUtils, path: string[]) {
   return value;
 }
 
-/** Creates a nested state for managing complex state. */
+/**
+ * Creates a {@link NestedState nested state} for managing complex state structures.
+ *
+ * @example
+ * ```js
+ * const state1 = createNestedState();
+ *
+ * const state2 = createNestedState({ name: 'John' });
+ *
+ * const state3 = createNestedState(() => ({ name: 'John' }));
+ * ```
+ */
 const createNestedState: {
   <T>(): NestedState<T | undefined>;
   <T>(

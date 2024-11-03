@@ -34,6 +34,9 @@ function _get(this: _InternalUtils) {
   return this._value;
 }
 
+/**
+ * Creates a {@link State state} for managing simple state value.
+ */
 const createState: {
   /** @internal */
   <T extends Record<string, any>>(

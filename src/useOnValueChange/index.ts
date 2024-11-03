@@ -24,7 +24,7 @@ const useOnValueChange: {
       }
     ) => void
   ): void;
-} = (state: State | State[], effect: (...values: any[]) => void) => {
+} = (state: State | State[], cb: (...values: any[]) => void) => {
   const [error, setError] = useState<any>();
 
   if (error) {
@@ -51,9 +51,9 @@ const useOnValueChange: {
     () =>
       onValueChange(state as any, () => {
         try {
-          effect.length == 1 || !isArr
-            ? effect(getValue(isArr ? state[0] : state))
-            : effect(...state.map(getValue));
+          cb.length == 1 || !isArr
+            ? cb(getValue(isArr ? state[0] : state))
+            : cb(...state.map(getValue));
         } catch (err) {
           setError(err);
         }
