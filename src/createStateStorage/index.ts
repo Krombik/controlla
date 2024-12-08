@@ -1,13 +1,8 @@
 import toKey, { type PrimitiveOrNested } from 'keyweaver';
 import type {
-  AsyncNestedState,
   AsyncState,
-  LoadableNestedState,
   LoadableState,
-  NestedState,
   NestedStateStorage,
-  ControllableLoadableNestedState,
-  ControllableLoadableState,
   State,
   StateStorage,
   AsyncStateOptions,
@@ -15,7 +10,6 @@ import type {
   PollableStateOptions,
   STATE_STORAGE_IDENTIFIER,
   LoadableStateOptions,
-  ControllableLoadableStateOptions,
   StorageUtils,
   StateInitializer,
   WithInitModule,
@@ -28,12 +22,12 @@ import { EMPTY_ARR } from '../utils/constants';
 import scope from '../utils/scope';
 import type createState from '../createState';
 import type createAsyncState from '../createAsyncState';
-import type createNestedState from '../createNestedState';
-import type createAsyncNestedState from '../createAsyncNestedState';
+import type createStateScope from '../createStateScope';
+import type createAsyncStateScope from '../createAsyncStateScope';
 import type createRequestableState from '../createRequestableState';
-import type createRequestableNestedState from '../createRequestableNestedState';
+import type createRequestableStateScope from '../createRequestableStateScope';
 import type createPollableState from '../createPollableState';
-import type createPollableNestedState from '../createPollableNestedState';
+import type createPollableStateScope from '../createPollableStateScope';
 import type createPaginatedStorage from '../createPaginatedStorage';
 import {
   PaginatedPollableNestedStateArgs,
@@ -60,7 +54,7 @@ type WithDepth<T extends any[], K extends number> = [
   ...(K extends 1 ? [depth?: K] : [depth: K]),
 ];
 
-type StateCreator = typeof createState | typeof createNestedState;
+type StateCreator = typeof createState | typeof createStateScope;
 
 type StateArgsBase<CreateState extends StateCreator, T> = [
   createState: CreateState,
@@ -93,9 +87,7 @@ type GetStateArgs<
   ]
 >;
 
-type AsyncStateCreator =
-  | typeof createAsyncState
-  | typeof createAsyncNestedState;
+type AsyncStateCreator = typeof createAsyncState | typeof createAsyncStateScope;
 
 type AsyncGetStateArgs<
   CreateState extends AsyncStateCreator,
@@ -165,7 +157,7 @@ type ControllableStateArgs<
 
 type RequestableStateCreator =
   | typeof createRequestableState
-  | typeof createRequestableNestedState;
+  | typeof createRequestableStateScope;
 
 type RequestableStateArgs<
   CreateState extends RequestableStateCreator,
@@ -183,7 +175,7 @@ type RequestableStateArgs<
 
 type PollableStateCreator =
   | typeof createPollableState
-  | typeof createPollableNestedState;
+  | typeof createPollableStateScope;
 
 type PollableStateArgs<
   CreateState extends PollableStateCreator,
@@ -223,7 +215,7 @@ type StateCreationArguments<
     ?
         | PollableStateArgs<
             T extends ControllableLoadableNestedState
-              ? typeof createPollableNestedState
+              ? typeof createPollableStateScope
               : typeof createPollableState,
             V,
             E,
@@ -232,7 +224,7 @@ type StateCreationArguments<
           >
         | ControllableStateArgs<
             T extends ControllableLoadableNestedState
-              ? typeof createAsyncNestedState
+              ? typeof createAsyncStateScope
               : typeof createAsyncState,
             V,
             E,
@@ -243,7 +235,7 @@ type StateCreationArguments<
       ?
           | RequestableStateArgs<
               T extends LoadableNestedState
-                ? typeof createRequestableNestedState
+                ? typeof createRequestableStateScope
                 : typeof createRequestableState,
               V,
               E,
@@ -252,7 +244,7 @@ type StateCreationArguments<
             >
           | LoadableStateArgs<
               T extends LoadableNestedState
-                ? typeof createAsyncNestedState
+                ? typeof createAsyncStateScope
                 : typeof createAsyncState,
               V,
               E,
@@ -263,7 +255,7 @@ type StateCreationArguments<
         ?
             | AsyncGetStateArgs<
                 T extends AsyncNestedState
-                  ? typeof createAsyncNestedState
+                  ? typeof createAsyncStateScope
                   : typeof createAsyncState,
                 V,
                 E,
@@ -272,7 +264,7 @@ type StateCreationArguments<
               >
             | AsyncStateArgsWithDeepness<
                 T extends AsyncNestedState
-                  ? typeof createAsyncNestedState
+                  ? typeof createAsyncStateScope
                   : typeof createAsyncState,
                 V,
                 E,
@@ -282,7 +274,7 @@ type StateCreationArguments<
           ?
               | GetStateArgs<
                   T extends NestedState
-                    ? typeof createNestedState
+                    ? typeof createStateScope
                     : typeof createState,
                   V,
                   Keys,
@@ -290,7 +282,7 @@ type StateCreationArguments<
                 >
               | StateArgsWithDeepness<
                   T extends NestedState
-                    ? typeof createNestedState
+                    ? typeof createStateScope
                     : typeof createState,
                   V,
                   LengthOf<Keys>
@@ -404,35 +396,35 @@ interface CreateStateStorage {
   >;
 
   <T, Keys extends PrimitiveOrNested[], E = any>(
-    ...args: ControllableStateArgs<typeof createAsyncNestedState, T, E, Keys>
+    ...args: ControllableStateArgs<typeof createAsyncStateScope, T, E, Keys>
   ): NestedStateStorage<Keys, ControllableLoadableNestedState<T, E, Keys>>;
   <T, Keys extends PrimitiveOrNested[], E = any>(
     ...args: ControllableStateArgs<typeof createAsyncState, T, E, Keys>
   ): NestedStateStorage<Keys, ControllableLoadableState<T, E, Keys>>;
 
   <T, Keys extends PrimitiveOrNested[], E = any>(
-    ...args: LoadableStateArgs<typeof createAsyncNestedState, T, E, Keys>
+    ...args: LoadableStateArgs<typeof createAsyncStateScope, T, E, Keys>
   ): NestedStateStorage<Keys, LoadableNestedState<T, E, Keys>>;
   <T, Keys extends PrimitiveOrNested[], E = any>(
     ...args: LoadableStateArgs<typeof createAsyncState, T, E, Keys>
   ): NestedStateStorage<Keys, LoadableState<T, E, Keys>>;
 
   <T, Keys extends PrimitiveOrNested[], E = any>(
-    ...args: AsyncGetStateArgs<typeof createAsyncNestedState, T, E, Keys>
+    ...args: AsyncGetStateArgs<typeof createAsyncStateScope, T, E, Keys>
   ): NestedStateStorage<Keys, AsyncNestedState<T, E, Keys>>;
   <T, Keys extends PrimitiveOrNested[], E = any>(
     ...args: AsyncGetStateArgs<typeof createAsyncState, T, E, Keys>
   ): NestedStateStorage<Keys, AsyncState<T, E, Keys>>;
 
   <T, Keys extends GenerateArr<C>, E = any, C extends number = LengthOf<Keys>>(
-    ...args: AsyncStateArgsWithDeepness<typeof createAsyncNestedState, T, E, C>
+    ...args: AsyncStateArgsWithDeepness<typeof createAsyncStateScope, T, E, C>
   ): NestedStateStorage<Keys, AsyncNestedState<T, E, Keys>>;
   <T, Keys extends GenerateArr<C>, E = any, C extends number = LengthOf<Keys>>(
     ...args: AsyncStateArgsWithDeepness<typeof createAsyncState, T, E, C>
   ): NestedStateStorage<Keys, AsyncState<T, E, Keys>>;
 
   <T, Keys extends PrimitiveOrNested[], E = any>(
-    ...args: PollableStateArgs<typeof createPollableNestedState, T, E, Keys>
+    ...args: PollableStateArgs<typeof createPollableStateScope, T, E, Keys>
   ): NestedStateStorage<Keys, ControllableLoadableNestedState<T, E, Keys>>;
   <T, Keys extends PrimitiveOrNested[], E = any>(
     ...args: PollableStateArgs<typeof createPollableState, T, E, Keys>
@@ -440,7 +432,7 @@ interface CreateStateStorage {
 
   <T, Keys extends PrimitiveOrNested[], E = any>(
     ...args: RequestableStateArgs<
-      typeof createRequestableNestedState,
+      typeof createRequestableStateScope,
       T,
       E,
       Keys
@@ -451,14 +443,14 @@ interface CreateStateStorage {
   ): NestedStateStorage<Keys, LoadableState<T, E, Keys>>;
 
   <T, Keys extends PrimitiveOrNested[]>(
-    ...args: GetStateArgs<typeof createNestedState, T, Keys>
+    ...args: GetStateArgs<typeof createStateScope, T, Keys>
   ): NestedStateStorage<Keys, NestedState<T, Keys>>;
   <T, Keys extends PrimitiveOrNested[]>(
     ...args: GetStateArgs<typeof createState, T, Keys>
   ): NestedStateStorage<Keys, State<T, Keys>>;
 
   <T, Keys extends GenerateArr<C>, C extends number = LengthOf<Keys>>(
-    ...args: StateArgsWithDeepness<typeof createNestedState, T, C>
+    ...args: StateArgsWithDeepness<typeof createStateScope, T, C>
   ): NestedStateStorage<Keys, NestedState<T, Keys>>;
   <T, Keys extends GenerateArr<C>, C extends number = LengthOf<Keys>>(
     ...args: StateArgsWithDeepness<typeof createState, T, C>

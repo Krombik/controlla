@@ -1,6 +1,5 @@
 import noop from 'lodash.noop';
-import getValue from '../getValue';
-import type { State, HandlePending } from '../types';
+import type { HandlePending, StateBase as State } from '../types';
 import { postBatchCallbacksPush } from '../utils/batching';
 
 const onValueChange: {
@@ -39,12 +38,12 @@ const onValueChange: {
     const unlisteners: Array<() => void> = new Array(l);
 
     if (cb.length) {
-      const values = state.map(getValue);
+      const values = state.map((state) => state.get());
 
       for (let i = 0; i < l; i++) {
         const item = state[i];
 
-        unlisteners[i] = item._internal._onValueChange((value) => {
+        unlisteners[i] = item._onValueChange((value) => {
           values[i] = value;
 
           if (isAvailable) {
@@ -56,7 +55,7 @@ const onValueChange: {
               isAvailable = true;
             });
           }
-        }, item._path!);
+        });
       }
     } else {
       const fn = () => {
@@ -74,7 +73,7 @@ const onValueChange: {
       for (let i = 0; i < l; i++) {
         const item = state[i];
 
-        unlisteners[i] = item._internal._onValueChange(fn, item._path!);
+        unlisteners[i] = item._onValueChange(fn);
       }
     }
 
@@ -87,7 +86,7 @@ const onValueChange: {
     };
   }
 
-  return state._internal._onValueChange(cb, state._path!);
+  return state._onValueChange(cb);
 };
 
 export default onValueChange;

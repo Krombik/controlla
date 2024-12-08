@@ -1,4 +1,3 @@
-import getValue from '../getValue';
 import type { AsyncState } from '../types';
 
 const getPromise: {
@@ -20,10 +19,6 @@ const getPromise: {
 } = (state: AsyncState, isRoot?: true) => {
   const utils = state._internal;
 
-  if (!('_promise' in utils)) {
-    throw new Error('available only for async state');
-  }
-
   const data = utils._promise;
 
   const path = state._path;
@@ -32,11 +27,11 @@ const getPromise: {
 
   if (data) {
     promise = data._promise;
-  } else if (getValue(state.isLoaded)) {
+  } else if (state.isLoaded._value) {
     promise =
       utils._value !== undefined
         ? Promise.resolve(utils._value)
-        : Promise.reject(utils._errorUtils._value);
+        : Promise.reject(state.error._value);
   } else {
     let _resolve!: (value: any) => void, _reject!: (error: any) => void;
 
@@ -54,7 +49,7 @@ const getPromise: {
   }
 
   return path && path.length && !isRoot
-    ? promise.then(() => utils._get(path))
+    ? promise.then(() => state.get())
     : promise;
 };
 

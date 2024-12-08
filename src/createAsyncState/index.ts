@@ -1,34 +1,32 @@
-import createState from '../createState';
 import type {
   AsyncState,
   AsyncStateOptions,
   LoadableState,
   LoadableStateOptions,
-  ControllableLoadableState,
-  ControllableLoadableStateOptions,
   StateInitializer,
+  ValueChangeCallbacks,
 } from '../types';
-import getAsyncStateCreator from '../utils/getAsyncStateCreator';
 
-const createAsyncState = getAsyncStateCreator(createState) as {
-  /**
-   * Creates a {@link ControllableLoadableState controllable loadable state} that provides full control over the
-   * loading process, including methods to pause, resume, and reset.
-   *
-   * @example
-   * ```js
-   * const controllableState = createAsyncState({
-   *   load: () => {}, // loading logic
-   *   pause: () => {}, // pause logic
-   *   resume: () => {}, // resume logic
-   *   reset: () => {} // reset logic
-   * });
-   * ```
-   */
-  <T, E = any>(
-    options: ControllableLoadableStateOptions<T, E>,
-    stateInitializer?: StateInitializer<T>
-  ): ControllableLoadableState<T, E>;
+import getAsyncState from '../utils/getAsyncState';
+
+import { set, _onValueChange, get } from '../utils/state/common';
+
+const createAsyncState = ((
+  options: LoadableStateOptions<any, any, any>,
+  stateInitializer?: StateInitializer,
+  keys?: any[]
+) =>
+  getAsyncState<ValueChangeCallbacks>(
+    get,
+    set,
+    _onValueChange,
+    options,
+    stateInitializer,
+    keys,
+    new Set(),
+    options.load,
+    options.Control
+  )) as {
   /**
    * Creates a {@link LoadableState loadable state} with basic loading capabilities.
    *
@@ -39,10 +37,10 @@ const createAsyncState = getAsyncStateCreator(createState) as {
    * });
    * ```
    */
-  <T, E = any>(
-    options: LoadableStateOptions<T, E>,
+  <T, E = any, Control = never>(
+    options: LoadableStateOptions<T, E, Control>,
     stateInitializer?: StateInitializer<T>
-  ): LoadableState<T, E>;
+  ): LoadableState<T, E, Control>;
   /**
    * Creates a {@link AsyncState basic asynchronous state}
    *
@@ -57,6 +55,6 @@ const createAsyncState = getAsyncStateCreator(createState) as {
   ): AsyncState<T, E>;
 };
 
-export type { AsyncState, LoadableState, ControllableLoadableState };
+export type { AsyncState, LoadableState };
 
 export default createAsyncState;

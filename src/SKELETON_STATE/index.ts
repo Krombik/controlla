@@ -1,17 +1,9 @@
 import noop from 'lodash.noop';
-import type {
-  AsyncStateUtils,
-  ControllableLoadableNestedState,
-  StateInternalUtils,
-  StateScope,
-} from '../types';
+import type { AsyncStateProperties, LoadableState } from '../types';
 import alwaysFalse from '../utils/alwaysFalse';
-import { $tate } from '../utils/constants';
 import { ContextType } from 'react';
 import type SuspenseContext from '../utils/SuspenseContext';
 import type ErrorBoundaryContext from '../utils/ErrorBoundaryContext';
-
-type Scope = StateScope<() => any>;
 
 export type SkeletonState = {
   /** @internal */
@@ -19,26 +11,19 @@ export type SkeletonState = {
     suspenseCtx: ContextType<typeof SuspenseContext>,
     errorBoundaryCtx: ContextType<typeof ErrorBoundaryContext>
   ): Promise<any>;
-} & Omit<ControllableLoadableNestedState<any, any, any[]>, keyof Scope> &
-  Scope;
+} & LoadableState<any, any, any>;
 
-function selfReturn<T>(this: T) {
-  return this;
-}
+const NOOP_PROMISE_DESCRIPTOR: PropertyDescriptor = {
+  value() {
+    return this;
+  },
+};
 
 const alwaysNoop = () => noop;
-
-const errorUtils: Partial<StateInternalUtils> = {
-  _get: noop,
-  _set: noop,
-  _onValueChange: alwaysNoop,
-};
 
 /**
  * A special state that remains permanently in a pending state.
  * This state never resolves, its {@link SkeletonState.isLoaded isLoaded} is always `false`, and it triggers Suspense indefinitely.
- * It supports all state methods, such as {@link SkeletonState.load load} or {@link SkeletonState.loading pause},
- * although these methods are implemented as no-ops.
  *
  * @example
  * ```jsx
@@ -68,47 +53,38 @@ const SKELETON_STATE = {
   _withoutLoading: true,
   _internal: {
     _promise: {
-      _promise: Object.setPrototypeOf(
-        {
-          then: selfReturn,
-          catch: selfReturn,
-          finally: selfReturn,
-        } as Promise<any>,
-        Promise.prototype
-      ),
-    } as AsyncStateUtils['_promise'],
-    _errorUtils: errorUtils as any,
-    _get: noop,
-    _set: noop,
-    _onValueChange: alwaysNoop,
+      _promise: Object.create(Promise.prototype, {
+        then: NOOP_PROMISE_DESCRIPTOR,
+        catch: NOOP_PROMISE_DESCRIPTOR,
+        finally: NOOP_PROMISE_DESCRIPTOR,
+      }),
+    } as AsyncStateProperties['_promise'],
     _slowLoading: {
       _callbackSet: { add: noop, delete: noop },
-    } as AsyncStateUtils['_slowLoading'],
-  } as Partial<AsyncStateUtils>,
-  scope() {
-    return new Proxy(this, {
-      get(target, prop, proxy) {
-        return prop != $tate ? proxy : target;
-      },
-    });
-  },
+    } as AsyncStateProperties['_slowLoading'],
+  } as Partial<AsyncStateProperties>,
   load: alwaysNoop,
-  loading: { pause: noop, reset: noop, resume: noop },
+  control: new Proxy(
+    {},
+    {
+      get: alwaysNoop,
+    }
+  ),
+  _onValueChange: noop,
+  get: noop,
+  set: noop,
   error: {
-    _internal: errorUtils,
-  } as Partial<
-    ControllableLoadableNestedState['error']
-  > as ControllableLoadableNestedState['error'],
+    get: noop,
+    set: noop,
+    _onValueChange: alwaysNoop,
+    _value: undefined,
+  } as Partial<LoadableState['error']> as LoadableState['error'],
   isLoaded: {
-    _internal: {
-      _value: false,
-      _get: alwaysFalse,
-      _set: noop,
-      _onValueChange: alwaysNoop,
-    },
-  } as Partial<
-    ControllableLoadableNestedState['isLoaded']
-  > as ControllableLoadableNestedState['isLoaded'],
+    get: alwaysFalse,
+    _set: noop,
+    _onValueChange: alwaysNoop,
+    _value: false,
+  } as Partial<LoadableState['isLoaded']> as LoadableState['isLoaded'],
 } as Partial<SkeletonState> as SkeletonState;
 
 export default SKELETON_STATE;

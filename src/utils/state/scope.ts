@@ -1,25 +1,19 @@
-import type {
-  ValueChangeCallbacks,
-  StateInitializer,
-  StateInternalUtils,
-  StateCallbackMap,
-  NestedState,
-} from '../types';
-import { EMPTY_ARR } from '../utils/constants';
-import processStateChanges from '../utils/processStateChanges';
-import scope from '../utils/scope';
 import noop from 'lodash.noop';
-import handleState from '../utils/handleState';
-import { addToBatch } from '../utils/batching';
+import {
+  SetData,
+  State,
+  StateCallbackMap,
+  ValueChangeCallbacks,
+} from '../../types';
+import { addToBatch } from '../batching';
+import processStateChanges from '../processStateChanges';
 
-interface _InternalUtils extends StateInternalUtils {
-  _rootMap: StateCallbackMap;
-}
+type ScopedState = State & SetData<StateCallbackMap>;
 
 const deepSet = (
   value: any,
   nextValue: any,
-  path: string[],
+  path: readonly string[],
   index: number,
   lastIndex: number,
   pushValueArr: ((value: any) => void)[]
@@ -54,14 +48,12 @@ const deepSet = (
   return arr;
 };
 
-function _onValueChange(
-  this: _InternalUtils,
-  cb: (value: any) => void,
-  path: string[]
-) {
+export function _onValueChange(this: ScopedState, cb: (value: any) => void) {
+  const path = this._path!;
+
   let length = path.length;
 
-  let parent = this._rootMap;
+  let parent = this._setData;
 
   let set: ValueChangeCallbacks | undefined;
 
@@ -130,8 +122,10 @@ function _onValueChange(
   };
 }
 
-function _set(this: _InternalUtils, nextValue: any, path: string[]) {
-  let currentNode: StateCallbackMap | null | undefined = this._rootMap;
+export function set(this: ScopedState, nextValue: any) {
+  let currentNode: StateCallbackMap | null | undefined = this._setData;
+
+  const path = this._path!;
 
   const root = currentNode._root;
 
@@ -167,12 +161,19 @@ function _set(this: _InternalUtils, nextValue: any, path: string[]) {
     }
   }
 
-  if (processStateChanges(this._get(path), nextValue, currentNode)) {
+  if (processStateChanges(this.get(), nextValue, currentNode)) {
     if (l) {
-      nextValue = deepSet(this._value, nextValue, path, 0, l - 1, pushArr);
+      nextValue = deepSet(
+        this._internal._value,
+        nextValue,
+        path,
+        0,
+        l - 1,
+        pushArr
+      );
     }
 
-    this._value = nextValue;
+    this._internal._value = nextValue;
 
     for (let i = nodesQueue.length; i--; ) {
       addToBatch(nodesQueue[i], valuesArr[i]);
@@ -184,10 +185,12 @@ function _set(this: _InternalUtils, nextValue: any, path: string[]) {
   }
 }
 
-function _get(this: _InternalUtils, path: string[]) {
+export function get(this: ScopedState) {
+  const path = this._path!;
+
   const l = path.length;
 
-  let value = this._value;
+  let value = this._internal._value;
 
   for (
     let i = 0;
@@ -197,54 +200,3 @@ function _get(this: _InternalUtils, path: string[]) {
 
   return value;
 }
-
-/**
- * Creates a {@link NestedState nested state} for managing complex state structures.
- *
- * @example
- * ```js
- * const state1 = createNestedState();
- *
- * const state2 = createNestedState({ name: 'John' });
- *
- * const state3 = createNestedState(() => ({ name: 'John' }));
- * ```
- */
-const createNestedState: {
-  <T>(): NestedState<T | undefined>;
-  <T>(
-    value: T | (() => T),
-    stateInitializer?: StateInitializer<T>
-  ): NestedState<T>;
-} = (
-  value?: unknown | (() => unknown),
-  stateInitializer?: StateInitializer,
-  keys?: any[],
-  utils?: Record<string, any>
-) => {
-  utils = {
-    _value: undefined,
-    _data: undefined!,
-    _rootMap: { _root: null, _children: null },
-    _onValueChange,
-    _get,
-    _set,
-    ...utils,
-  } as _InternalUtils;
-
-  return {
-    _internal: utils as _InternalUtils,
-    _path: EMPTY_ARR,
-    scope,
-    _anchor: handleState(
-      value,
-      stateInitializer,
-      keys,
-      utils as _InternalUtils
-    ),
-  } as Partial<NestedState> as NestedState;
-};
-
-export type { NestedState };
-
-export default createNestedState;

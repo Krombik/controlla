@@ -1,17 +1,37 @@
-import createAsyncState from '../createAsyncState';
 import type {
-  ControllableLoadableState,
   StateInitializer,
   PollableStateOptions,
+  ValueChangeCallbacks,
+  LoadableState,
+  PollableState,
 } from '../types';
-import getPollableStateCreator from '../utils/getPollableStateCreator';
+import createLoader from '../utils/createLoader';
+import getAsyncState from '../utils/getAsyncState';
+import { handlePolling, PollingControl } from '../utils/handlePolling';
 
-const createPollableState = getPollableStateCreator(createAsyncState) as {
-  /** Creates a {@link ControllableLoadableState controllable loadable state} with polling capabilities. */
+import { _onValueChange, get, set } from '../utils/state/common';
+
+const createPollableState = ((
+  options: PollableStateOptions<any, any, any[]>,
+  stateInitializer?: StateInitializer,
+  keys?: any[]
+) =>
+  getAsyncState<ValueChangeCallbacks>(
+    get,
+    set,
+    _onValueChange,
+    options,
+    stateInitializer,
+    keys,
+    new Set(),
+    createLoader(handlePolling, options),
+    PollingControl
+  )) as {
+  /** Creates a {@link LoadableState loadable state} with polling capabilities. */
   <T, E = any>(
     options: PollableStateOptions<T, E>,
     stateInitializer?: StateInitializer<T>
-  ): ControllableLoadableState<T, E>;
+  ): PollableState<T, E>;
 };
 
 export default createPollableState;

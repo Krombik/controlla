@@ -1,78 +1,42 @@
-import type {
+import {
+  type StateInitializer,
+  type State,
   ValueChangeCallbacks,
-  Internal,
-  StateInternalUtils,
-  StateInitializer,
-  State,
 } from '../types';
-import { addToBatch } from '../utils/batching';
 import handleState from '../utils/handleState';
-
-type _InternalUtils = StateInternalUtils & {
-  _valueSet: ValueChangeCallbacks;
-};
-
-function _onValueChange(this: _InternalUtils, cb: (value: any) => void) {
-  const set = this._valueSet;
-
-  set.add(cb);
-
-  return () => {
-    set.delete(cb);
-  };
-}
-
-function _set(this: _InternalUtils, value: any) {
-  if (this._value !== value) {
-    this._value = value;
-
-    addToBatch(this._valueSet, value);
-  }
-}
-
-function _get(this: _InternalUtils) {
-  return this._value;
-}
+import { get, _onValueChange, set } from '../utils/state/common';
 
 /**
  * Creates a {@link State state} for managing simple state value.
  */
 const createState: {
   /** @internal */
-  <T extends Record<string, any>>(
+  (
     value?: unknown | (() => unknown),
     stateInitializer?: StateInitializer,
-    keys?: any[],
-    utils?: T
-  ): State<unknown> & Internal<T>;
+    keys?: any[]
+  ): State;
   <T>(): State<T | undefined>;
   <T>(value: T | (() => T), stateInitializer?: StateInitializer<T>): State<T>;
 } = (
   value?: unknown | (() => unknown),
   stateInitializer?: StateInitializer,
-  keys?: any[],
-  utils?: Record<string, any>
-) => {
-  utils = {
-    _value: undefined,
-    _data: undefined!,
-    _valueSet: new Set(),
-    _set,
-    _get,
-    _onValueChange,
-    ...utils,
-  } as _InternalUtils;
-
-  return {
-    _internal: utils,
-    _anchor: handleState(
-      value,
-      stateInitializer,
-      keys,
-      utils as _InternalUtils
-    ),
-  } as Partial<State> as State;
-};
+  keys?: any[]
+) =>
+  handleState<State, ValueChangeCallbacks>(
+    {
+      _internal: {
+        _value: undefined,
+      },
+      get,
+      _setData: new Set(),
+      set,
+      _onValueChange,
+    },
+    value,
+    stateInitializer,
+    keys
+  );
 
 export type { State };
 

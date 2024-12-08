@@ -1,5 +1,9 @@
 import type { FC } from 'react';
-import type { LoadableState, PaginatedStateStorage, State } from '../types';
+import type {
+  LoadableState,
+  PaginatedStateStorage,
+  StateBase as State,
+} from '../types';
 import useValue from '../useValue';
 
 export type PaginationControllerProps<T, E = any> = {

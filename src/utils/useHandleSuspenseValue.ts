@@ -1,9 +1,7 @@
-import getValue from '../getValue';
 import type { AnyAsyncState } from '../types';
 import handleUnlisteners from './handleUnlisteners';
 import onValueChange from '../onValueChange';
 import { useLayoutEffect } from 'react';
-import toDeps from '../toDeps';
 
 const useHandleSuspenseValue = (
   state: AnyAsyncState,
@@ -11,26 +9,32 @@ const useHandleSuspenseValue = (
 ) => {
   const withValueWatching = !state._awaitOnly;
 
-  useLayoutEffect(
-    () =>
-      handleUnlisteners(
-        onValueChange(
-          [state, state.error],
-          withValueWatching
-            ? forceRerender
-            : (value) => {
-                if (value === undefined) {
-                  forceRerender();
-                }
-              }
-        ),
+  useLayoutEffect(() => {
+    if (withValueWatching) {
+      return handleUnlisteners(
+        onValueChange([state, state.error], forceRerender),
         state
-      ),
-    toDeps(state)
-  );
+      );
+    }
+
+    let isPreviousExist = state.get() !== undefined;
+
+    return handleUnlisteners(
+      onValueChange([state, state.error], (value) => {
+        const isCurrentExist = value !== undefined;
+
+        if (isPreviousExist != isCurrentExist) {
+          isPreviousExist = isCurrentExist;
+
+          forceRerender();
+        }
+      }),
+      state
+    );
+  }, [state]);
 
   if (withValueWatching) {
-    return getValue(state);
+    return state.get();
   }
 };
 

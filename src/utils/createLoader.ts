@@ -1,23 +1,21 @@
-import noop from 'lodash.noop';
-import setValue from '../setValue';
-import type { LoadableStateOptions, RequestableStateOptions } from '../types';
+import type {
+  LoadableState,
+  LoadableStateOptions,
+  RequestableStateOptions,
+} from '../types';
 import becomingOnline from './becomingOnline';
 import { RESOLVED_PROMISE } from './constants';
 import type { PrimitiveOrNested } from 'keyweaver';
 
-const createFetcher = (
+const createLoader = <U extends Record<string, any> = never>(
   handleLoad: (
     cancelPromise: Promise<void>,
-    fetch: () => Promise<PrimitiveOrNested[] | void>
+    fetch: () => Promise<PrimitiveOrNested[] | void>,
+    self: LoadableState<any, any, U>
   ) => void | Promise<void>,
-  {
-    load,
-    _afterLoad,
-    _beforeLoad = noop,
-    shouldRetryOnError,
-  }: RequestableStateOptions<any, any>
-): LoadableStateOptions<any>['load'] =>
-  function (...args) {
+  { load, shouldRetryOnError }: RequestableStateOptions<any, any, any[]>
+) =>
+  function (this: LoadableState<any, any, U>, ...args: any[]) {
     const self = this;
 
     let attempt = 0;
@@ -41,7 +39,7 @@ const createFetcher = (
               attempt = 0;
 
               if (isRunning) {
-                setValue(self, value);
+                self.set(value, false);
 
                 return args;
               }
@@ -64,27 +62,25 @@ const createFetcher = (
                   }
                 }
 
-                setValue(self.error, err);
+                self.error.set(err);
               }
             }
           )
         : RESOLVED_PROMISE;
 
-    handleLoad(cancelPromise, () => {
-      const utils = self._internal;
+    handleLoad(
+      cancelPromise,
+      () => {
+        if (isRunning) {
+          self._internal._isFetchInProgress = true;
+        }
 
-      if (isRunning) {
-        utils._isFetchInProgress = true;
-      }
-
-      _beforeLoad(args, utils);
-
-      return retriableFetcher().then(
-        _afterLoad && ((args) => _afterLoad(args, utils))
-      );
-    });
+        return retriableFetcher();
+      },
+      self
+    );
 
     return cancel;
-  };
+  } as LoadableStateOptions<any, any>['load'];
 
-export default createFetcher;
+export default createLoader;

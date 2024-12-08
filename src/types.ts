@@ -4,6 +4,10 @@ import type { ComponentType, PropsWithChildren } from 'react';
 
 declare const PENDING: unique symbol;
 
+export type Mutable<T> = {
+  -readonly [P in keyof T]: T[P];
+};
+
 export type ResolvedValue<Value> = Exclude<Value, typeof PENDING>;
 
 export type HandlePending<Value> = [Extract<Value, typeof PENDING>] extends [
@@ -24,15 +28,6 @@ export type StateCallbackMap = {
   readonly _parent?: StateCallbackMap;
 };
 
-export type StateInternalUtils = {
-  _value: any;
-  _set(nextValue: any, path: readonly string[], isError?: boolean): void;
-  _get(path: readonly string[]): any;
-  _onValueChange(cb: (value: any) => void, path: readonly string[]): () => void;
-};
-
-declare const STATE_IDENTIFIER: unique symbol;
-
 type StorageKeys<Keys extends PrimitiveOrNested[]> = Keys['length'] extends 0
   ? {}
   : {
@@ -45,7 +40,15 @@ export type Internal<T> = {
   readonly _internal: T;
 };
 
-declare class StateBase {}
+export type SetData<D> = {
+  readonly _setData: D;
+};
+
+export declare class StateBase<Value = any> {
+  get(): HandlePending<Value>;
+  /** @internal */
+  _onValueChange(cb: (value: any) => void): () => void;
+}
 
 /**
  * Represents a basic reactive state that holds a value.
@@ -55,42 +58,29 @@ declare class StateBase {}
  * const state: State<number> = createState(0);
  * ```
  */
-export type State<
-  Value = any,
-  Keys extends PrimitiveOrNested[] = [],
-> = StateBase & {
-  readonly [STATE_IDENTIFIER]: Value;
+export type State<Value = any> = StateBase<Value> &
   /** @internal */
-  readonly _anchor?: Readonly<{}>;
-} & StorageKeys<Keys> &
+  Internal<{
+    _value: any;
+  }> &
   /** @internal */
-  Internal<StateInternalUtils> &
-  /** @internal */
-  Partial<StorageKeys<any[]>> &
-  /** @internal */
-  InternalPathBase;
+  InternalPathBase & {
+    /** @internal */
+    set(nextValue: any, isError?: boolean): void;
+    set(nextValue: ResolvedValue<Value>): void;
+    /** @internal */
+    _anchor?: object;
+  };
 
-export type ErrorStateUtils = {
-  _parentUtils: StateInternalUtils & AsyncStateUtils;
-  readonly _isExpectedError?: (error: any) => boolean;
-  _commonSet: StateInternalUtils['_set'];
-};
-
-export type AsyncStateUtils = {
+export type AsyncStateProperties = {
   _isLoaded(value: any, prevValue: any, attempt: number | undefined): boolean;
-  _commonSet: StateInternalUtils['_set'];
   readonly _slowLoading: {
-    _handle(isLoadedUtils: StateInternalUtils): void;
     readonly _timeout: number;
     _timeoutId: ReturnType<typeof setTimeout> | undefined;
     readonly _callbackSet: Set<() => void>;
   } | null;
-  _load: (() => (() => void) | void) | undefined;
   _counter: number;
   _isLoadable: boolean;
-  _isFetchInProgress: boolean;
-  readonly _errorUtils: ErrorStateUtils & StateInternalUtils;
-  readonly _isLoadedUtils: StateInternalUtils;
   _promise: {
     readonly _promise: Promise<any>;
     _resolve(value: any): void;
@@ -108,27 +98,59 @@ export type AsyncStateUtils = {
     _isLoadable: boolean;
     _focusListener: (() => void) | undefined;
   } | null;
+  _isFetchInProgress: boolean;
 };
+
+export type ErrorState<Error> =
+  /** @internal */
+  SetData<ValueChangeCallbacks> & {
+    set(error: Error | undefined): void;
+    get(): Error | undefined;
+    /** @internal */
+    _onValueChange(cb: (value: any) => void): () => void;
+    /** @internal */
+    _value: any;
+    /** @internal */
+    readonly _parent: AsyncState;
+    /** @internal */
+    _isExpectedError?(err: any): boolean;
+  };
+
+export type IsLoadedState =
+  /** @internal */
+  SetData<ValueChangeCallbacks> & {
+    /** @internal */
+    _set(nextValue: boolean): void;
+    get(): boolean;
+    /** @internal */
+    _onValueChange(cb: (value: any) => void): () => void;
+    /** @internal */
+    _value: boolean;
+  };
 
 /**
  * Represents a state that manages an asynchronous value, including {@link AsyncState.isLoaded loading} and {@link AsyncState.error error} states.
  * Extends {@link State}.
  */
-export type AsyncState<
-  Value = any,
-  Error = any,
-  Keys extends PrimitiveOrNested[] = [],
-> = State<Value | typeof PENDING, Keys> &
+export type AsyncState<Value = any, Error = any> = State<
+  Value | typeof PENDING
+> &
   /** @internal */
-  Internal<AsyncStateUtils> & {
+  Internal<AsyncStateProperties> & {
+    /** @internal */
+    readonly _withoutLoading?: true;
     /** @internal */
     readonly _awaitOnly?: true;
     /** A state that holds the latest error, if one occurred during loading. */
-    readonly error: State<Error | undefined> &
-      /** @internal */
-      Internal<ErrorStateUtils>;
+    readonly error: ErrorState<Error>;
     /** A state that indicates whether the state has successfully loaded */
-    readonly isLoaded: State<boolean>;
+    readonly isLoaded: IsLoadedState;
+    /** @internal */
+    _commonSet: State['set'];
+    /** @internal */
+    _load?(...args: any[]): (() => void) | void;
+    /** @internal */
+    readonly _keys: any[] | undefined;
   };
 
 /**
@@ -138,10 +160,8 @@ export type AsyncState<
 export type LoadableState<
   Value = any,
   Error = any,
-  Keys extends PrimitiveOrNested[] = [],
-> = AsyncState<Value, Error, Keys> & {
-  /** @internal */
-  readonly _withoutLoading?: true;
+  Control = never,
+> = AsyncState<Value, Error> & {
   /**
    * Initiates the loading process for the state if it has not already started.
    * If the loading process is already active, it increases the load listener count.
@@ -164,49 +184,61 @@ export type LoadableState<
    * ```
    */
   load(force?: boolean): () => void;
-};
+  /** @internal */
+  _load(...args: any[]): (() => void) | void;
+} & ([Control] extends [never] ? {} : { readonly control: Control });
 
-/**
- * Represents a loadable state whose loading process can be controlled. Extends {@link LoadableState}.
- */
-export type ControllableLoadableState<
+type ProcessScope<
+  Value,
+  S extends State,
+  M = Exclude<Value, Nil>,
+  N = Extract<Value, Nil>,
+> = (IsAny<Value> extends false
+  ? M extends Primitive
+    ? {}
+    : M extends any[]
+      ? {
+          readonly [key in ToIndex<keyof M>]-?: ProcessScope<M[key] | N, S>;
+        }
+      : {
+          readonly [key in keyof M]-?: ProcessScope<M[key] | N, S>;
+        }
+  : { readonly [key in number | string]: ProcessScope<any, S> }) &
+  EndOfScope<
+    S extends LoadableState<any, infer E, infer C>
+      ? LoadableState<Value, E, C>
+      : S extends AsyncState<any, infer E>
+        ? AsyncState<Value, E>
+        : State<Value>
+  >;
+
+export type StateScope<Value = any> = ProcessScope<Value, State>;
+
+export type AsyncStateScope<Value = any, Error = any> = ProcessScope<
+  Value,
+  AsyncState<any, Error>
+>;
+
+export type LoadableStateScope<
   Value = any,
   Error = any,
-  Keys extends PrimitiveOrNested[] = [],
-> = LoadableState<Value, Error, Keys> & {
-  /** Provides control methods for managing the loading process of the state. */
-  readonly loading: {
-    /** Pauses the current loading process. */
-    pause(): void;
-    /** Resumes a paused loading process. */
-    resume(): void;
-    /** Resets the loading process, starting it from the beginning. */
-    reset(): void;
-  };
-};
+  Control = never,
+> = ProcessScope<Value, LoadableState<any, Error, Control>>;
+
+export type PollableStateScope<Value = any, Error = any> = LoadableStateScope<
+  Value,
+  Error,
+  PollableMethods
+>;
 
 export type InternalPathBase = {
   /** @internal */
   readonly _path?: readonly string[];
 };
 
-export type StateScope<Scope extends () => any> = {
-  /**
-   * @returns scoped version of the state, allowing access to nested state values.
-   *
-   * @example
-   * ```js
-   * const state = nestedState.scope().some.nested.path.$tate;
-   * ```
-   */
-  scope: Scope;
+type EndOfScope<T> = {
+  readonly [$tate]: T;
 };
-
-type EndOfScope<T, IsRoot extends boolean = false> = IsRoot extends false
-  ? {
-      readonly [$tate]: T;
-    }
-  : {};
 
 type StringToNumber<T> = T extends `${infer K extends number}` ? K : never;
 
@@ -214,151 +246,15 @@ type ToIndex<T> = [Exclude<T, keyof []>] extends [never]
   ? number
   : StringToNumber<T>;
 
-type ProcessStateScopeItem<
-  T,
-  key,
-  Keys extends PrimitiveOrNested[],
-  S extends State,
-  NS extends NestedState,
-  IsUndefined extends boolean,
-> = ProcessStateScope<
-  Exclude<T, Nil>[key extends keyof Exclude<T, Nil> ? key : never],
-  Keys,
-  S,
-  NS,
-  IsUndefined extends true
-    ? true
-    : [Extract<T, Nil>] extends [never]
-      ? false
-      : true,
-  false
->;
-
 type IsAny<T> = 0 extends 1 & T ? true : false;
 
-type AnyScope<S, IsRoot extends boolean = true> = {
-  readonly [key in string | number]: AnyScope<S, false>;
-} & EndOfScope<S, IsRoot>;
+export type AnyAsyncState<Value = any, Error = any> =
+  | AsyncState<Value, Error>
+  | AnyLoadableState<Value, Error>;
 
-type ProcessStateScope<
-  T,
-  Keys extends PrimitiveOrNested[],
-  S extends State,
-  NS extends NestedState,
-  IsUndefined extends boolean = false,
-  IsRoot extends boolean = true,
-> =
-  IsAny<T> extends true
-    ? AnyScope<S>
-    : Exclude<T, Nil> extends Primitive
-      ? EndOfScope<
-          ProcessState<
-            S,
-            T | (IsUndefined extends true ? undefined : never),
-            Keys
-          >
-        >
-      : (Exclude<T, Nil> extends any[]
-          ? {
-              readonly [key in ToIndex<
-                keyof Exclude<T, Nil>
-              >]-?: ProcessStateScopeItem<T, key, Keys, S, NS, IsUndefined>;
-            }
-          : {
-              readonly [key in keyof Exclude<T, Nil>]-?: ProcessStateScopeItem<
-                T,
-                key,
-                Keys,
-                S,
-                NS,
-                IsUndefined
-              >;
-            }) &
-          EndOfScope<
-            ProcessState<
-              NS,
-              T | (IsUndefined extends true ? undefined : never),
-              Keys
-            >,
-            IsRoot
-          >;
-
-/**
- * Represents a state that supports nested structures, allowing access to
- * and management of deeper state values. Extends {@link State} and provides
- * a {@link NestedState.scope scope} method for working with nested parts of the state.
- */
-export type NestedState<
-  Value = any,
-  Keys extends PrimitiveOrNested[] = [],
-> = State<Value, Keys> &
-  StateScope<() => ProcessStateScope<Value, Keys, State, NestedState>>;
-
-/**
- * Represents an asynchronous state that supports nested structures, allowing
- * for the management of asynchronous values within a hierarchical state setup.
- * Extends {@link AsyncState} and provides a {@link AsyncNestedState.scope scope} method for accessing nested
- * parts of the state.
- */
-export type AsyncNestedState<
-  Value = any,
-  Error = any,
-  Keys extends PrimitiveOrNested[] = [],
-> = AsyncState<Value, Error, Keys> &
-  StateScope<
-    () => ProcessStateScope<Value, Keys, AsyncState, AsyncNestedState>
-  >;
-
-/**
- * Represents a loadable state that supports nested structures, allowing
- * for organized and hierarchical management of loadable values. Extends
- * {@link LoadableState} and provides a {@link LoadableNestedState.scope scope} method for accessing and managing
- * nested parts of the state.
- */
-export type LoadableNestedState<
-  Value = any,
-  Error = any,
-  Keys extends PrimitiveOrNested[] = [],
-> = LoadableState<Value, Error, Keys> &
-  StateScope<
-    () => ProcessStateScope<Value, Keys, LoadableState, LoadableNestedState>
-  >;
-
-/**
- * Represents a loadable state that supports nested structures and allows
- * control over the loading process. Extends {@link ControllableLoadableState}
- * and provides a {@link ControllableLoadableNestedState.scope scope} method for managing and accessing nested parts of the state.
- */
-export type ControllableLoadableNestedState<
-  Value = any,
-  Error = any,
-  Keys extends PrimitiveOrNested[] = [],
-> = ControllableLoadableState<Value, Error, Keys> &
-  StateScope<
-    () => ProcessStateScope<
-      Value,
-      Keys,
-      ControllableLoadableState,
-      ControllableLoadableNestedState
-    >
-  >;
-
-export type AnyAsyncState<
-  Value = any,
-  Error = any,
-  Keys extends PrimitiveOrNested[] = [],
-> =
-  | AsyncState<Value, Error, Keys>
-  | LoadableState<Value, Error, Keys>
-  | ControllableLoadableState<Value, Error, Keys>;
-
-export type AnyLoadableState<
-  Value = any,
-  Error = any,
-  Keys extends PrimitiveOrNested[] = [],
-> =
-  | LoadableState<Value, Error, Keys>
-  | ControllableLoadableState<Value, Error, Keys>;
+export type AnyLoadableState<Value = any, Error = any> =
+  | LoadableState<Value, Error>
+  | LoadableState<Value, Error, any>;
 
 export type ExtractValues<
   T extends Array<AsyncState | Falsy>,
@@ -404,9 +300,14 @@ export type AsyncStateOptions<
   isExpectedError?(error: any): error is E;
 };
 
+interface Kek<Control, S> {
+  Control: new (options: Omit<this, 'load' | 'Control'>, state: S) => Control;
+}
+
 export type LoadableStateOptions<
-  T,
+  T = any,
   E = any,
+  Control = never,
   Keys extends PrimitiveOrNested[] = [],
 > = AsyncStateOptions<T, E, Keys> & {
   /**
@@ -424,20 +325,8 @@ export type LoadableStateOptions<
    * when the tab gains focus after this duration has passed since the last load.
    */
   reloadOnFocus?: number;
-};
-
-export type ControllableLoadableStateOptions<
-  T,
-  E = any,
-  Keys extends PrimitiveOrNested[] = [],
-> = LoadableStateOptions<T, E, Keys> & {
-  /** Pauses the current loading process, preventing further progress until resumed. */
-  pause(): void;
-  /** Resumes a paused loading process, allowing it to continue. */
-  resume(): void;
-  /** Resets the loading process, starting it over from the beginning. */
-  reset(): void;
-};
+  revalidate?: boolean;
+} & ([Control] extends [never] ? {} : Kek<Control, AsyncState<T, E>>);
 
 export type RequestableStateOptions<
   T,
@@ -472,8 +361,23 @@ export type RequestableStateOptions<
   shouldRetryOnError?(err: E, attempt: number): number;
 };
 
-export type PollableStateOptions<
+export interface PollableMethods {
+  /** Pauses the current loading process. */
+  pause(): void;
+  /** Resumes a paused loading process. */
+  resume(): void;
+  /** Resets the loading process, starting it from the beginning. */
+  reset(): void;
+}
+
+export type PollableState<
   T,
+  E = any,
+  Keys extends PrimitiveOrNested[] = [],
+> = LoadableState<T, E, PollableMethods>;
+
+export type PollableStateOptions<
+  T = any,
   E = any,
   Keys extends PrimitiveOrNested[] = [],
 > = RequestableStateOptions<T, E, Keys> &
@@ -508,10 +412,10 @@ export type StorageKeysWithoutPagination<
 type StorageItem = State | StateStorageMarker<PrimitiveOrNested, any>;
 
 type ProcessState<S extends State, V, Keys extends PrimitiveOrNested[] = []> =
-  S extends ControllableLoadableNestedState<any, infer E>
-    ? ControllableLoadableNestedState<V, E, Keys>
-    : S extends ControllableLoadableState<any, infer E>
-      ? ControllableLoadableState<V, E, Keys>
+  S extends ControllableLoadableNestedState<infer L, any, infer E>
+    ? ControllableLoadableNestedState<L, V, E, Keys>
+    : S extends ControllableLoadableState<infer L, any, infer E>
+      ? ControllableLoadableState<L, V, E, Keys>
       : S extends LoadableNestedState<any, infer E>
         ? LoadableNestedState<V, E, Keys>
         : S extends LoadableState<any, infer E>

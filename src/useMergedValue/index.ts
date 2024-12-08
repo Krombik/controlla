@@ -1,6 +1,10 @@
 import { useLayoutEffect, useRef } from 'react';
-import type { AnyAsyncState, HandlePending, State } from '../types';
-import getValue from '../getValue';
+import type {
+  AnyAsyncState,
+  HandlePending,
+  LoadableState,
+  StateBase as State,
+} from '../types';
 import onValueChange from '../onValueChange';
 import useForceRerender from 'react-helpful-utils/useForceRerender';
 import simpleIsEqual from '../utils/simpleIsEqual';
@@ -15,15 +19,7 @@ const useMergedValue = ((
 ) => {
   const forceRerender = useForceRerender();
 
-  const deps = [];
-
-  for (let i = 0; i < states.length; i++) {
-    const state = states[i];
-
-    deps.push(state._internal, state._path && state._path.join('.'));
-  }
-
-  const mergedValue = merger(...states.map(getValue));
+  const mergedValue = merger(...states.map((state) => state.get()));
 
   const mergedValueRef = useRef(mergedValue);
 
@@ -34,7 +30,7 @@ const useMergedValue = ((
       let nextValue;
 
       try {
-        nextValue = merger(...states.map(getValue));
+        nextValue = merger(...states.map((state) => state.get()));
       } catch {
         forceRerender();
 
@@ -51,8 +47,8 @@ const useMergedValue = ((
     for (let i = 0; i < states.length; i++) {
       const state = states[i];
 
-      if ('load' in state && !state._withoutLoading) {
-        loadUnlisteners.push(state.load());
+      if (state._load && !state._withoutLoading) {
+        loadUnlisteners.push((state as LoadableState).load());
       }
     }
 
@@ -65,7 +61,7 @@ const useMergedValue = ((
           }
         }
       : valuesUnlistener;
-  }, deps);
+  }, states);
 
   return mergedValue;
 }) as {

@@ -1,17 +1,15 @@
-export { default as createNestedState } from './createNestedState';
+export { default as createStateScope } from './createStateScope';
 export { default as createState } from './createState';
-export { default as createAsyncNestedState } from './createAsyncNestedState';
+export { default as createAsyncStateScope } from './createAsyncStateScope';
 export { default as createAsyncState } from './createAsyncState';
-export { default as createRequestableNestedState } from './createRequestableNestedState';
+export { default as createRequestableStateScope } from './createRequestableStateScope';
 export { default as createRequestableState } from './createRequestableState';
-export { default as createPollableNestedState } from './createPollableNestedState';
+export { default as createPollableStateScope } from './createPollableStateScope';
 export { default as createPollableState } from './createPollableState';
 
 export { default as createPaginatedStorage } from './createPaginatedStorage';
 export { default as createStateStorage } from './createStateStorage';
 
-export { default as getValue } from './getValue';
-export { default as setValue } from './setValue';
 export { default as clear } from './clear';
 export { default as onValueChange } from './onValueChange';
 export { default as getPromise } from './getPromise';
@@ -25,8 +23,6 @@ export { default as useAll } from './useAll';
 export { default as useOnValueChange } from './useOnValueChange';
 
 export { default as batchedUpdates } from './batchedUpdates';
-export { default as areStatesEqual } from './areStatesEqual';
-export { default as toDeps } from './toDeps';
 
 export { default as awaitOnly } from './awaitOnly';
 export { default as withoutLoading } from './withoutLoading';
@@ -44,6 +40,7 @@ export { default as SuspenseOnlyController } from './SuspenseOnlyController';
 export { default as SuspenseOnlyAllController } from './SuspenseOnlyAllController';
 
 export { default as SKELETON_STATE } from './SKELETON_STATE';
+export { default as SKELETON_STATE_SCOPE } from './SKELETON_STATE_SCOPE';
 
 export {
   default as persistModule,
@@ -53,17 +50,16 @@ export {
 
 export type {
   State,
-  AsyncNestedState,
+  StateScope,
   AsyncState,
-  LoadableNestedState,
+  AsyncStateScope,
   LoadableState,
+  LoadableStateScope,
   LoadableStateOptions,
   AsyncStateOptions,
-  ControllableLoadableNestedState,
-  ControllableLoadableState,
-  ControllableLoadableStateOptions,
-  NestedState,
   NestedStateStorage,
+  PollableState,
+  PollableStateScope,
   PollableStateOptions,
   RequestableStateOptions,
   StateStorage,

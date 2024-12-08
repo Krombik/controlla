@@ -5,7 +5,7 @@ import useForceRerender from 'react-helpful-utils/useForceRerender';
 const useNoop = () => {
   useForceRerender();
 
-  useLayoutEffect(noop, [0, 0]);
+  useLayoutEffect(noop, [0]);
 };
 
 export default useNoop;

@@ -1,11 +1,9 @@
 import { useLayoutEffect, useRef } from 'react';
-import type { AnyAsyncState, AsyncState, State } from '../types';
-import getValue from '../getValue';
+import type { AnyAsyncState, AsyncState, StateBase as State } from '../types';
 import onValueChange from '../onValueChange';
 import useForceRerender from 'react-helpful-utils/useForceRerender';
 import handleUnlisteners from '../utils/handleUnlisteners';
 import simpleIsEqual from '../utils/simpleIsEqual';
-import toDeps from '../toDeps';
 
 const useMappedValue = ((
   state: AnyAsyncState,
@@ -19,9 +17,9 @@ const useMappedValue = ((
   const forceRerender = useForceRerender();
 
   const mappedValue = mapper(
-    getValue(state),
-    isLoadedState && getValue(isLoadedState),
-    errorState && getValue(errorState)
+    state.get(),
+    isLoadedState && isLoadedState._value,
+    errorState && errorState._value
   );
 
   const mappedValueRef = useRef(mappedValue);
@@ -42,9 +40,9 @@ const useMappedValue = ((
 
             try {
               nextValue = mapper(
-                getValue(state),
-                isLoadedState && getValue(isLoadedState),
-                errorState && getValue(errorState)
+                state.get(),
+                isLoadedState && isLoadedState._value,
+                errorState && errorState._value
               );
             } catch {
               forceRerender();
@@ -59,7 +57,7 @@ const useMappedValue = ((
         ),
         state
       ),
-    toDeps(state)
+    [state]
   );
 
   return mappedValue;

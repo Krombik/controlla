@@ -1,11 +1,11 @@
-import type { AnyAsyncState } from '../types';
+import type { AnyAsyncState, LoadableState } from '../types';
 
 const handleUnlisteners = (
   valueUnlistener: () => void,
   state: AnyAsyncState
 ) => {
   const loadUnlistener =
-    'load' in state && !state._withoutLoading && state.load();
+    state._load && !state._withoutLoading && (state as LoadableState).load();
 
   return loadUnlistener
     ? () => {

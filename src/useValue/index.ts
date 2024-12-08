@@ -1,11 +1,14 @@
 import { useLayoutEffect } from 'react';
-import type { AnyAsyncState, Falsy, HandlePending, State } from '../types';
+import type {
+  AnyAsyncState,
+  Falsy,
+  HandlePending,
+  StateBase as State,
+} from '../types';
 import onValueChange from '../onValueChange';
 import useNoop from '../utils/useNoop';
-import getValue from '../getValue';
 import useForceRerender from 'react-helpful-utils/useForceRerender';
 import handleUnlisteners from '../utils/handleUnlisteners';
-import toDeps from '../toDeps';
 
 const useValue = ((state: AnyAsyncState | Falsy) => {
   if (state) {
@@ -13,10 +16,10 @@ const useValue = ((state: AnyAsyncState | Falsy) => {
 
     useLayoutEffect(
       () => handleUnlisteners(onValueChange(state, forceRerender), state),
-      toDeps(state)
+      [state]
     );
 
-    return getValue(state);
+    return state.get();
   }
 
   useNoop();

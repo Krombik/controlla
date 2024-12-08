@@ -1,8 +1,6 @@
 import { useLayoutEffect, useState } from 'react';
-import type { HandlePending, State } from '../types';
+import type { HandlePending, StateBase as State } from '../types';
 import onValueChange from '../onValueChange';
-import getValue from '../getValue';
-import toDeps from '../toDeps';
 
 const useOnValueChange: {
   /**
@@ -33,32 +31,18 @@ const useOnValueChange: {
 
   const isArr = 'length' in state;
 
-  let deps;
-
-  if (isArr) {
-    deps = [];
-
-    for (let i = 0; i < state.length; i++) {
-      const item = state[i];
-
-      deps.push(item._internal, item._path && item._path.join('.'));
-    }
-  } else {
-    deps = toDeps(state);
-  }
-
   useLayoutEffect(
     () =>
       onValueChange(state as any, () => {
         try {
           cb.length == 1 || !isArr
-            ? cb(getValue(isArr ? state[0] : state))
-            : cb(...state.map(getValue));
+            ? cb(isArr ? state[0].get() : state.get())
+            : cb(...state.map((state) => state.get()));
         } catch (err) {
           setError(err);
         }
       }),
-    deps
+    isArr ? state : [state]
   );
 };
 

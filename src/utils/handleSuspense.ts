@@ -1,5 +1,5 @@
 import type { ContextType } from 'react';
-import type { AnyAsyncState } from '../types';
+import type { AnyAsyncState, LoadableState } from '../types';
 import type ErrorBoundaryContext from './ErrorBoundaryContext';
 import type SuspenseContext from './SuspenseContext';
 import getPromise from '../getPromise';
@@ -14,9 +14,9 @@ const handleSuspense = (
     return state._fakeSuspense(suspenseCtx, errorBoundaryCtx);
   }
 
-  if ('load' in state && !state._withoutLoading) {
+  if (state._load && !state._withoutLoading) {
     if (suspenseCtx) {
-      const unload = state.load();
+      const unload = (state as LoadableState).load();
 
       suspenseCtx.push(unload);
 

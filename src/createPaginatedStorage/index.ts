@@ -23,9 +23,9 @@ import alwaysTrue from '../utils/alwaysTrue';
 import type { PrimitiveOrNested } from 'keyweaver';
 import scope from '../utils/scope';
 import type createRequestableState from '../createRequestableState';
-import type createRequestableNestedState from '../createRequestableNestedState';
+import type createRequestableStateScope from '../createRequestableStateScope';
 import type createPollableState from '../createPollableState';
-import type createPollableNestedState from '../createPollableNestedState';
+import type createPollableStateScope from '../createPollableStateScope';
 import { useForceRerender } from 'react-helpful-utils';
 import getPromise from '../getPromise';
 import handleUnlisteners from '../utils/handleUnlisteners';
@@ -212,7 +212,7 @@ function usePages(
                   cleanupMap.set(page, state.load(true));
 
                   prev();
-                } else if ('loading' in state) {
+                } else if ('reset' in state.loading) {
                   state.loading.reset();
                 }
               }
@@ -242,7 +242,7 @@ function usePages(
                   cleanupMap.set(page, state.load(true));
 
                   prev();
-                } else if ('loading' in state) {
+                } else if ('reset' in state.loading) {
                   state.loading.reset();
                 }
               }
@@ -289,7 +289,7 @@ function usePages(
       for (let i = from; i < to; i++) {
         const state: PaginatedState = this.get(i);
 
-        if (state._internal._isFetchInProgress) {
+        if (state.loading._isFetchInProgress) {
           isUnstable = true;
         }
 
@@ -336,7 +336,7 @@ export type PaginatedRequestableNestedStateArgs<
   Keys extends PrimitiveOrNested[] = [],
   ParentKeys extends PrimitiveOrNested[] = [],
 > = Args<
-  typeof createRequestableNestedState,
+  typeof createRequestableStateScope,
   T,
   RequestableStateOptions<T, E, [...ParentKeys, ...Keys, page: number]>
 >;
@@ -358,7 +358,7 @@ export type PaginatedPollableNestedStateArgs<
   Keys extends PrimitiveOrNested[] = [],
   ParentKeys extends PrimitiveOrNested[] = [],
 > = Args<
-  typeof createPollableNestedState,
+  typeof createPollableStateScope,
   T,
   PollableStateOptions<T, E, [...ParentKeys, ...Keys, page: number]>
 >;

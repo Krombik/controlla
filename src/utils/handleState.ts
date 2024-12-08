@@ -1,6 +1,6 @@
 import noop from 'lodash.noop';
-import type { StateInitializer, StateInternalUtils } from '../types';
-import { EMPTY_ARR } from './constants';
+import type { AsyncState, SetData, State, StateInitializer } from '../types';
+import { postBatchCallbacksPush } from './batching';
 
 const finalizationRegistry: Pick<
   FinalizationRegistry<() => void>,
@@ -11,12 +11,12 @@ const finalizationRegistry: Pick<
     })
   : { register: noop };
 
-const handleState = <T extends StateInternalUtils>(
+const handleState = <S extends State | AsyncState, D = any>(
+  state: S & SetData<D>,
   value: unknown | (() => unknown) | undefined,
   stateInitializer: StateInitializer | undefined,
-  keys: any[] | undefined,
-  utils: T
-): Readonly<{}> | undefined => {
+  keys: any[] | undefined
+) => {
   if (stateInitializer) {
     const { get, set, observe } = stateInitializer(keys);
 
@@ -34,48 +34,58 @@ const handleState = <T extends StateInternalUtils>(
       set(value);
     }
 
-    if (observe) {
-      const anchor = {};
+    state._internal._value = value;
 
+    if (observe) {
       let callable = true;
 
-      utils._onValueChange((value) => {
+      const _state: Pick<State, 'set' | '_internal'> &
+        Partial<Pick<AsyncState, '_commonSet'>> = {
+        _internal: state._internal,
+        set: state.set,
+        _commonSet: (state as AsyncState)._commonSet,
+      };
+
+      state._onValueChange((value) => {
         if (callable) {
           set(value);
         }
-      }, EMPTY_ARR);
+      });
+
+      state._anchor = state;
 
       finalizationRegistry.register(
-        anchor,
+        state,
         observe((newValue) => {
           callable = false;
 
           if (newValue === undefined) {
             newValue =
-              typeof originalValue === 'function'
+              typeof originalValue == 'function'
                 ? keys
                   ? originalValue(...keys)
                   : originalValue()
                 : originalValue;
           }
 
-          utils._set(newValue, EMPTY_ARR, false);
+          _state.set(newValue, false);
 
-          callable = true;
+          postBatchCallbacksPush(() => {
+            callable = true;
+          });
         })
       );
-
-      utils._value = value;
-
-      return anchor;
+    } else {
+      state._onValueChange(set);
     }
 
-    utils._onValueChange(set, EMPTY_ARR);
-  } else if (typeof value == 'function') {
-    value = keys ? value(...keys) : value();
+    return state;
   }
 
-  utils._value = value;
+  state._internal._value =
+    typeof value == 'function' ? (keys ? value(...keys) : value()) : value;
+
+  return state;
 };
 
 export default handleState;

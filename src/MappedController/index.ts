@@ -1,5 +1,5 @@
 import type { FC } from 'react';
-import type { AsyncState, State } from '../types';
+import type { AsyncState, StateBase as State } from '../types';
 import useMappedValue from '../useMappedValue';
 
 type Props<S extends State, V> = {

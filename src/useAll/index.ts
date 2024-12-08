@@ -13,7 +13,6 @@ import handleSuspense from '../utils/handleSuspense';
 import SuspenseContext from '../utils/SuspenseContext';
 import useForceRerender from 'react-helpful-utils/useForceRerender';
 import useHandleSuspenseValue from '../utils/useHandleSuspenseValue';
-import getValue from '../getValue';
 
 /**
  * A hook to retrieve the current values and errors from multiple {@link states}.
@@ -89,7 +88,7 @@ const useAll = <
     const state = states[i];
 
     if (state) {
-      const err = getValue(state.error);
+      const err = state.error.get();
 
       const isError = err !== undefined;
 
@@ -108,7 +107,7 @@ const useAll = <
           const state = states[i];
 
           if (state) {
-            const err = getValue(state.error);
+            const err = state.error.get();
 
             if (err === undefined) {
               if (state._internal._value === undefined) {
@@ -134,14 +133,14 @@ const useAll = <
           for (let i = 0; i < l; i++) {
             const state = unloadedStates[i];
 
-            const errorUtils = state.error._internal;
+            const error = state.error;
 
             handleSuspense(state, errorBoundaryCtx, suspenseCtx).then(
               onResolve,
               safeReturn
-                ? errorUtils._isExpectedError
+                ? error._isExpectedError
                   ? (err) => {
-                      if (errorUtils._isExpectedError!(err)) {
+                      if (error._isExpectedError!(err)) {
                         onResolve();
                       } else {
                         res();
@@ -154,7 +153,7 @@ const useAll = <
         });
       }
     } else {
-      useLayoutEffect(noop, [0, 0]);
+      useLayoutEffect(noop, [0]);
     }
   }
 
