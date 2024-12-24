@@ -12,7 +12,10 @@ import { _onValueChange, get, set } from '../utils/state/common';
 const createRequestableState = ((
   options: RequestableStateOptions<any, any, any[]>,
   stateInitializer?: StateInitializer,
-  keys?: any[]
+  keys?: any[],
+  tickStart?: () => void,
+  tickEnd?: () => void,
+  parent?: any
 ) =>
   getAsyncState<ValueChangeCallbacks>(
     get,
@@ -22,7 +25,11 @@ const createRequestableState = ((
     stateInitializer,
     keys,
     new Set(),
-    createLoader(handleFetch, options)
+    createLoader(handleFetch, options),
+    undefined,
+    tickStart,
+    tickEnd,
+    parent
   )) as {
   /**
    * Creates a {@link LoadableState loadable state} that supports asynchronous data loading on request.

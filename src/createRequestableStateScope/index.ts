@@ -23,7 +23,10 @@ const createRequestableStateScope: {
 } = (
   options: RequestableStateOptions<any, any, any[]>,
   stateInitializer?: StateInitializer,
-  keys?: any[]
+  keys?: any[],
+  tickStart?: () => void,
+  tickEnd?: () => void,
+  parent?: any
 ) =>
   createScope(
     getAsyncState<StateCallbackMap>(
@@ -34,7 +37,11 @@ const createRequestableStateScope: {
       stateInitializer,
       keys,
       { _root: null, _children: null },
-      createLoader(handleFetch, options)
+      createLoader(handleFetch, options),
+      undefined,
+      tickStart,
+      tickEnd,
+      parent
     )
   );
 

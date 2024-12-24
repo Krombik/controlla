@@ -14,7 +14,10 @@ import { _onValueChange, get, set } from '../utils/state/common';
 const createPollableState = ((
   options: PollableStateOptions<any, any, any[]>,
   stateInitializer?: StateInitializer,
-  keys?: any[]
+  keys?: any[],
+  tickStart?: () => void,
+  tickEnd?: () => void,
+  parent?: any
 ) =>
   getAsyncState<ValueChangeCallbacks>(
     get,
@@ -25,7 +28,10 @@ const createPollableState = ((
     keys,
     new Set(),
     createLoader(handlePolling, options),
-    PollingControl
+    PollingControl,
+    tickStart,
+    tickEnd,
+    parent
   )) as {
   /** Creates a {@link LoadableState loadable state} with polling capabilities. */
   <T, E = any>(

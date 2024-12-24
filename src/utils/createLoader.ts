@@ -5,12 +5,11 @@ import type {
 } from '../types';
 import becomingOnline from './becomingOnline';
 import { RESOLVED_PROMISE } from './constants';
-import type { PrimitiveOrNested } from 'keyweaver';
 
 const createLoader = <U extends Record<string, any> = never>(
   handleLoad: (
     cancelPromise: Promise<void>,
-    fetch: () => Promise<PrimitiveOrNested[] | void>,
+    fetch: () => Promise<true | void>,
     self: LoadableState<any, any, U>
   ) => void | Promise<void>,
   { load, shouldRetryOnError }: RequestableStateOptions<any, any, any[]>
@@ -32,7 +31,7 @@ const createLoader = <U extends Record<string, any> = never>(
       };
     });
 
-    const retriableFetcher = (): Promise<PrimitiveOrNested[] | void> =>
+    const retriableFetcher = (): Promise<true | void> =>
       isRunning
         ? load(...args).then(
             (value) => {
@@ -41,7 +40,7 @@ const createLoader = <U extends Record<string, any> = never>(
               if (isRunning) {
                 self.set(value, false);
 
-                return args;
+                return true;
               }
             },
             (err) => {
@@ -70,12 +69,22 @@ const createLoader = <U extends Record<string, any> = never>(
 
     handleLoad(
       cancelPromise,
-      () => {
+      async () => {
+        const data = self._internal;
+
         if (isRunning) {
-          self._internal._isFetchInProgress = true;
+          data._isFetchInProgress = true;
+
+          data._tickStart();
         }
 
-        return retriableFetcher();
+        const res = await retriableFetcher();
+
+        data._isFetchInProgress = false;
+
+        await data._parent!._promise;
+
+        return res;
       },
       self
     );

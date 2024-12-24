@@ -19,7 +19,10 @@ const createPollableStateScope: {
 } = (
   options: PollableStateOptions<any, any, any[]>,
   stateInitializer?: StateInitializer,
-  keys?: any[]
+  keys?: any[],
+  tickStart?: () => void,
+  tickEnd?: () => void,
+  parent?: any
 ) =>
   createScope(
     getAsyncState<StateCallbackMap>(
@@ -31,7 +34,10 @@ const createPollableStateScope: {
       keys,
       { _root: null, _children: null },
       createLoader(handlePolling, options),
-      PollingControl
+      PollingControl,
+      tickStart,
+      tickEnd,
+      parent
     )
   );
 

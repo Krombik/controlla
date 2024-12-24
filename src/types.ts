@@ -28,13 +28,6 @@ export type StateCallbackMap = {
   readonly _parent?: StateCallbackMap;
 };
 
-type StorageKeys<Keys extends PrimitiveOrNested[]> = Keys['length'] extends 0
-  ? {}
-  : {
-      /** Represents the keys that define the hierarchical structure of the storage. */
-      readonly keys: Readonly<Keys>;
-    };
-
 export type Internal<T> = {
   /** @internal */
   readonly _internal: T;
@@ -73,6 +66,7 @@ export type State<Value = any> = StateBase<Value> &
   };
 
 export type AsyncStateProperties = {
+  _value: any;
   _isLoaded(value: any, prevValue: any, attempt: number | undefined): boolean;
   readonly _slowLoading: {
     readonly _timeout: number;
@@ -99,6 +93,10 @@ export type AsyncStateProperties = {
     _focusListener: (() => void) | undefined;
   } | null;
   _isFetchInProgress: boolean;
+  readonly _keys: any[] | undefined;
+  _tickStart(): void;
+  _tickEnd(): void;
+  readonly _parent: PaginatedStateStorage<any> | undefined;
 };
 
 export type ErrorState<Error> =
@@ -149,8 +147,6 @@ export type AsyncState<Value = any, Error = any> = State<
     _commonSet: State['set'];
     /** @internal */
     _load?(...args: any[]): (() => void) | void;
-    /** @internal */
-    readonly _keys: any[] | undefined;
   };
 
 /**
@@ -278,7 +274,7 @@ export type ArrayOfUndefined<T extends any[]> = Readonly<{
 export type AsyncStateOptions<
   T,
   E = any,
-  Keys extends PrimitiveOrNested[] = [],
+  Keys extends PrimitiveOrNested[] = any[],
 > = {
   /** The initial value of the state or a function to resolve it using keys. */
   value?: ResolvedValue<T> | ((...keys: Keys) => ResolvedValue<T>);
@@ -340,13 +336,6 @@ export type RequestableStateOptions<
   | 'reloadOnFocus'
   | 'isExpectedError'
 > & {
-  /** @internal */
-  _beforeLoad?(args: PrimitiveOrNested[], utils: AsyncState['_internal']): void;
-  /** @internal */
-  _afterLoad?(
-    args: PrimitiveOrNested[] | void,
-    utils: AsyncState['_internal']
-  ): Promise<PrimitiveOrNested[] | void>;
   /**
    * A function that starts the loading process for the state and returns a promise
    * that resolves with the loaded value.
@@ -362,19 +351,15 @@ export type RequestableStateOptions<
 };
 
 export interface PollableMethods {
-  /** Pauses the current loading process. */
+  /** Pauses the current polling process. */
   pause(): void;
-  /** Resumes a paused loading process. */
+  /** Resumes a polling process. */
   resume(): void;
   /** Resets the loading process, starting it from the beginning. */
   reset(): void;
 }
 
-export type PollableState<
-  T,
-  E = any,
-  Keys extends PrimitiveOrNested[] = [],
-> = LoadableState<T, E, PollableMethods>;
+export type PollableState<T, E = any> = LoadableState<T, E, PollableMethods>;
 
 export type PollableStateOptions<
   T = any,
@@ -396,56 +381,33 @@ type KeysOfStorage<T, Acc extends PrimitiveOrNested[] = []> =
     ? KeysOfStorage<Item, [...Acc, Key]>
     : Acc;
 
-export type StorageKeysWithoutPagination<
-  T,
-  Acc extends PrimitiveOrNested[] = [],
-> =
-  T extends PaginatedStateStorage<any>
-    ? Acc
-    : T extends StateStorageMarker<
-          infer Key extends PrimitiveOrNested,
-          infer Item
-        >
-      ? StorageKeysWithoutPagination<Item, [...Acc, Key]>
-      : Acc;
-
 type StorageItem = State | StateStorageMarker<PrimitiveOrNested, any>;
 
-type ProcessState<S extends State, V, Keys extends PrimitiveOrNested[] = []> =
-  S extends ControllableLoadableNestedState<infer L, any, infer E>
-    ? ControllableLoadableNestedState<L, V, E, Keys>
-    : S extends ControllableLoadableState<infer L, any, infer E>
-      ? ControllableLoadableState<L, V, E, Keys>
-      : S extends LoadableNestedState<any, infer E>
-        ? LoadableNestedState<V, E, Keys>
-        : S extends LoadableState<any, infer E>
-          ? LoadableState<V, E, Keys>
-          : S extends AsyncNestedState<any, infer E>
-            ? AsyncNestedState<V, E, Keys>
-            : S extends AsyncState<any, infer E>
-              ? AsyncState<V, E, Keys>
-              : S extends NestedState
-                ? NestedState<V, Keys>
-                : State<V, Keys>;
+type ProcessState<S extends State | StateScope, V> =
+  S extends LoadableStateScope<any, infer E, infer C>
+    ? LoadableStateScope<V, E, C>
+    : S extends AsyncStateScope<any, infer E>
+      ? AsyncStateScope<V, E>
+      : S extends StateScope
+        ? StateScope<V>
+        : S extends LoadableState<any, infer E, infer C>
+          ? LoadableState<V, E, C>
+          : S extends AsyncState<any, infer E>
+            ? AsyncState<V, E>
+            : State<V>;
 
-type ProcessStorageItem<
-  T extends StorageItem,
-  Keys extends PrimitiveOrNested[],
-> =
+type ProcessStorageItem<T extends StorageItem> =
   T extends State<ResolvedValue<infer V>>
-    ? ProcessState<T, V, Keys>
-    : T extends StateStorage<infer K, infer T>
-      ? StateStorage<K, T, Keys>
+    ? ProcessState<T, V>
+    : T extends StateStorage<infer K, infer Keys>
+      ? StateStorage<K, Keys>
       : T;
 
-type StateWithNestedStorageKeys<
-  T,
-  Keys extends PrimitiveOrNested[],
-> = T extends StorageItem
-  ? ProcessStorageItem<T, Keys>
+type StateWithNestedStorageKeys<T> = T extends StorageItem
+  ? ProcessStorageItem<T>
   : T extends Record<string, StorageItem>
     ? {
-        [key in keyof T]: ProcessStorageItem<T[key], Keys>;
+        [key in keyof T]: ProcessStorageItem<T[key]>;
       }
     : never;
 
@@ -461,35 +423,21 @@ type RetrieveChildState<T, Keys extends PrimitiveOrNested[]> = Keys extends [
 type RetrieveState<T> =
   T extends StateStorageMarker<any, infer Child> ? RetrieveState<Child> : T;
 
-export type RetrieveStateOrPaginatedStorage<T> =
-  T extends PaginatedStateStorage<any>
-    ? T
-    : T extends StateStorageMarker<any, infer Child>
-      ? RetrieveStateOrPaginatedStorage<Child>
-      : T;
-
-/**
- * Represents a nested structure for state storage, recursively creating
- * a hierarchy of state storages based on the provided keys.
- */
-export type NestedStateStorage<
-  Keys extends PrimitiveOrNested[],
-  T,
-> = Keys extends [
-  ...infer Head extends PrimitiveOrNested[],
-  infer Tail extends PrimitiveOrNested,
-]
-  ? NestedStateStorage<Head, StateStorage<Tail, T, Head>>
-  : T;
+// export type RetrieveStateOrPaginatedStorage<T> =
+//   T extends PaginatedStateStorage<any>
+//     ? T
+//     : T extends StateStorageMarker<any, infer Child>
+//       ? RetrieveStateOrPaginatedStorage<Child>
+//       : T;
 
 export declare const STATE_STORAGE_IDENTIFIER: unique symbol;
 
-type StateStorageMarker<Key extends PrimitiveOrNested, Item> = {
-  [STATE_STORAGE_IDENTIFIER]: [Key, Item];
+type StateStorageMarker<Keys extends PrimitiveOrNested[], Item> = {
+  [STATE_STORAGE_IDENTIFIER]: [Keys, Item];
 };
 
 type StorageUtilsBase = {
-  _get(key: PrimitiveOrNested, keys: readonly PrimitiveOrNested[]): any;
+  // _get(key: PrimitiveOrNested, keys: readonly PrimitiveOrNested[]): any;
   _getItem(arg1: any, arg2: any, arg3: any, utils?: Record<string, any>): any;
   readonly _storage: Map<any, any>;
   readonly _arg1: any;
@@ -499,7 +447,6 @@ type StorageUtilsBase = {
 
 export type StorageUtils = StorageUtilsBase & {
   _keyStorage?: Map<string, any>;
-  readonly _depth: number;
 };
 
 export type PaginatedStorageUtils = StorageUtilsBase & {
@@ -510,243 +457,84 @@ export type PaginatedStorageUtils = StorageUtilsBase & {
   _shouldRevalidate(state: LoadableState): boolean;
 };
 
-type UnNestedState<S> =
-  S extends ControllableLoadableState<any, infer E>
-    ? ControllableLoadableState<any, E>
-    : S extends LoadableState<any, infer E>
-      ? LoadableState<any, E>
-      : S extends AsyncState<any, infer E>
-        ? AsyncState<any, E>
-        : S extends State
-          ? State
-          : never;
-
-type IsState<S> = S extends State ? S : never;
-
-type ProcessStateStorageScopeItem<
-  T,
-  S,
-  K extends PrimitiveOrNested,
-  ParentKeys extends PrimitiveOrNested[],
-  key,
-  IsUndefined extends boolean,
-> = ProcessStateStorageScope<
-  Exclude<T, Nil>[key extends keyof Exclude<T, Nil> ? key : never],
-  S,
-  K,
-  ParentKeys,
-  IsUndefined extends true
-    ? true
-    : [Extract<T, Nil>] extends [never]
-      ? false
-      : true,
-  false
->;
-
-type ProcessStateStorageScope<
-  T,
-  S,
-  Key extends PrimitiveOrNested,
-  ParentKeys extends PrimitiveOrNested[],
-  IsUndefined extends boolean = false,
-  IsRoot extends boolean = true,
-> =
-  IsAny<T> extends true
-    ? AnyScope<S>
-    : Exclude<T, Nil> extends Primitive
-      ? EndOfScope<
-          StateStorage<
-            Key,
-            NestedStateStorage<
-              KeysOfStorage<S>,
-              ProcessState<
-                UnNestedState<RetrieveState<S>>,
-                T | (IsUndefined extends true ? undefined : never)
-              >
-            >,
-            ParentKeys
-          >
-        >
-      : (Exclude<T, Nil> extends any[]
-          ? {
-              readonly [key in ToIndex<
-                keyof Exclude<T, Nil>
-              >]-?: ProcessStateStorageScopeItem<
-                T,
-                S,
-                Key,
-                ParentKeys,
-                key,
-                IsUndefined
-              >;
-            }
-          : {
-              readonly [key in keyof Exclude<
-                T,
-                Nil
-              >]-?: ProcessStateStorageScopeItem<
-                T,
-                S,
-                Key,
-                ParentKeys,
-                key,
-                IsUndefined
-              >;
-            }) &
-          EndOfScope<
-            StateStorage<
-              Key,
-              NestedStateStorage<
-                KeysOfStorage<S>,
-                ProcessState<
-                  IsState<RetrieveState<S>>,
-                  T | (IsUndefined extends true ? undefined : never)
-                >
-              >,
-              ParentKeys
-            >,
-            IsRoot
-          >;
+// type UnNestedState<S> =
+//   S extends ControllableLoadableState<any, infer E>
+//     ? ControllableLoadableState<any, E>
+//     : S extends LoadableState<any, infer E>
+//       ? LoadableState<any, E>
+//       : S extends AsyncState<any, infer E>
+//         ? AsyncState<any, E>
+//         : S extends State
+//           ? State
+//           : never;
 
 /**
  * Represents a structured state storage system that allows retrieval and deletion
  * of state entries using specified keys.
  */
 export type StateStorage<
-  K extends PrimitiveOrNested,
   T,
-  ParentKeys extends PrimitiveOrNested[] = [],
-> = StorageKeys<ParentKeys> &
+  Keys extends PrimitiveOrNested[] = any[],
+> = StateStorageMarker<Keys, T> & {
+  /**
+   * Retrieves a state within the storage using the provided keys.
+   *
+   * @example
+   * ```js
+   * const state = storage.get('key', { some: { nested: ['key'] } });
+   * ```
+   */
+  get(...keys: Keys): StateWithNestedStorageKeys<T>;
+  /**
+   * Deletes a state entry from the storage associated with the given key.
+   *
+   * **Warning**: This is an unsafe method. It only removes the state entry from
+   * the storage but does not clear or reset the state itself.
+   */
+  delete(...keys: Partial<Keys>): void;
   /** @internal */
-  Internal<StorageUtils> &
+  readonly _keys: any[] | undefined;
   /** @internal */
-  InternalPathBase &
-  StateStorageMarker<K, T> & {
-    /**
-     * Retrieves a state within the storage using the provided keys.
-     *
-     * @example
-     * ```js
-     * const state = storage.get('key', { some: { nested: ['key'] } });
-     * ```
-     */
-    get<Keys extends [K, ...Partial<KeysOfStorage<T>>]>(
-      ...keys: Keys
-    ): StateWithNestedStorageKeys<
-      RetrieveChildState<
-        T,
-        Keys extends [any, ...infer Tail extends PrimitiveOrNested[]]
-          ? Tail
-          : []
-      >,
-      [...ParentKeys, ...Keys]
-    >;
-    /**
-     * Deletes a state entry from the storage associated with the given key.
-     *
-     * **Warning**: This is an unsafe method. It only removes the state entry from
-     * the storage but does not clear or reset the state itself.
-     */
-    delete(key: K): void;
-  } & (T extends StateScope<() => any>
-    ? StateScope<
-        () => ProcessStateStorageScope<
-          RetrieveState<T> extends State<infer V> ? ResolvedValue<V> : never,
-          T,
-          K,
-          ParentKeys
-        >
-      >
-    : {});
-
-type ProcessPaginatedStorageScopeItem<
-  T,
-  S extends LoadableState,
-  ParentKeys extends PrimitiveOrNested[],
-  key,
-  IsUndefined extends boolean,
-> = ProcessPaginatedStorageScope<
-  Exclude<T, Nil>[key extends keyof Exclude<T, Nil> ? key : never],
-  S,
-  ParentKeys,
-  IsUndefined extends true
-    ? true
-    : [Extract<T, Nil>] extends [never]
-      ? false
-      : true,
-  false
->;
-
-type ProcessPaginatedStorageScope<
-  T,
-  S extends LoadableState,
-  ParentKeys extends PrimitiveOrNested[],
-  IsUndefined extends boolean = false,
-  IsRoot extends boolean = true,
-> =
-  IsAny<T> extends true
-    ? AnyScope<PaginatedStateStorage<S, ParentKeys>>
-    : Exclude<T, Nil> extends Primitive
-      ? EndOfScope<
-          PaginatedStateStorage<
-            ProcessState<
-              UnNestedState<S>,
-              T | (IsUndefined extends true ? undefined : never)
-            >,
-            ParentKeys
-          >
-        >
-      : (Exclude<T, Nil> extends any[]
-          ? {
-              readonly [key in ToIndex<
-                keyof Exclude<T, Nil>
-              >]-?: ProcessPaginatedStorageScopeItem<
-                T,
-                S,
-                ParentKeys,
-                key,
-                IsUndefined
-              >;
-            }
-          : {
-              readonly [key in keyof Exclude<
-                T,
-                Nil
-              >]-?: ProcessPaginatedStorageScopeItem<
-                T,
-                S,
-                ParentKeys,
-                key,
-                IsUndefined
-              >;
-            }) &
-          EndOfScope<
-            PaginatedStateStorage<
-              ProcessState<
-                S,
-                T | (IsUndefined extends true ? undefined : never)
-              >,
-              ParentKeys
-            >,
-            IsRoot
-          >;
+  readonly _storage: Map<any, any>;
+  /** @internal */
+  readonly _getItem: (...args: any[]) => any;
+  /** @internal */
+  readonly _arg1: any;
+  /** @internal */
+  readonly _arg2?: any;
+  /** @internal */
+  readonly _arg3?: any;
+};
 
 /**
  * Represents a paginated state storage system for managing state entries across multiple pages.
  */
-export type PaginatedStateStorage<
-  T extends LoadableState,
-  ParentKeys extends PrimitiveOrNested[] = [],
-> = StorageKeys<ParentKeys> &
+export type PaginatedStateStorage<T extends LoadableState | StateScope> =
   /** @internal */
-  Internal<PaginatedStorageUtils> &
-  /** @internal */
-  InternalPathBase &
-  StateStorageMarker<number, T> & {
+  InternalPathBase & {
+    /** @internal */
+    readonly _keys: any[] | undefined;
+    readonly page: State<number>;
+    /** @internal */
+    readonly _storage: Map<number, T>;
+    /** @internal */
+    readonly _stableStorage: Map<number, any>;
+    /** @internal */
+    _promise: Promise<void> | undefined;
+    /** @internal */
+    _resolve: () => void;
+    /** @internal */
+    readonly _pages: Set<number>;
+    /** @internal */
+    readonly _getItem: (...args: any[]) => any;
+    /** @internal */
+    readonly _arg1: any;
+    /** @internal */
+    readonly _arg2: StateInitializer | undefined;
+    /** @internal */
+    _shouldRevalidate(state: LoadableState): boolean;
     /** Retrieves a state entry for the specified page number within the paginated storage. */
-    get(
-      page: number
-    ): StateWithNestedStorageKeys<T, [...ParentKeys, page: number]>;
+    get(page: number): T;
     /**
      * Deletes a state entry for the specified page number from the paginated storage.
      *
@@ -754,51 +542,41 @@ export type PaginatedStateStorage<
      * the storage but does not clear or reset the state itself.
      */
     delete(page: number): void;
-    /**
-     * A hook that retrieves an tuple of items and errors for the specified {@link count} of pages in the paginated storage.
-     * @param count - The number of pages to retrieve starting from the first page.
-     *
-     * @example
-     * ```js
-     * const [items, errors] = paginatedStorage.usePages(5);
-     * ```
-     */
-    usePages(
-      count: number
-    ): T extends LoadableState<infer V, infer E>
-      ? readonly [
-          items: ReadonlyArray<V | undefined>,
-          errors: ReadonlyArray<E | undefined>,
-        ]
-      : never;
-    /**
-     * A hook that retrieves an tuple of items and errors for the specified range of pages in the paginated storage.
-     * @param from - The starting page number (starts from `0`).
-     * @param to - The ending page number.
-     *
-     * @example
-     * ```js
-     * const [items, errors] = paginatedStorage.usePages(2, 5);
-     * ```
-     */
-    usePages(
-      from: number,
-      to: number
-    ): T extends LoadableState<infer V, infer E>
-      ? readonly [
-          items: ReadonlyArray<V | undefined>,
-          errors: ReadonlyArray<E | undefined>,
-        ]
-      : never;
-  } & (T extends StateScope<() => any>
-    ? StateScope<
-        () => ProcessPaginatedStorageScope<
-          T extends LoadableState<infer V> ? V : never,
-          T,
-          ParentKeys
-        >
-      >
-    : {});
+  } & (T extends LoadableState
+      ? {
+          /**
+           * A hook that retrieves an array of items and errors for the current {@link PaginatedStateStorage.page page state value} in the paginated storage.
+           *
+           * @example
+           * ```js
+           * const [items, errors] = paginatedStorage.usePages();
+           * ```
+           */
+          usePages(): T extends LoadableState<infer V, infer E>
+            ? readonly [
+                items: ReadonlyArray<V | undefined>,
+                errors: ReadonlyArray<E | undefined>,
+              ]
+            : never;
+        }
+      : {
+          /**
+           * A hook that retrieves an array of items and errors for the current {@link PaginatedStateStorage.page page state value} in the paginated storage.
+           *
+           * @example
+           * ```js
+           * const [items, errors] = paginatedStorage.usePages();
+           * ```
+           */
+          usePages<S extends LoadableState>(
+            getState: (scope: T) => S
+          ): S extends LoadableState<infer V, infer E>
+            ? readonly [
+                items: ReadonlyArray<V | undefined>,
+                errors: ReadonlyArray<E | undefined>,
+              ]
+            : never;
+        });
 
 export type WithInitModule<T, Args extends any[]> = [
   ...Args,

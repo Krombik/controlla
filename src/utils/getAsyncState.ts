@@ -1,3 +1,4 @@
+import noop from 'lodash.noop';
 import type {
   AnyAsyncState,
   AsyncState,
@@ -6,6 +7,7 @@ import type {
   LoadableState,
   LoadableStateOptions,
   Mutable,
+  PaginatedStateStorage,
   StateInitializer,
 } from '../types';
 import alwaysTrue from './alwaysTrue';
@@ -54,6 +56,8 @@ function set(this: AsyncState, value: any, isError?: boolean) {
   const prevRootValue = data._value;
 
   self._commonSet(value);
+
+  data._tickEnd();
 
   const newRootValue = data._value;
 
@@ -136,7 +140,7 @@ function load(this: LoadableState, reload?: boolean) {
       data._reloadIfStale._timeoutId = undefined;
     }
 
-    const keys = this._keys;
+    const keys = data._keys;
 
     const unload = keys ? self._load(...keys) : self._load();
 
@@ -242,7 +246,10 @@ const getAsyncState = <D>(
   _keys: any[] | undefined,
   _setData: D,
   _load?: LoadableStateOptions['load'],
-  Control?: LoadableStateOptions<any, any, any>['Control']
+  Control?: LoadableStateOptions<any, any, any>['Control'],
+  _tickStart?: () => void,
+  _tickEnd?: () => void,
+  _parent?: PaginatedStateStorage<any>
 ): AnyAsyncState => {
   const {
     isExpectedError,
@@ -291,6 +298,10 @@ const getAsyncState = <D>(
               _callbackSet: new Set(),
             }
           : null,
+        _keys,
+        _tickEnd: _tickEnd || noop,
+        _tickStart: _tickStart || noop,
+        _parent,
       },
       get,
       _setData,
@@ -308,7 +319,6 @@ const getAsyncState = <D>(
         _setData: new Set(),
       },
       control: undefined!,
-      _keys,
     },
     options.value,
     stateInitializer,

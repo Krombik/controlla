@@ -62,15 +62,16 @@ const SKELETON_STATE = {
     _slowLoading: {
       _callbackSet: { add: noop, delete: noop },
     } as AsyncStateProperties['_slowLoading'],
-  } as Partial<AsyncStateProperties>,
+    _value: undefined,
+  } as Partial<LoadableState['_internal']> as LoadableState['_internal'],
   load: alwaysNoop,
-  control: new Proxy(
-    {},
-    {
-      get: alwaysNoop,
-    }
-  ),
-  _onValueChange: noop,
+  control: new Proxy(noop, {
+    get(_, __, proxy) {
+      return proxy;
+    },
+    has: alwaysFalse,
+  }),
+  _onValueChange: alwaysNoop,
   get: noop,
   set: noop,
   error: {

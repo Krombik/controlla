@@ -13,22 +13,18 @@ export class PollingControl implements PollableMethods {
   _sleep: () => Promise<void>;
   _pausePromise: Promise<void> | undefined | false = undefined;
   _sleepPromise: Promise<void> | void | false = undefined;
-  _resume: () => void;
-  reset: () => void;
+  _resume: () => void = noop;
+  reset: () => void = noop;
   readonly _state: AsyncState;
 
   constructor(options: PollableStateOptions, state: AsyncState) {
     const { hiddenInterval } = options;
-
-    this._resume = noop;
 
     this._interval = options.interval;
 
     this._hiddenInterval = hiddenInterval;
 
     this._sleep = hiddenInterval == null ? commonSleep : smartSleep;
-
-    this.reset = noop;
 
     this._state = state;
   }

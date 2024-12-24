@@ -1,317 +1,216 @@
 import { useEffect } from 'react';
-import getValue from '../getValue';
 import type {
-  AnyLoadableState,
-  ControllableLoadableNestedState,
-  ControllableLoadableState,
   StateInitializer,
-  Internal,
-  StateInternalUtils,
-  LoadableNestedState,
   LoadableState,
   PaginatedStateStorage,
-  PaginatedStorageUtils,
   PollableStateOptions,
   RequestableStateOptions,
   WithInitModule,
+  PollableState,
+  AsyncStateProperties,
+  LoadableStateScope,
+  PollableStateScope,
 } from '../types';
-import { EMPTY_ARR } from '../utils/constants';
 import onValueChange from '../onValueChange';
-import useConst from 'react-helpful-utils/useConst';
 import alwaysFalse from '../utils/alwaysFalse';
 import alwaysTrue from '../utils/alwaysTrue';
 import type { PrimitiveOrNested } from 'keyweaver';
-import scope from '../utils/scope';
 import type createRequestableState from '../createRequestableState';
 import type createRequestableStateScope from '../createRequestableStateScope';
 import type createPollableState from '../createPollableState';
 import type createPollableStateScope from '../createPollableStateScope';
-import { useForceRerender } from 'react-helpful-utils';
-import getPromise from '../getPromise';
+import useForceRerender from 'react-helpful-utils/useForceRerender';
 import handleUnlisteners from '../utils/handleUnlisteners';
 import concat from '../utils/concat';
+import createState from '../createState';
+import noop from 'lodash.noop';
+import identity from 'lodash.identity';
 
-type AdditionalUtils = {
-  readonly _parent: PaginatedStateStorage<any>['_internal'];
-  _originalSet: StateInternalUtils['_set'];
-  readonly _page: number;
-  readonly _stable: Pick<StateInternalUtils, '_get' | '_value'>;
-};
+function get(this: PaginatedStateStorage<any>, page: number) {
+  const self = this;
 
-type PaginatedState = AnyLoadableState & Internal<AdditionalUtils>;
+  const { _storage: _pages } = self;
 
-function _set(
-  this: PaginatedState['_internal'],
-  nextValue: any,
-  path: string[],
-  isError: boolean
-) {
-  this._originalSet(nextValue, path, isError);
-
-  this._parent._resolvePage(this._page);
-}
-
-function get(this: PaginatedStateStorage<any, any[]>, page: number) {
-  const keys = this.keys.length ? concat(this.keys, page) : [page];
-
-  return {
-    ...this._internal._get(page, keys),
-    keys,
-  };
-}
-
-function _get(
-  this: PaginatedStorageUtils,
-  page: number,
-  keys: PrimitiveOrNested[]
-) {
-  const storage = this._storage;
-
-  if (storage.has(page)) {
-    return storage.get(page)!;
+  if (_pages.has(page)) {
+    return _pages.get(page);
   }
 
-  const state: PaginatedState = this._getItem(this._arg1, this._arg2, keys, {
-    _parent: this,
-    _page: page,
-    _originalSet: undefined!,
-    _stable: { _value: undefined, _get: undefined! },
-  } as AdditionalUtils);
+  const item = self._getItem(
+    self._arg1,
+    self._arg2,
+    self._keys ? concat(self._keys, page) : [page],
+    _tickStart,
+    _tickEnd,
+    self
+  );
 
-  const utils = state._internal;
+  _pages.set(page, item);
 
-  utils._originalSet = utils._set;
-
-  utils._set = _set;
-
-  utils._stable._get = utils._get;
-
-  storage.set(page, state);
-
-  return state;
-}
-
-function _resolvePage(this: PaginatedStorageUtils, page: number) {
-  if (this._pages.delete(page) && !this._pages.size) {
-    this._resolve();
-
-    this._promise = new Promise((res) => {
-      this._resolve = res;
-    });
-  }
+  return item;
 }
 
 function _delete(this: PaginatedStateStorage<any>, page: number) {
-  this._internal._storage.delete(page);
+  this._storage.delete(page);
 }
 
-const _beforeLoad = (args: any[], utils: PaginatedState['_internal']) => {
-  utils._parent._pages.add(args[args.length - 1] as number);
+function _tickStart(this: AsyncStateProperties) {
+  const self = this;
 
-  utils._stable._value = utils._value;
-};
+  const index = self._keys![self._keys!.length - 1];
 
-const _afterLoad = async (
-  args: any[] | void,
-  utils: PaginatedState['_internal']
-) => {
-  if (args) {
-    const self = utils._parent;
+  const parent = self._parent!;
 
-    self._resolvePage(args[args.length - 1] as number);
-
-    await self._promise;
-
-    return args;
+  if (!parent._promise) {
+    parent._promise = new Promise<void>((res) => {
+      parent._resolve = res;
+    });
   }
-};
+
+  parent._pages.add(index);
+
+  parent._stableStorage.set(index, self._value);
+}
+
+function _tickEnd(this: AsyncStateProperties) {
+  const self = this;
+
+  const parent = self._parent!;
+
+  if (
+    parent._promise &&
+    parent._pages.delete(self._keys![self._keys!.length - 1]) &&
+    !parent._pages.size
+  ) {
+    parent._stableStorage.clear();
+
+    parent._promise = parent._resolve() as undefined;
+  }
+}
 
 function usePages(
-  this: PaginatedStateStorage<any, any[]>,
-  from: number,
-  to?: number
+  this: PaginatedStateStorage<LoadableState | LoadableStateScope>,
+  getState: (scope: any) => LoadableState = identity
 ) {
-  if (to == null) {
-    to = from;
+  const self = this;
 
-    from = 0;
+  const stableStorage = self._stableStorage;
+
+  const count: number = self.page._internal._value;
+
+  const forceRerender = useForceRerender();
+
+  const values = new Array(count);
+
+  const errors = new Array(count);
+
+  for (let i = 0; i < count; i++) {
+    const state = getState(self.get(i));
+
+    values[i] = (
+      stableStorage.has(i)
+        ? ({
+            _internal: { _value: stableStorage.get(i) },
+            get: state.get,
+            _path: state._path,
+          } as LoadableState)
+        : state
+    ).get();
+
+    errors[i] = state.error.get();
   }
 
-  return useConst(() => {
-    const paginationUtils = this._internal;
+  useEffect(() => {
+    let prevPage = count;
 
-    const { _shouldRevalidate: shouldRevalidate } = paginationUtils;
+    let isCallable = true;
 
     const cleanupMap = new Map<number, () => void>();
 
-    let prevFrom: null | number = null;
+    const callback = () => {
+      if (self._promise) {
+        if (isCallable) {
+          isCallable = false;
 
-    let prevTo: null | number = null;
+          self._promise.then(() => {
+            isCallable = true;
 
-    let inProgress = true;
-
-    return (from: number, to: number) => {
-      let isUnstable = false;
-
-      const states: PaginatedState[] = [];
-
-      const errors: any[] = [];
-
-      const forceRerender = useForceRerender();
-
-      inProgress = true;
-
-      useEffect(() => {
-        const fromDiff = prevFrom != null ? prevFrom - from : 0;
-
-        const toDiff = prevTo != null ? to - prevTo : to;
-
-        const callback = () => {
-          if (inProgress) {
-            inProgress = false;
-
-            const l = states.length;
-
-            let inProgressCount = l;
-
-            const onDone = () => {
-              if (!--inProgressCount) {
-                forceRerender();
-              }
-            };
-
-            for (let i = 0; i < l; i++) {
-              getPromise(states[i], true).then(onDone, onDone);
-            }
-          }
-        };
-
-        if (fromDiff) {
-          if (fromDiff > 0) {
-            for (let i = 0; i < fromDiff; i++) {
-              const state = states[i];
-
-              cleanupMap.set(
-                from + i,
-                handleUnlisteners(
-                  onValueChange([state, state.error], callback),
-                  state
-                )
-              );
-            }
-
-            if (!isUnstable) {
-              for (let i = fromDiff; i < states.length; i++) {
-                const state = states[i];
-
-                if (shouldRevalidate(state)) {
-                  const page = from + i;
-
-                  const prev = cleanupMap.get(page)!;
-
-                  cleanupMap.set(page, state.load(true));
-
-                  prev();
-                } else if ('reset' in state.loading) {
-                  state.loading.reset();
-                }
-              }
-            }
-          } else {
-            for (let i = prevFrom!; i < from; i++) {
-              cleanupMap.get(i)!();
-
-              cleanupMap.delete(i);
-            }
-          }
+            forceRerender();
+          });
         }
+      } else {
+        forceRerender();
+      }
+    };
 
-        if (toDiff) {
-          if (toDiff > 0) {
-            const start = prevTo != null ? prevTo - prevFrom! : 0;
+    for (let i = 0; i < prevPage; i++) {
+      const state = getState(self.get(i));
 
-            if (start && !isUnstable) {
-              for (let i = 0; i < start; i++) {
-                const state = states[i];
-
-                if (shouldRevalidate(state)) {
-                  const page = from + i;
-
-                  const prev = cleanupMap.get(page)!;
-
-                  cleanupMap.set(page, state.load(true));
-
-                  prev();
-                } else if ('reset' in state.loading) {
-                  state.loading.reset();
-                }
-              }
-            }
-
-            for (let i = start; i < states.length; i++) {
-              const state = states[i];
-
-              cleanupMap.set(
-                from + i,
-                handleUnlisteners(
-                  onValueChange([state, state.error], callback),
-                  state
-                )
-              );
-            }
-          } else {
-            for (let i = prevTo!; i < to; i++) {
-              cleanupMap.get(i)!();
-
-              cleanupMap.delete(i);
-            }
-          }
-        }
-
-        prevFrom = from;
-
-        prevTo = to;
-      }, [from, to, paginationUtils]);
-
-      useEffect(
-        () => () => {
-          for (let i = prevFrom!; i < prevTo!; i++) {
-            cleanupMap.get(i)!();
-
-            cleanupMap.delete(i);
-          }
-
-          prevFrom = prevTo = null;
-        },
-        [paginationUtils]
+      cleanupMap.set(
+        i,
+        handleUnlisteners(onValueChange([state, state.error], callback), state)
       );
+    }
 
-      for (let i = from; i < to; i++) {
-        const state: PaginatedState = this.get(i);
+    const unlisten = self.page._onValueChange((nextPage: number) => {
+      if (nextPage > prevPage) {
+        if (!self._promise) {
+          const { _shouldRevalidate } = self;
 
-        if (state.loading._isFetchInProgress) {
-          isUnstable = true;
+          for (let i = 0; i < prevPage; i++) {
+            const state = getState(self.get(i));
+
+            if (_shouldRevalidate(state)) {
+              const prev = cleanupMap.get(i)!;
+
+              cleanupMap.set(i, state.load(true));
+
+              prev();
+            } else if ((state as PollableState<any>).control) {
+              (state as PollableState<any>).control.reset();
+            }
+          }
         }
 
-        errors.push(getValue(state.error));
+        for (let i = prevPage; i < nextPage; i++) {
+          const state = getState(self.get(i));
 
-        states.push(state);
+          cleanupMap.set(
+            i,
+            handleUnlisteners(
+              onValueChange([state, state.error], callback),
+              state
+            )
+          );
+        }
+      } else {
+        for (let i = nextPage; i < prevPage; i++) {
+          cleanupMap.get(i)!();
+
+          cleanupMap.delete(i);
+        }
       }
 
-      return [
-        states.map(
-          isUnstable
-            ? (item) => item._internal._stable._get(item._path!)
-            : getValue
-        ),
-        errors,
-      ] as const;
+      forceRerender();
+    });
+
+    return () => {
+      unlisten();
+
+      for (let i = 0; i < prevPage; i++) {
+        cleanupMap.get(i)!();
+
+        cleanupMap.delete(i);
+      }
     };
-  })(from, to);
+  }, [self]);
+
+  return [values, errors] as const;
 }
 
 type Options<T> = {
-  shouldRevalidate?: boolean | ((value: T | undefined) => boolean);
+  shouldRevalidate?:
+    | boolean
+    | ((...args: T extends LoadableState ? [state: T] : [scope: T]) => boolean);
 };
 
 type Args<CreateState, T, O> = WithInitModule<
@@ -323,44 +222,40 @@ export type PaginatedRequestableStateArgs<
   T,
   E,
   Keys extends PrimitiveOrNested[] = [],
-  ParentKeys extends PrimitiveOrNested[] = [],
 > = Args<
   typeof createRequestableState,
   T,
-  RequestableStateOptions<T, E, [...ParentKeys, ...Keys, page: number]>
+  RequestableStateOptions<T, E, [...Keys, page: number]>
 >;
 
 export type PaginatedRequestableNestedStateArgs<
   T,
   E,
   Keys extends PrimitiveOrNested[] = [],
-  ParentKeys extends PrimitiveOrNested[] = [],
 > = Args<
   typeof createRequestableStateScope,
   T,
-  RequestableStateOptions<T, E, [...ParentKeys, ...Keys, page: number]>
+  RequestableStateOptions<T, E, [...Keys, page: number]>
 >;
 
 export type PaginatedPollableStateArgs<
   T,
   E,
   Keys extends PrimitiveOrNested[] = [],
-  ParentKeys extends PrimitiveOrNested[] = [],
 > = Args<
   typeof createPollableState,
   T,
-  PollableStateOptions<T, E, [...ParentKeys, ...Keys, page: number]>
+  PollableStateOptions<T, E, [...Keys, page: number]>
 >;
 
 export type PaginatedPollableNestedStateArgs<
   T,
   E,
   Keys extends PrimitiveOrNested[] = [],
-  ParentKeys extends PrimitiveOrNested[] = [],
 > = Args<
   typeof createPollableStateScope,
   T,
-  PollableStateOptions<T, E, [...ParentKeys, ...Keys, page: number]>
+  PollableStateOptions<T, E, [...Keys, page: number]>
 >;
 
 /**
@@ -374,55 +269,42 @@ const createPaginatedStorage: {
   ): PaginatedStateStorage<LoadableState<T, Error>>;
   <T, Error = any>(
     ...args: PaginatedRequestableNestedStateArgs<T, Error>
-  ): PaginatedStateStorage<LoadableNestedState<T, Error>>;
+  ): PaginatedStateStorage<LoadableStateScope<T, Error>>;
 
   <T, Error = any>(
     ...args: PaginatedPollableStateArgs<T, Error>
-  ): PaginatedStateStorage<ControllableLoadableState<T, Error>>;
+  ): PaginatedStateStorage<PollableState<T, Error>>;
   <T, Error = any>(
     ...args: PaginatedPollableNestedStateArgs<T, Error>
-  ): PaginatedStateStorage<ControllableLoadableNestedState<T, Error>>;
+  ): PaginatedStateStorage<PollableStateScope<T, Error>>;
 } = (
-  createState: any,
-  options: RequestableStateOptions<any, any, [number]> & Options<any>,
-  stateInitializer?: StateInitializer
+  getItem: any,
+  options: Options<any>,
+  stateInitializer?: StateInitializer,
+  keys?: any[]
 ): any => {
   const { shouldRevalidate } = options;
 
-  let resolve!: () => void;
-
   return {
-    _internal: {
-      _get,
-      _getItem: createState,
-      _arg1: {
-        ...options,
-        _beforeLoad,
-        _afterLoad,
-      },
-      _arg2: stateInitializer,
-      _pages: new Set(),
-      _promise: new Promise((res) => {
-        resolve = res;
-      }),
-      _resolve: resolve,
-      _shouldRevalidate: shouldRevalidate
-        ? shouldRevalidate != true
-          ? (state) => shouldRevalidate(getValue(state))
-          : alwaysTrue
-        : alwaysFalse,
-      _storage: new Map(),
-      _resolvePage,
-    },
+    _storage: new Map(),
+    _pages: new Set(),
+    _stableStorage: new Map(),
+    page: createState(1),
+    _getItem: getItem,
+    _arg1: options,
+    _arg2: stateInitializer,
+    _shouldRevalidate: shouldRevalidate
+      ? shouldRevalidate != true
+        ? shouldRevalidate
+        : alwaysTrue
+      : alwaysFalse,
     get,
     delete: _delete,
-    scope,
-    _path: EMPTY_ARR,
-    keys: EMPTY_ARR,
+    _promise: undefined,
+    _resolve: noop,
+    _keys: keys,
     usePages,
-  } as Partial<
-    PaginatedStateStorage<any, any[]>
-  > as PaginatedStateStorage<ControllableLoadableNestedState>;
+  } as PaginatedStateStorage<any>;
 };
 
 export type { PaginatedStateStorage };
