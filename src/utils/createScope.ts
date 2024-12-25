@@ -1,16 +1,16 @@
-import { State } from '../types';
+import type { State } from '../types';
 import concat from './concat';
 import { $tate } from './constants';
 
-type Kek = {
+type Child = {
   readonly _state: State;
-  readonly _map: Map<string, State | Kek>;
+  readonly _map: Map<string, State | Child>;
   readonly _path: readonly string[];
 };
 
-type ScopeMap = Map<typeof $tate, State> & Map<string, Kek>;
+type ScopeMap = Map<typeof $tate, State> & Map<string, Child>;
 
-const handler: ProxyHandler<Kek> = {
+const childHandler: ProxyHandler<Child> = {
   get(target, prop: string) {
     const { _map } = target;
 
@@ -18,17 +18,17 @@ const handler: ProxyHandler<Kek> = {
       return _map.get(prop);
     }
 
-    const next: Kek | State =
+    const next =
       prop != $tate
         ? new Proxy(
             {
               _map: new Map(),
               _path: concat(target._path, prop),
               _state: target._state,
-            },
-            handler
+            } as Child,
+            childHandler
           )
-        : { ...target._state, _path: target._path };
+        : ({ ...target._state, _path: target._path } as State);
 
     _map.set(prop, next);
 
@@ -48,7 +48,7 @@ const rootHandler: ProxyHandler<ScopeMap> = {
         _path: [prop],
         _state: _map.get($tate)!,
       },
-      handler
+      childHandler
     );
 
     _map.set(prop, next);

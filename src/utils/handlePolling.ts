@@ -5,7 +5,7 @@ import type {
   AsyncState,
 } from '../types';
 import becomingOnline from './becomingOnline';
-import createLoader from './createLoader';
+import type createLoader from './createLoader';
 
 export class PollingControl implements PollableMethods {
   readonly _interval: number | ((value: any) => number);

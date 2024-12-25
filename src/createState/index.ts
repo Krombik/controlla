@@ -1,8 +1,4 @@
-import {
-  type StateInitializer,
-  type State,
-  ValueChangeCallbacks,
-} from '../types';
+import type { StateInitializer, State, ValueChangeCallbacks } from '../types';
 import handleState from '../utils/handleState';
 import { get, _onValueChange, set } from '../utils/state/common';
 

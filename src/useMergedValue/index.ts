@@ -11,7 +11,7 @@ import simpleIsEqual from '../utils/simpleIsEqual';
 
 const useMergedValue = ((
   states: AnyAsyncState[],
-  merger: (...values: any[]) => any,
+  merger: (values: any[]) => any,
   isEqual: (
     nextMergedValue: any,
     prevMergedValue: any
@@ -19,7 +19,7 @@ const useMergedValue = ((
 ) => {
   const forceRerender = useForceRerender();
 
-  const mergedValue = merger(...states.map((state) => state.get()));
+  const mergedValue = merger(states.map((state) => state.get()));
 
   const mergedValueRef = useRef(mergedValue);
 
@@ -30,7 +30,7 @@ const useMergedValue = ((
       let nextValue;
 
       try {
-        nextValue = merger(...states.map((state) => state.get()));
+        nextValue = merger(states.map((state) => state.get()));
       } catch {
         forceRerender();
 
@@ -76,13 +76,11 @@ const useMergedValue = ((
    */
   <const S extends State[], V>(
     states: S,
-    merger: (
-      ...values: {
-        [index in keyof S]: HandlePending<
-          S[index] extends State<infer T> ? T : never
-        >;
-      }
-    ) => V,
+    merger: (values: {
+      [index in keyof S]: HandlePending<
+        S[index] extends State<infer T> ? T : never
+      >;
+    }) => V,
     isEqual?: (nextMergedValue: V, prevMergedValue: V) => boolean
   ): V;
 };

@@ -57,7 +57,6 @@ export type {
   LoadableStateScope,
   LoadableStateOptions,
   AsyncStateOptions,
-  NestedStateStorage,
   PollableState,
   PollableStateScope,
   PollableStateOptions,

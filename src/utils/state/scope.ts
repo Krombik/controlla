@@ -1,6 +1,6 @@
 import noop from 'lodash.noop';
-import {
-  SetData,
+import type {
+  InternalSetData,
   State,
   StateCallbackMap,
   ValueChangeCallbacks,
@@ -8,7 +8,7 @@ import {
 import { addToBatch } from '../batching';
 import processStateChanges from '../processStateChanges';
 
-type ScopedState = State & SetData<StateCallbackMap>;
+type ScopedState = State & InternalSetData<StateCallbackMap>;
 
 const deepSet = (
   value: any,

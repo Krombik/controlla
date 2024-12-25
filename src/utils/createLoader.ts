@@ -12,7 +12,7 @@ const createLoader = <U extends Record<string, any> = never>(
     fetch: () => Promise<true | void>,
     self: LoadableState<any, any, U>
   ) => void | Promise<void>,
-  { load, shouldRetryOnError }: RequestableStateOptions<any, any, any[]>
+  { fetch, shouldRetryOnError }: RequestableStateOptions<any, any, any[]>
 ) =>
   function (this: LoadableState<any, any, U>, ...args: any[]) {
     const self = this;
@@ -33,7 +33,7 @@ const createLoader = <U extends Record<string, any> = never>(
 
     const retriableFetcher = (): Promise<true | void> =>
       isRunning
-        ? load(...args).then(
+        ? fetch(...args).then(
             (value) => {
               attempt = 0;
 
@@ -82,7 +82,9 @@ const createLoader = <U extends Record<string, any> = never>(
 
         data._isFetchInProgress = false;
 
-        await data._parent!._promise;
+        if (data._parent) {
+          await data._parent._promise;
+        }
 
         return res;
       },

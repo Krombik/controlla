@@ -1,15 +1,12 @@
 import type { FC } from 'react';
 import type {
   LoadableState,
+  LoadableStateScope,
   PaginatedStateStorage,
-  StateBase as State,
 } from '../types';
-import useValue from '../useValue';
 
-export type PaginationControllerProps<T, E = any> = {
+type PaginationStateProps<T, E = any> = {
   storage: PaginatedStateStorage<LoadableState<T, E>>;
-  /** The number of pages to load, or a state holding the count. */
-  count: number | State<number>;
   /** A function to render the paginated {@link items} and their associated {@link errors}. */
   render(
     items: ReadonlyArray<T | undefined>,
@@ -17,19 +14,35 @@ export type PaginationControllerProps<T, E = any> = {
   ): ReturnType<FC>;
 };
 
-/**
- * A controller component for rendering paginated data using the provided {@link PaginationControllerProps.storage storage} and {@link PaginationControllerProps.count pages count}.
- */
-const PaginationController = <T, E = any>({
-  storage,
-  count,
-  render,
-}: PaginationControllerProps<T, E>) => {
-  const t = storage.usePages(
-    typeof count == 'number' ? count : useValue(count)
-  );
+type PaginationScopeProps<
+  S extends LoadableStateScope,
+  T extends LoadableState,
+> = {
+  storage: PaginatedStateStorage<S>;
+  getState(scope: S): T;
+  /** A function to render the paginated {@link items} and their associated {@link errors}. */
+  render(
+    items: ReadonlyArray<
+      T extends LoadableState<infer V> ? V | undefined : never
+    >,
+    errors: ReadonlyArray<
+      T extends LoadableState<any, infer E> ? E | undefined : never
+    >
+  ): ReturnType<FC>;
+};
 
-  return render(t[0], t[1]);
+/**
+ * A controller component for rendering paginated data using the provided {@link PaginationStateProps.storage storage} and {@link PaginationStateProps.count pages count}.
+ */
+const PaginationController = ((props: PaginationScopeProps<any, any>) => {
+  const tuple = props.storage.usePages(props.getState);
+
+  return props.render(tuple[0], tuple[1]);
+}) as {
+  <T, E = any>(props: PaginationStateProps<T, E>): ReturnType<FC>;
+  <S extends LoadableStateScope, T extends LoadableState>(
+    props: PaginationScopeProps<S, T>
+  ): ReturnType<FC>;
 };
 
 export default PaginationController;

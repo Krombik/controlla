@@ -7,7 +7,6 @@ import type {
   AsyncStateOptions,
   RequestableStateOptions,
   PollableStateOptions,
-  STATE_STORAGE_IDENTIFIER,
   LoadableStateOptions,
   WithInitModule,
   PaginatedStateStorage,
@@ -17,6 +16,7 @@ import type {
   AsyncStateScope,
   StateScope,
   PollableMethods,
+  StorageRecord,
 } from '../types';
 import type createState from '../createState';
 import type createAsyncState from '../createAsyncState';
@@ -27,7 +27,7 @@ import type createRequestableStateScope from '../createRequestableStateScope';
 import type createPollableState from '../createPollableState';
 import type createPollableStateScope from '../createPollableStateScope';
 import type createPaginatedStorage from '../createPaginatedStorage';
-import {
+import type {
   PaginatedPollableNestedStateArgs,
   PaginatedPollableStateArgs,
   PaginatedRequestableNestedStateArgs,
@@ -45,7 +45,7 @@ type GetStateArgs<
   T,
   [
     createState: CreateState,
-    defaultValue?: T | ((...args: [...ParentKeys, ...Keys]) => T),
+    defaultValue?: T | ((keys: [...ParentKeys, ...Keys]) => T),
   ]
 >;
 
@@ -115,21 +115,6 @@ type PollableStateArgs<
     options: PollableStateOptions<T, E, [...ParentKeys, ...Keys]>,
   ]
 >;
-
-type StateStorageItem =
-  | StorageRecord
-  | PaginatedStateStorage<any>
-  | State
-  | {
-      [STATE_STORAGE_IDENTIFIER]: [PrimitiveOrNested, StateStorageItem];
-    };
-
-type StorageRecord = {
-  [key: string]:
-    | State
-    | PaginatedStateStorage<any>
-    | StateStorage<StateStorageItem, any[]>;
-};
 
 type StateCreationArguments<
   T extends State,
@@ -249,26 +234,6 @@ type WithCreatePaginatedStorage<T extends any[]> = [
 type WithCreateStateStorage<T extends any[]> = [CreateStateStorage, ...T];
 
 interface CreateStateStorage {
-  <T, Keys extends PrimitiveOrNested[], E = any>(
-    ...args: WithCreatePaginatedStorage<
-      PaginatedRequestableStateArgs<T, E, Keys>
-    >
-  ): StateStorage<PaginatedStateStorage<LoadableState<T, E>>, Keys>;
-  <T, Keys extends PrimitiveOrNested[], E = any>(
-    ...args: WithCreatePaginatedStorage<
-      PaginatedRequestableNestedStateArgs<T, E, Keys>
-    >
-  ): StateStorage<PaginatedStateStorage<LoadableStateScope<T, E>>, Keys>;
-
-  <T, Keys extends PrimitiveOrNested[], E = any>(
-    ...args: WithCreatePaginatedStorage<PaginatedPollableStateArgs<T, E, Keys>>
-  ): StateStorage<PaginatedStateStorage<PollableState<T, E>>, Keys>;
-  <T, Keys extends PrimitiveOrNested[], E = any>(
-    ...args: WithCreatePaginatedStorage<
-      PaginatedPollableNestedStateArgs<T, E, Keys>
-    >
-  ): StateStorage<PaginatedStateStorage<PollableStateScope<T, E>>, Keys>;
-
   <T, Keys extends PrimitiveOrNested[], E = any, Control = never>(
     ...args: LoadableStateArgs<
       typeof createAsyncStateScope,
@@ -283,18 +248,18 @@ interface CreateStateStorage {
   ): StateStorage<LoadableState<T, E, Control>, Keys>;
 
   <T, Keys extends PrimitiveOrNested[], E = any>(
-    ...args: AsyncGetStateArgs<typeof createAsyncStateScope, T, E, Keys>
-  ): StateStorage<AsyncStateScope<T, E>, Keys>;
-  <T, Keys extends PrimitiveOrNested[], E = any>(
-    ...args: AsyncGetStateArgs<typeof createAsyncState, T, E, Keys>
-  ): StateStorage<AsyncState<T, E>, Keys>;
-
-  <T, Keys extends PrimitiveOrNested[], E = any>(
     ...args: PollableStateArgs<typeof createPollableStateScope, T, E, Keys>
   ): StateStorage<PollableStateScope<T, E>, Keys>;
   <T, Keys extends PrimitiveOrNested[], E = any>(
     ...args: PollableStateArgs<typeof createPollableState, T, E, Keys>
   ): StateStorage<PollableState<T, E>, Keys>;
+
+  <T, Keys extends PrimitiveOrNested[], E = any>(
+    ...args: AsyncGetStateArgs<typeof createAsyncStateScope, T, E, Keys>
+  ): StateStorage<AsyncStateScope<T, E>, Keys>;
+  <T, Keys extends PrimitiveOrNested[], E = any>(
+    ...args: AsyncGetStateArgs<typeof createAsyncState, T, E, Keys>
+  ): StateStorage<AsyncState<T, E>, Keys>;
 
   <T, Keys extends PrimitiveOrNested[], E = any>(
     ...args: RequestableStateArgs<
@@ -315,9 +280,20 @@ interface CreateStateStorage {
     ...args: GetStateArgs<typeof createState, T, Keys>
   ): StateStorage<StateScope<T>, Keys>;
 
-  <T extends StorageRecord, Keys extends PrimitiveOrNested[] = any[]>(
+  <T extends StorageRecord, Keys extends PrimitiveOrNested[]>(
     obj: StorageRecordArgs<T, Keys>
   ): StateStorage<T, Keys>;
+
+  <T, Keys extends PrimitiveOrNested[], E = any>(
+    ...args: WithCreatePaginatedStorage<
+      PaginatedRequestableStateArgs<T, E, Keys>
+    >
+  ): StateStorage<PaginatedStateStorage<LoadableState<T, E>>, Keys>;
+  <T, Keys extends PrimitiveOrNested[], E = any>(
+    ...args: WithCreatePaginatedStorage<
+      PaginatedRequestableNestedStateArgs<T, E, Keys>
+    >
+  ): StateStorage<PaginatedStateStorage<LoadableStateScope<T, E>>, Keys>;
 }
 
 function _delete(this: StateStorage<any, any>, ...keys: PrimitiveOrNested[]) {

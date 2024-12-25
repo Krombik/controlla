@@ -5,13 +5,11 @@ import useMergedValue from '../useMergedValue';
 type Props<S extends State[], V> = {
   states: S;
   /** Function that merges the values from the provided {@link Props.states states}. */
-  merger(
-    ...values: {
-      [index in keyof S]: HandlePending<
-        S[index] extends State<infer T> ? T : never
-      >;
-    }
-  ): V;
+  merger(values: {
+    [index in keyof S]: HandlePending<
+      S[index] extends State<infer T> ? T : never
+    >;
+  }): V;
   /** Function that renders the merged value. */
   render(mergedValue: V): ReturnType<FC>;
   /** Optional comparison function to determine if the next merged value is equal to the previous. */

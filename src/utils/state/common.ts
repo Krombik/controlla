@@ -1,7 +1,7 @@
-import { SetData, State, ValueChangeCallbacks } from '../../types';
+import type { InternalSetData, State, ValueChangeCallbacks } from '../../types';
 import { addToBatch } from '../batching';
 
-type CommonState = State & SetData<ValueChangeCallbacks>;
+type CommonState = State & InternalSetData<ValueChangeCallbacks>;
 
 export function _onValueChange(this: CommonState, cb: (value: any) => void) {
   const set = this._setData;

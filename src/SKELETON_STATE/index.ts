@@ -1,7 +1,7 @@
 import noop from 'lodash.noop';
 import type { AsyncStateProperties, LoadableState } from '../types';
 import alwaysFalse from '../utils/alwaysFalse';
-import { ContextType } from 'react';
+import type { ContextType } from 'react';
 import type SuspenseContext from '../utils/SuspenseContext';
 import type ErrorBoundaryContext from '../utils/ErrorBoundaryContext';
 

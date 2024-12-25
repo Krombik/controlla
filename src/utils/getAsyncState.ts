@@ -15,6 +15,7 @@ import { addToBatch } from './batching';
 import executeSetters from './executeSetters';
 import handleState from './handleState';
 import { _onValueChange } from './state/common';
+import { EMPTY_ARR } from './constants';
 
 const handleReloadOn = (
   reloadData: NonNullable<AsyncState['_internal']['_reloadIfStale']>,
@@ -245,7 +246,7 @@ const getAsyncState = <D>(
   stateInitializer: StateInitializer | undefined,
   _keys: any[] | undefined,
   _setData: D,
-  _load?: LoadableStateOptions['load'],
+  _load?: LoadableStateOptions<any, any, any, any[]>['load'],
   Control?: LoadableStateOptions<any, any, any>['Control'],
   _tickStart?: () => void,
   _tickEnd?: () => void,
@@ -259,7 +260,7 @@ const getAsyncState = <D>(
     loadingTimeout,
   } = options;
 
-  const errorState: ErrorState<any> = {
+  const errorState = {
     _onValueChange,
     get: isExpectedError ? getError : getInner,
     set: setError,
@@ -267,7 +268,7 @@ const getAsyncState = <D>(
     _parent: undefined!,
     _value: undefined,
     _setData: new Set(),
-  };
+  } as Partial<ErrorState<any>> as ErrorState<any>;
 
   const state = handleState<LoadableState<any, any, any>>(
     {
@@ -317,8 +318,9 @@ const getAsyncState = <D>(
         _set: setInner,
         _value: false,
         _setData: new Set(),
-      },
+      } as IsLoadedState,
       control: undefined!,
+      _path: EMPTY_ARR,
     },
     options.value,
     stateInitializer,

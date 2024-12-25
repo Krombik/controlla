@@ -14,7 +14,7 @@ import handleContainerChildren from '../utils/handleContainerChildren';
 type Props<S extends Array<AsyncState | Falsy>> = {
   states: S;
   /** A function to render the final content when all {@link Props.states states} resolve successfully. */
-  render(...values: ExtractValues<S>): ReturnType<FC>;
+  render(values: ExtractValues<S>): ReturnType<FC>;
   /** A function or element to render if any of the {@link Props.states states} fail */
   renderIfError?:
     | ((
@@ -33,7 +33,7 @@ const Controller: FC<Props<any[]>> = ({
   container,
 }) => {
   if (renderIfError === undefined) {
-    return handleContainerChildren(container, render(...useAll(states)));
+    return handleContainerChildren(container, render(useAll(states)));
   }
 
   const [values, errors] = useAll(states, true);
@@ -41,7 +41,7 @@ const Controller: FC<Props<any[]>> = ({
   return handleContainerChildren(
     container,
     errors.every((item) => item === undefined)
-      ? render(...values)
+      ? render(values)
       : typeof renderIfError == 'function'
         ? renderIfError(errors, values)
         : renderIfError

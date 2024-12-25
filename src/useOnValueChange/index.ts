@@ -14,15 +14,13 @@ const useOnValueChange: {
    */
   <const S extends State[]>(
     states: S,
-    cb: (
-      ...values: {
-        [index in keyof S]: HandlePending<
-          S[index] extends State<infer K> ? K : never
-        >;
-      }
-    ) => void
+    cb: (values: {
+      [index in keyof S]: HandlePending<
+        S[index] extends State<infer K> ? K : never
+      >;
+    }) => void
   ): void;
-} = (state: State | State[], cb: (...values: any[]) => void) => {
+} = (state: State | State[], cb: (values: any[]) => void) => {
   const [error, setError] = useState<any>();
 
   if (error) {
@@ -37,7 +35,7 @@ const useOnValueChange: {
         try {
           cb.length == 1 || !isArr
             ? cb(isArr ? state[0].get() : state.get())
-            : cb(...state.map((state) => state.get()));
+            : cb(state.map((state) => state.get()));
         } catch (err) {
           setError(err);
         }
