@@ -394,9 +394,11 @@ type StateStorageMarker<Keys extends PrimitiveOrNested[], Item> = {
   [STATE_STORAGE_IDENTIFIER]: [Keys, Item];
 };
 
-type PartialTuple<T extends unknown[]> = T extends [infer Head, ...infer Rest]
-  ? [Head] | [Head, ...PartialTuple<Rest>]
-  : T;
+type PartialTuple<T extends unknown[]> = T extends [...infer Rest, infer _]
+  ? [] extends Rest
+    ? never
+    : Rest | PartialTuple<Rest>
+  : never;
 
 /**
  * Represents a structured state storage system that allows retrieval and deletion
@@ -421,7 +423,7 @@ export type StateStorage<
    * **Warning**: This is an unsafe method. It only removes the state entry from
    * the storage but does not clear or reset the state itself.
    */
-  delete(...keys: PartialTuple<Keys>): void;
+  delete(...keys: Keys | PartialTuple<Keys>): void;
   /** @internal */
   readonly _keys: any[] | undefined;
   /** @internal */
