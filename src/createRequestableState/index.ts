@@ -7,7 +7,7 @@ import type {
 import createLoader from '../utils/createLoader';
 import getAsyncState from '../utils/getAsyncState';
 import { handleFetch } from '../utils/handleFetch';
-import { _onValueChange, get, set } from '../utils/state/common';
+import { _onValueChange, set } from '../utils/state/common';
 
 const createRequestableState = ((
   options: RequestableStateOptions<any, any, any[]>,
@@ -18,7 +18,6 @@ const createRequestableState = ((
   parent?: any
 ) =>
   getAsyncState<ValueChangeCallbacks>(
-    get,
     set,
     _onValueChange,
     options,

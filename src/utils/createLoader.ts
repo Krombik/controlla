@@ -38,7 +38,7 @@ const createLoader = <U extends Record<string, any> = never>(
               attempt = 0;
 
               if (isRunning) {
-                self.set(value, false);
+                self.set(value);
 
                 return true;
               }
@@ -70,20 +70,18 @@ const createLoader = <U extends Record<string, any> = never>(
     handleLoad(
       cancelPromise,
       async () => {
-        const data = self._internal;
-
         if (isRunning) {
-          data._isFetchInProgress = true;
+          self._isFetchInProgress = true;
 
-          data._tickStart();
+          self._tickStart();
         }
 
         const res = await retriableFetcher();
 
-        data._isFetchInProgress = false;
+        self._isFetchInProgress = false;
 
-        if (data._parent) {
-          await data._parent._promise;
+        if (self._parent) {
+          await self._parent._promise;
         }
 
         return res;

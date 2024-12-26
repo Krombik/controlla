@@ -66,7 +66,7 @@ const use: {
       throw err;
     }
 
-    if (state._internal._value !== undefined || isError) {
+    if (state._root._value !== undefined || isError) {
       const value = useHandleSuspenseValue(state, useForceRerender());
 
       return safeReturn ? [value, err] : value;

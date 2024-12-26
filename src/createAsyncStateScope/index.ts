@@ -8,7 +8,7 @@ import type {
 } from '../types';
 import createScope from '../utils/createScope';
 import getAsyncState from '../utils/getAsyncState';
-import { _onValueChange, get, set } from '../utils/state/scope';
+import { _onValueChange, set } from '../utils/state/scope';
 
 const createAsyncStateScope: {
   /**
@@ -44,7 +44,6 @@ const createAsyncStateScope: {
 ) =>
   createScope(
     getAsyncState<StateCallbackMap>(
-      get,
       set,
       _onValueChange,
       options,

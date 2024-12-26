@@ -5,7 +5,6 @@ import type {
   ExtractValues,
   AsyncState,
   ExtractErrors,
-  ArrayOfUndefined,
 } from '../types';
 import noop from 'lodash.noop';
 import ErrorBoundaryContext from '../utils/ErrorBoundaryContext';
@@ -69,7 +68,12 @@ const useAll = <
 ): SafeReturn extends false
   ? ExtractValues<S>
   : Readonly<
-      | [values: ExtractValues<S>, errors: ArrayOfUndefined<S>]
+      | [
+          values: ExtractValues<S>,
+          errors: Readonly<{
+            [index in keyof S]: undefined;
+          }>,
+        ]
       | [values: ExtractValues<S, true>, errors: ExtractErrors<S>]
     > => {
   const l = states.length;
@@ -96,7 +100,7 @@ const useAll = <
         throw err;
       }
 
-      if (state._internal._value !== undefined || isError) {
+      if (state._root._value !== undefined || isError) {
         values[i] = useHandleSuspenseValue(state, forceRerender);
 
         errors[i] = err;
@@ -110,7 +114,7 @@ const useAll = <
             const err = state.error.get();
 
             if (err === undefined) {
-              if (state._internal._value === undefined) {
+              if (state._root._value === undefined) {
                 unloadedStates.push(state);
               }
             } else if (!safeReturn) {

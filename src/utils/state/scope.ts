@@ -48,10 +48,12 @@ const deepSet = (
   return arr;
 };
 
-export function _onValueChange(this: ScopedState, cb: (value: any) => void) {
-  const path = this._path!;
-
-  let length = path.length;
+export function _onValueChange(
+  this: ScopedState,
+  cb: (value: any) => void,
+  path?: readonly string[]
+) {
+  let length = path ? path.length : 0;
 
   let parent = this._setData;
 
@@ -59,7 +61,7 @@ export function _onValueChange(this: ScopedState, cb: (value: any) => void) {
 
   for (let i = 0, l = length; i < l; i++) {
     if (parent._children) {
-      let child = parent._children.get(path[i]);
+      let child = parent._children.get(path![i]);
 
       if (child) {
         parent = child;
@@ -74,7 +76,7 @@ export function _onValueChange(this: ScopedState, cb: (value: any) => void) {
 
     for (l--; i < l; i++) {
       children.set(
-        path[i],
+        path![i],
         (parent = {
           _root: null,
           _children: (children = new Map()),
@@ -84,7 +86,7 @@ export function _onValueChange(this: ScopedState, cb: (value: any) => void) {
     }
 
     children.set(
-      path[l],
+      path![l],
       (parent = { _root: (set = new Set()), _children: null, _parent: parent })
     );
   }
@@ -108,7 +110,7 @@ export function _onValueChange(this: ScopedState, cb: (value: any) => void) {
           const children = parent._children;
 
           if (children && children.size != 1) {
-            children.delete(path[length]);
+            children.delete(path![length]);
           } else {
             parent._children = null;
           }
@@ -122,14 +124,18 @@ export function _onValueChange(this: ScopedState, cb: (value: any) => void) {
   };
 }
 
-export function set(this: ScopedState, nextValue: any) {
-  let currentNode: StateCallbackMap | null | undefined = this._setData;
+export function set(
+  this: ScopedState,
+  nextValue: any,
+  path?: readonly string[]
+) {
+  const self = this;
 
-  const path = this._path!;
+  let currentNode: StateCallbackMap | null | undefined = self._setData;
 
   const root = currentNode._root;
 
-  const l = path.length;
+  const l = path ? path.length : 0;
 
   const nodesQueue: ValueChangeCallbacks[] = [];
 
@@ -140,7 +146,7 @@ export function set(this: ScopedState, nextValue: any) {
   const pushArr: ((value: any) => void)[] = [];
 
   for (let i = 0; i < l; i++) {
-    const k = path[i];
+    const k = path![i];
 
     currentNode = currentNode._children && currentNode._children.get(k);
 
@@ -162,18 +168,11 @@ export function set(this: ScopedState, nextValue: any) {
   }
 
   if (processStateChanges(this.get(), nextValue, currentNode)) {
-    if (l) {
-      nextValue = deepSet(
-        this._internal._value,
-        nextValue,
-        path,
-        0,
-        l - 1,
-        pushArr
-      );
+    if (path) {
+      nextValue = deepSet(self._value, nextValue, path, 0, l - 1, pushArr);
     }
 
-    this._internal._value = nextValue;
+    self._value = nextValue;
 
     for (let i = nodesQueue.length; i--; ) {
       addToBatch(nodesQueue[i], valuesArr[i]);
@@ -183,20 +182,4 @@ export function set(this: ScopedState, nextValue: any) {
       addToBatch(root, nextValue);
     }
   }
-}
-
-export function get(this: ScopedState) {
-  const path = this._path!;
-
-  const l = path.length;
-
-  let value = this._internal._value;
-
-  for (
-    let i = 0;
-    i < l && (value = value ? value[path[i]] : undefined) !== undefined;
-    i++
-  ) {}
-
-  return value;
 }

@@ -1,5 +1,5 @@
 import noop from 'lodash.noop';
-import type { HandlePending, StateBase as State } from '../types';
+import type { AsyncState, StateBase as State } from '../types';
 import { postBatchCallbacksPush } from '../utils/batching';
 
 const onValueChange = ((
@@ -72,7 +72,16 @@ const onValueChange = ((
    * @returns a function to unsubscribe from the value change event.
    *
    */
-  <T>(state: State<T>, cb: (value: HandlePending<T>) => void): () => void;
+  <T>(state: AsyncState<T>, cb: (value: T | undefined) => void): () => void;
+  /**
+   * Registers a callback to be invoked when the value of a single {@link state} changes.
+   *
+   * @param state - The state to monitor for changes.
+   * @param cb - The callback function invoked with the new value of the state.
+   * @returns a function to unsubscribe from the value change event.
+   *
+   */
+  <T>(state: State<T>, cb: (value: T) => void): () => void;
   /**
    * Registers a callback to be invoked when the values of multiple {@link states} change.
    *
@@ -83,9 +92,9 @@ const onValueChange = ((
   <const S extends State[]>(
     states: S,
     cb: (values: {
-      [index in keyof S]: HandlePending<
-        S[index] extends State<infer K> ? K : never
-      >;
+      [index in keyof S]: S[index] extends State<infer K>
+        ? K | (S[index] extends AsyncState ? undefined : never)
+        : never;
     }) => void
   ): () => void;
 };

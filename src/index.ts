@@ -8,7 +8,7 @@ export { default as createPollableStateScope } from './createPollableStateScope'
 export { default as createPollableState } from './createPollableState';
 
 export { default as createPaginatedStorage } from './createPaginatedStorage';
-export { default as createStateStorage } from './createStateStorage';
+export { default as createStorage } from './createStorage';
 
 export { default as clear } from './clear';
 export { default as onValueChange } from './onValueChange';
@@ -61,6 +61,6 @@ export type {
   PollableStateScope,
   PollableStateOptions,
   RequestableStateOptions,
-  StateStorage,
-  PaginatedStateStorage,
+  Storage,
+  PaginatedStorage,
 } from './types';

@@ -3,13 +3,13 @@ import type {
   AsyncState,
   LoadableState,
   State,
-  StateStorage,
+  Storage,
   AsyncStateOptions,
   RequestableStateOptions,
   PollableStateOptions,
   LoadableStateOptions,
   WithInitModule,
-  PaginatedStateStorage,
+  PaginatedStorage,
   PollableStateScope,
   PollableState,
   LoadableStateScope,
@@ -184,11 +184,11 @@ type StateCreationArguments<
       : never;
 
 type PaginatedStorageArgs<
-  T extends PaginatedStateStorage<any>,
+  T extends PaginatedStorage<any>,
   Keys extends PrimitiveOrNested[],
   ParentKeys extends PrimitiveOrNested[],
 > =
-  T extends PaginatedStateStorage<infer S>
+  T extends PaginatedStorage<infer S>
     ? WithCreatePaginatedStorage<
         S extends PollableStateScope<infer V, infer E>
           ? PaginatedPollableNestedStateArgs<V, E, [...ParentKeys, Keys]>
@@ -209,7 +209,7 @@ type StorageRecordArgs<
 > = {
   [key in keyof T]: T[key] extends State
     ? StateCreationArguments<T[key], Keys, ParentKeys>
-    : T[key] extends StateStorage<infer S, infer K>
+    : T[key] extends Storage<infer S, infer K>
       ? S extends StorageRecord
         ? WithCreateStateStorage<
             [StorageRecordArgs<S, K, [...ParentKeys, ...Keys]>]
@@ -218,7 +218,7 @@ type StorageRecordArgs<
           ? WithCreateStateStorage<
               StateCreationArguments<S, K, [...ParentKeys, ...Keys]>
             >
-          : S extends PaginatedStateStorage<any>
+          : S extends PaginatedStorage<any>
             ? WithCreateStateStorage<
                 PaginatedStorageArgs<S, K, [...ParentKeys, ...Keys]>
               >
@@ -231,9 +231,9 @@ type WithCreatePaginatedStorage<T extends any[]> = [
   ...T,
 ];
 
-type WithCreateStateStorage<T extends any[]> = [CreateStateStorage, ...T];
+type WithCreateStateStorage<T extends any[]> = [CreateStorage, ...T];
 
-interface CreateStateStorage {
+interface CreateStorage {
   <T, Keys extends PrimitiveOrNested[], E = any, Control = never>(
     ...args: LoadableStateArgs<
       typeof createAsyncStateScope,
@@ -242,24 +242,24 @@ interface CreateStateStorage {
       Control,
       Keys
     >
-  ): StateStorage<LoadableStateScope<T, E, Control>, Keys>;
+  ): Storage<LoadableStateScope<T, E, Control>, Keys>;
   <T, Keys extends PrimitiveOrNested[], E = any, Control = never>(
     ...args: LoadableStateArgs<typeof createAsyncState, T, E, Control, Keys>
-  ): StateStorage<LoadableState<T, E, Control>, Keys>;
+  ): Storage<LoadableState<T, E, Control>, Keys>;
 
   <T, Keys extends PrimitiveOrNested[], E = any>(
     ...args: PollableStateArgs<typeof createPollableStateScope, T, E, Keys>
-  ): StateStorage<PollableStateScope<T, E>, Keys>;
+  ): Storage<PollableStateScope<T, E>, Keys>;
   <T, Keys extends PrimitiveOrNested[], E = any>(
     ...args: PollableStateArgs<typeof createPollableState, T, E, Keys>
-  ): StateStorage<PollableState<T, E>, Keys>;
+  ): Storage<PollableState<T, E>, Keys>;
 
   <T, Keys extends PrimitiveOrNested[], E = any>(
     ...args: AsyncGetStateArgs<typeof createAsyncStateScope, T, E, Keys>
-  ): StateStorage<AsyncStateScope<T, E>, Keys>;
+  ): Storage<AsyncStateScope<T, E>, Keys>;
   <T, Keys extends PrimitiveOrNested[], E = any>(
     ...args: AsyncGetStateArgs<typeof createAsyncState, T, E, Keys>
-  ): StateStorage<AsyncState<T, E>, Keys>;
+  ): Storage<AsyncState<T, E>, Keys>;
 
   <T, Keys extends PrimitiveOrNested[], E = any>(
     ...args: RequestableStateArgs<
@@ -268,35 +268,35 @@ interface CreateStateStorage {
       E,
       Keys
     >
-  ): StateStorage<LoadableStateScope<T, E>, Keys>;
+  ): Storage<LoadableStateScope<T, E>, Keys>;
   <T, const Keys extends PrimitiveOrNested[], E = any>(
     ...args: RequestableStateArgs<typeof createRequestableState, T, E, Keys>
-  ): StateStorage<LoadableState<T, E>, Keys>;
+  ): Storage<LoadableState<T, E>, Keys>;
 
   <T, Keys extends PrimitiveOrNested[]>(
     ...args: GetStateArgs<typeof createStateScope, T, Keys>
-  ): StateStorage<StateScope<T>, Keys>;
+  ): Storage<StateScope<T>, Keys>;
   <T, Keys extends PrimitiveOrNested[]>(
     ...args: GetStateArgs<typeof createState, T, Keys>
-  ): StateStorage<StateScope<T>, Keys>;
+  ): Storage<StateScope<T>, Keys>;
 
   <T extends StorageRecord, Keys extends PrimitiveOrNested[]>(
     obj: StorageRecordArgs<T, Keys>
-  ): StateStorage<T, Keys>;
+  ): Storage<T, Keys>;
 
   <T, Keys extends PrimitiveOrNested[], E = any>(
     ...args: WithCreatePaginatedStorage<
       PaginatedRequestableStateArgs<T, E, Keys>
     >
-  ): StateStorage<PaginatedStateStorage<LoadableState<T, E>>, Keys>;
+  ): Storage<PaginatedStorage<LoadableState<T, E>>, Keys>;
   <T, Keys extends PrimitiveOrNested[], E = any>(
     ...args: WithCreatePaginatedStorage<
       PaginatedRequestableNestedStateArgs<T, E, Keys>
     >
-  ): StateStorage<PaginatedStateStorage<LoadableStateScope<T, E>>, Keys>;
+  ): Storage<PaginatedStorage<LoadableStateScope<T, E>>, Keys>;
 }
 
-function _delete(this: StateStorage<any, any>, ...keys: PrimitiveOrNested[]) {
+function _delete(this: Storage<any, any>, ...keys: PrimitiveOrNested[]) {
   let item = this._storage;
 
   const l = keys.length - 1;
@@ -336,7 +336,7 @@ function _delete(this: StateStorage<any, any>, ...keys: PrimitiveOrNested[]) {
   }
 }
 
-function get(this: StateStorage<any, any>, ...keys: any[]): any {
+function get(this: Storage<any, any>, ...keys: any[]): any {
   const l = keys.length;
 
   const self = this;
@@ -374,6 +374,8 @@ function get(this: StateStorage<any, any>, ...keys: any[]): any {
       item.set(strKey, key);
     }
 
+    const parentItem = item;
+
     if (i < l - 1) {
       item = new Map();
     } else if (self._getItem.length != 4) {
@@ -391,7 +393,7 @@ function get(this: StateStorage<any, any>, ...keys: any[]): any {
       );
     }
 
-    item.set(key, item);
+    parentItem.set(key, item);
   }
 
   return item;
@@ -410,7 +412,7 @@ const createStorageRecord = (
     return {
       ...acc,
       [key]:
-        a0 != createStateStorage
+        a0 != createStorage
           ? (a0 as Function).length != 4
             ? a0(item[1], item[2], keys)
             : a0(item[1], item[2], item[3], keys)
@@ -418,7 +420,7 @@ const createStorageRecord = (
     };
   }, {});
 
-const createStateStorage: CreateStateStorage = (
+const createStorage: CreateStorage = (
   arg1: any,
   arg2?: unknown,
   arg3?: any,
@@ -445,9 +447,9 @@ const createStateStorage: CreateStateStorage = (
           _arg3: arg4,
           _keys: keys,
         }
-  ) as StateStorage<any, any>;
+  ) as Storage<any, any>;
 };
 
-export type { StateStorage };
+export type { Storage };
 
-export default createStateStorage;
+export default createStorage;

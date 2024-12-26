@@ -8,7 +8,7 @@ import createLoader from '../utils/createLoader';
 import createScope from '../utils/createScope';
 import getAsyncState from '../utils/getAsyncState';
 import { handleFetch } from '../utils/handleFetch';
-import { _onValueChange, get, set } from '../utils/state/scope';
+import { _onValueChange, set } from '../utils/state/scope';
 
 const createRequestableStateScope: {
   /**
@@ -30,7 +30,6 @@ const createRequestableStateScope: {
 ) =>
   createScope(
     getAsyncState<StateCallbackMap>(
-      get,
       set,
       _onValueChange,
       options,

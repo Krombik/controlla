@@ -9,7 +9,7 @@ import createLoader from '../utils/createLoader';
 import getAsyncState from '../utils/getAsyncState';
 import { handlePolling, PollingControl } from '../utils/handlePolling';
 
-import { _onValueChange, get, set } from '../utils/state/common';
+import { _onValueChange, set } from '../utils/state/common';
 
 const createPollableState = ((
   options: PollableStateOptions<any, any, any[]>,
@@ -20,7 +20,6 @@ const createPollableState = ((
   parent?: any
 ) =>
   getAsyncState<ValueChangeCallbacks>(
-    get,
     set,
     _onValueChange,
     options,

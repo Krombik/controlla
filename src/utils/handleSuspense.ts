@@ -14,7 +14,7 @@ const handleSuspense = (
     return state._fakeSuspense(suspenseCtx, errorBoundaryCtx);
   }
 
-  if (state._load && !state._withoutLoading) {
+  if ((state as LoadableState).load) {
     if (suspenseCtx) {
       const unload = (state as LoadableState).load();
 

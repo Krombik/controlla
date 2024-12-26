@@ -10,12 +10,12 @@ const ORIGINAL_WILL_UNMOUNT = Symbol();
 const CTX = Symbol();
 
 /** A higher-order function that wraps a React class component with additional error boundary handling. */
-const wrapErrorBoundary = <T extends typeof Component>(component: T): T => {
+const wrapErrorBoundary = <T extends typeof Component>(Component: T): T => {
   const { render, componentDidCatch, componentWillUnmount } =
-    component.prototype;
+    Component.prototype;
 
   //@ts-expect-error
-  return class extends component {
+  return class extends Component {
     readonly [CTX]: NonNullable<ContextType<typeof ErrorBoundaryContext>> =
       new Set();
 

@@ -2,11 +2,11 @@ import type { FC } from 'react';
 import type {
   LoadableState,
   LoadableStateScope,
-  PaginatedStateStorage,
+  PaginatedStorage,
 } from '../types';
 
 type PaginationStateProps<T, E = any> = {
-  storage: PaginatedStateStorage<LoadableState<T, E>>;
+  storage: PaginatedStorage<LoadableState<T, E>>;
   /** A function to render the paginated {@link items} and their associated {@link errors}. */
   render(
     items: ReadonlyArray<T | undefined>,
@@ -18,7 +18,7 @@ type PaginationScopeProps<
   S extends LoadableStateScope,
   T extends LoadableState,
 > = {
-  storage: PaginatedStateStorage<S>;
+  storage: PaginatedStorage<S>;
   getState(scope: S): T;
   /** A function to render the paginated {@link items} and their associated {@link errors}. */
   render(

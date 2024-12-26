@@ -3,11 +3,12 @@ import type {
   StateScope,
   StateCallbackMap,
   State,
+  Mutable,
 } from '../types';
-import { EMPTY_ARR } from '../utils/constants';
 import handleState from '../utils/handleState';
 import createScope from '../utils/createScope';
-import { _onValueChange, get, set } from '../utils/state/scope';
+import { _onValueChange, set } from '../utils/state/scope';
+import { get } from '../utils/state/common';
 
 /**
  * Creates a {@link StateScope state scope} for managing complex state structures.
@@ -31,22 +32,25 @@ const createStateScope: {
   value?: unknown | (() => unknown),
   stateInitializer?: StateInitializer,
   keys?: any[]
-) =>
-  createScope(
-    handleState<State, StateCallbackMap>(
-      {
-        _internal: { _value: undefined },
-        get,
-        _setData: { _root: null, _children: null },
-        set,
-        _onValueChange,
-        _path: EMPTY_ARR,
-      },
-      value,
-      stateInitializer,
-      keys
-    )
+) => {
+  const state = handleState<State, StateCallbackMap>(
+    {
+      _value: undefined,
+      _root: undefined!,
+      get,
+      _setData: { _root: null, _children: null },
+      set,
+      _onValueChange,
+    },
+    value,
+    stateInitializer,
+    keys
   );
+
+  (state as Mutable<typeof state>)._root = state;
+
+  return createScope(state);
+};
 
 export type { StateScope };
 

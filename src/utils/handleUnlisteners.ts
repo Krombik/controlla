@@ -4,8 +4,8 @@ const handleUnlisteners = (
   valueUnlistener: () => void,
   state: AnyAsyncState
 ) => {
-  const loadUnlistener =
-    state._load && !state._withoutLoading && (state as LoadableState).load();
+  const loadUnlistener: undefined | (() => void) =
+    (state as LoadableState).load && (state as LoadableState).load();
 
   return loadUnlistener
     ? () => {

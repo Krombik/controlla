@@ -14,15 +14,15 @@ export function _onValueChange(this: CommonState, cb: (value: any) => void) {
 }
 
 export function set(this: CommonState, value: any) {
-  const data = this._internal;
+  const self = this;
 
-  if (data._value !== value) {
-    data._value = value;
+  if (self._value !== value) {
+    self._value = value;
 
     addToBatch(this._setData, value);
   }
 }
 
 export function get(this: CommonState) {
-  return this._internal._value;
+  return this._value;
 }

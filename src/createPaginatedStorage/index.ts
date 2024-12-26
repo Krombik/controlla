@@ -2,12 +2,11 @@ import { useEffect } from 'react';
 import type {
   StateInitializer,
   LoadableState,
-  PaginatedStateStorage,
+  PaginatedStorage,
   PollableStateOptions,
   RequestableStateOptions,
   WithInitModule,
   PollableState,
-  AsyncStateProperties,
   LoadableStateScope,
   PollableStateScope,
 } from '../types';
@@ -22,11 +21,11 @@ import type createPollableStateScope from '../createPollableStateScope';
 import useForceRerender from 'react-helpful-utils/useForceRerender';
 import handleUnlisteners from '../utils/handleUnlisteners';
 import concat from '../utils/concat';
-import createState from '../createState';
 import noop from 'lodash.noop';
 import identity from 'lodash.identity';
+import { _onValueChange, set, get } from '../utils/state/common';
 
-function get(this: PaginatedStateStorage<any>, page: number) {
+function getItem(this: PaginatedStorage<any>, page: number) {
   const self = this;
 
   const { _storage: _pages } = self;
@@ -49,11 +48,11 @@ function get(this: PaginatedStateStorage<any>, page: number) {
   return item;
 }
 
-function _delete(this: PaginatedStateStorage<any>, page: number) {
+function _delete(this: PaginatedStorage<any>, page: number) {
   this._storage.delete(page);
 }
 
-function _tickStart(this: AsyncStateProperties) {
+function _tickStart(this: LoadableState) {
   const self = this;
 
   const index = self._keys![self._keys!.length - 1];
@@ -71,7 +70,7 @@ function _tickStart(this: AsyncStateProperties) {
   parent._stableStorage.set(index, self._value);
 }
 
-function _tickEnd(this: AsyncStateProperties) {
+function _tickEnd(this: LoadableState) {
   const self = this;
 
   const parent = self._parent!;
@@ -88,14 +87,14 @@ function _tickEnd(this: AsyncStateProperties) {
 }
 
 function usePages(
-  this: PaginatedStateStorage<LoadableState | LoadableStateScope>,
+  this: PaginatedStorage<LoadableState | LoadableStateScope>,
   getState: (scope: any) => LoadableState = identity
 ) {
   const self = this;
 
   const stableStorage = self._stableStorage;
 
-  const count: number = self.page._internal._value;
+  const count: number = self.page._value;
 
   const forceRerender = useForceRerender();
 
@@ -109,7 +108,8 @@ function usePages(
     values[i] = (
       stableStorage.has(i)
         ? ({
-            _internal: { _value: stableStorage.get(i) },
+            _root: { _value: stableStorage.get(i) },
+            _value: stableStorage.get(i),
             get: state.get,
             _path: state._path,
           } as LoadableState)
@@ -266,19 +266,19 @@ export type PaginatedPollableNestedStateArgs<
 const createPaginatedStorage: {
   <T, Error = any>(
     ...args: PaginatedRequestableStateArgs<T, Error>
-  ): PaginatedStateStorage<LoadableState<T, Error>>;
+  ): PaginatedStorage<LoadableState<T, Error>>;
   <T, Error = any>(
     ...args: PaginatedRequestableNestedStateArgs<T, Error>
-  ): PaginatedStateStorage<LoadableStateScope<T, Error>>;
+  ): PaginatedStorage<LoadableStateScope<T, Error>>;
 
   <T, Error = any>(
     ...args: PaginatedPollableStateArgs<T, Error>
-  ): PaginatedStateStorage<PollableState<T, Error>>;
+  ): PaginatedStorage<PollableState<T, Error>>;
   <T, Error = any>(
     ...args: PaginatedPollableNestedStateArgs<T, Error>
-  ): PaginatedStateStorage<PollableStateScope<T, Error>>;
+  ): PaginatedStorage<PollableStateScope<T, Error>>;
 } = (
-  getItem: any,
+  createState: any,
   options: Options<any>,
   stateInitializer?: StateInitializer,
   keys?: any[]
@@ -289,8 +289,14 @@ const createPaginatedStorage: {
     _storage: new Map(),
     _pages: new Set(),
     _stableStorage: new Map(),
-    page: createState(1),
-    _getItem: getItem,
+    page: {
+      _onValueChange,
+      _value: 1,
+      get,
+      set,
+      _setData: new Set(),
+    } as PaginatedStorage<any>['page'],
+    _getItem: createState,
     _arg1: options,
     _arg2: stateInitializer,
     _shouldRevalidate: shouldRevalidate
@@ -298,15 +304,15 @@ const createPaginatedStorage: {
         ? shouldRevalidate
         : alwaysTrue
       : alwaysFalse,
-    get,
+    get: getItem,
     delete: _delete,
     _promise: undefined,
     _resolve: noop,
     _keys: keys,
     usePages,
-  } as PaginatedStateStorage<any>;
+  } as PaginatedStorage<any>;
 };
 
-export type { PaginatedStateStorage };
+export type { PaginatedStorage };
 
 export default createPaginatedStorage;

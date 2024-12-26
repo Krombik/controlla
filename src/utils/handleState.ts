@@ -16,6 +16,20 @@ const finalizationRegistry: Pick<
     })
   : { register: noop };
 
+if (typeof WeakRef == 'undefined') {
+  window.WeakRef = class WeakRef {
+    _item: any;
+
+    constructor(item: any) {
+      this._item = item;
+    }
+
+    deref() {
+      return this._item;
+    }
+  } as typeof WeakRef;
+}
+
 const handleState = <S extends State | AsyncState, D = any>(
   state: Omit<S, symbol> & InternalSetData<D>,
   value: unknown | (() => unknown) | undefined,
@@ -39,14 +53,10 @@ const handleState = <S extends State | AsyncState, D = any>(
       set(value);
     }
 
-    state._internal._value = value;
+    state._value = value;
 
     if (observe) {
       let callable = true;
-
-      const _state = {
-        ...state,
-      };
 
       state._onValueChange((value) => {
         if (callable) {
@@ -54,25 +64,29 @@ const handleState = <S extends State | AsyncState, D = any>(
         }
       });
 
-      state._anchor = state;
+      const stateRef = new WeakRef(state);
 
       finalizationRegistry.register(
         state,
         observe((newValue) => {
-          callable = false;
+          const state = stateRef.deref();
 
-          if (newValue === undefined) {
-            newValue =
-              typeof originalValue == 'function'
-                ? originalValue(keys)
-                : originalValue;
+          if (state) {
+            callable = false;
+
+            if (newValue === undefined) {
+              newValue =
+                typeof originalValue == 'function'
+                  ? originalValue(keys)
+                  : originalValue;
+            }
+
+            state.set(newValue);
+
+            postBatchCallbacksPush(() => {
+              callable = true;
+            });
           }
-
-          _state.set(newValue, false);
-
-          postBatchCallbacksPush(() => {
-            callable = true;
-          });
         })
       );
     } else {
@@ -82,7 +96,7 @@ const handleState = <S extends State | AsyncState, D = any>(
     return state as any as S;
   }
 
-  state._internal._value = typeof value == 'function' ? value(keys) : value;
+  state._value = typeof value == 'function' ? value(keys) : value;
 
   return state as any as S;
 };

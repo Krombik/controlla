@@ -1,5 +1,5 @@
 import noop from 'lodash.noop';
-import type { AsyncStateProperties, LoadableState } from '../types';
+import type { LoadableState } from '../types';
 import alwaysFalse from '../utils/alwaysFalse';
 import type { ContextType } from 'react';
 import type SuspenseContext from '../utils/SuspenseContext';
@@ -50,27 +50,27 @@ const SKELETON_STATE = {
 
     throw new Error('No Suspense Wrapper');
   },
-  _withoutLoading: true,
-  _internal: {
-    _promise: {
-      _promise: Object.create(Promise.prototype, {
-        then: NOOP_PROMISE_DESCRIPTOR,
-        catch: NOOP_PROMISE_DESCRIPTOR,
-        finally: NOOP_PROMISE_DESCRIPTOR,
-      }),
-    } as AsyncStateProperties['_promise'],
-    _slowLoading: {
-      _callbackSet: { add: noop, delete: noop },
-    } as AsyncStateProperties['_slowLoading'],
-    _value: undefined,
-  } as Partial<LoadableState['_internal']> as LoadableState['_internal'],
+  _promise: {
+    _promise: Object.create(Promise.prototype, {
+      then: NOOP_PROMISE_DESCRIPTOR,
+      catch: NOOP_PROMISE_DESCRIPTOR,
+      finally: NOOP_PROMISE_DESCRIPTOR,
+    }),
+  } as LoadableState['_promise'],
+  _slowLoading: {
+    _callbackSet: { add: noop, delete: noop },
+  } as LoadableState['_slowLoading'],
+  _value: undefined,
   load: alwaysNoop,
-  control: new Proxy(noop, {
-    get(_, __, proxy) {
-      return proxy;
-    },
-    has: alwaysFalse,
-  }),
+  control: new Proxy(
+    {},
+    {
+      get(_, __, proxy) {
+        return proxy;
+      },
+      has: alwaysFalse,
+    }
+  ),
   _onValueChange: alwaysNoop,
   get: noop,
   set: noop,

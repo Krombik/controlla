@@ -1,14 +1,14 @@
 import type { FC } from 'react';
-import type { HandlePending, StateBase as State } from '../types';
+import type { AsyncState, StateBase as State } from '../types';
 import useMergedValue from '../useMergedValue';
 
 type Props<S extends State[], V> = {
   states: S;
   /** Function that merges the values from the provided {@link Props.states states}. */
   merger(values: {
-    [index in keyof S]: HandlePending<
-      S[index] extends State<infer T> ? T : never
-    >;
+    [index in keyof S]: S[index] extends State<infer K>
+      ? K | (S[index] extends AsyncState ? undefined : never)
+      : never;
   }): V;
   /** Function that renders the merged value. */
   render(mergedValue: V): ReturnType<FC>;

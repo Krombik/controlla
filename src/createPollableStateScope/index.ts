@@ -8,7 +8,7 @@ import createLoader from '../utils/createLoader';
 import createScope from '../utils/createScope';
 import getAsyncState from '../utils/getAsyncState';
 import { handlePolling, PollingControl } from '../utils/handlePolling';
-import { _onValueChange, get, set } from '../utils/state/scope';
+import { _onValueChange, set } from '../utils/state/scope';
 
 const createPollableStateScope: {
   /** Creates a {@link ControllableLoadableNestedState controllable loadable nested state} with polling capabilities. */
@@ -26,7 +26,6 @@ const createPollableStateScope: {
 ) =>
   createScope(
     getAsyncState<StateCallbackMap>(
-      get,
       set,
       _onValueChange,
       options,

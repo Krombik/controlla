@@ -9,7 +9,7 @@ import type {
 
 import getAsyncState from '../utils/getAsyncState';
 
-import { set, _onValueChange, get } from '../utils/state/common';
+import { set, _onValueChange } from '../utils/state/common';
 
 const createAsyncState = ((
   options: LoadableStateOptions<any, any, any>,
@@ -17,7 +17,6 @@ const createAsyncState = ((
   keys?: any[]
 ) =>
   getAsyncState<ValueChangeCallbacks>(
-    get,
     set,
     _onValueChange,
     options,

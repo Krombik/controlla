@@ -2,19 +2,9 @@ import type { Primitive, PrimitiveOrNested } from 'keyweaver';
 import type { $tate } from './utils/constants';
 import type { ComponentType, PropsWithChildren } from 'react';
 
-declare const PENDING: unique symbol;
-
 export type Mutable<T> = {
   -readonly [P in keyof T]: T[P];
 };
-
-export type ResolvedValue<Value> = Exclude<Value, typeof PENDING>;
-
-export type HandlePending<Value> = [Extract<Value, typeof PENDING>] extends [
-  never,
-]
-  ? Value
-  : ResolvedValue<Value> | undefined;
 
 type Nil = null | undefined;
 
@@ -28,11 +18,6 @@ export type StateCallbackMap = {
   readonly _parent?: StateCallbackMap;
 };
 
-export type Internal<T> = {
-  /** @internal */
-  readonly _internal: T;
-};
-
 export type InternalSetData<D> = {
   readonly _setData: D;
 };
@@ -40,15 +25,18 @@ export type InternalSetData<D> = {
 declare const STATE_MARKER: unique symbol;
 
 export declare class StateBase<T = any> {
+  /** @internal */
+  _value: any;
   [STATE_MARKER]: T;
   /** @internal */
-  _onValueChange(cb: (value: any) => void): () => void;
+  _onValueChange(
+    cb: (value: any) => void,
+    path?: readonly string[]
+  ): () => void;
   /** @internal */
   get(): any;
   /** @internal */
   readonly _path?: readonly string[];
-  /** @internal */
-  _anchor?: object;
 }
 
 /**
@@ -59,58 +47,20 @@ export declare class StateBase<T = any> {
  * const state: State<number> = createState(0);
  * ```
  */
-export type State<Value = any> = StateBase<Value> &
+export interface State<Value = any> extends StateBase<Value> {
   /** @internal */
-  Internal<{
-    _value: any;
-  }> & {
-    /** @internal */
-    set(value: any, isError?: boolean): void;
-    set(value: Value): void;
-    get(): Value;
-  };
+  readonly _root?: this;
+  /** @internal */
+  set(value: any, path?: readonly string[], isError?: boolean): void;
+  set(value: Value): void;
+  get(): Value;
+}
 
-export type AsyncStateProperties = {
-  _value: any;
-  _isLoaded(value: any, prevValue: any, attempt: number | undefined): boolean;
-  readonly _slowLoading: {
-    readonly _timeout: number;
-    _timeoutId: ReturnType<typeof setTimeout> | undefined;
-    readonly _callbackSet: Set<() => void>;
-  } | null;
-  _counter: number;
-  _isLoadable: boolean;
-  _promise: {
-    readonly _promise: Promise<any>;
-    _resolve(value: any): void;
-    _reject(error: any): void;
-  } | null;
-  _unload: (() => void) | void | undefined;
-  _attempt: number | undefined;
-  readonly _reloadIfStale: {
-    readonly _timeout: number;
-    _timeoutId: ReturnType<typeof setTimeout> | undefined;
-  } | null;
-  readonly _reloadOnFocus: {
-    readonly _timeout: number;
-    _timeoutId: ReturnType<typeof setTimeout> | undefined;
-    _isLoadable: boolean;
-    _focusListener: (() => void) | undefined;
-  } | null;
-  _isFetchInProgress: boolean;
-  readonly _keys: any[] | undefined;
-  _tickStart(): void;
-  _tickEnd(): void;
-  readonly _parent: PaginatedStateStorage<any> | undefined;
-};
-
-export type ErrorState<Error> = StateBase<boolean> &
+export type ErrorState<Error> = StateBase<Error> &
   /** @internal */
   InternalSetData<ValueChangeCallbacks> & {
     set(error: Error | undefined): void;
     get(): Error | undefined;
-    /** @internal */
-    _onValueChange(cb: (value: any) => void): () => void;
     /** @internal */
     _value: any;
     /** @internal */
@@ -125,36 +75,74 @@ export type IsLoadedState = StateBase<boolean> &
     /** @internal */
     _set(value: boolean): void;
     get(): boolean;
-    /** @internal */
-    _value: boolean;
   };
 
 /**
  * Represents a state that manages an asynchronous value, including {@link AsyncState.isLoaded loading} and {@link AsyncState.error error} states.
  * Extends {@link State}.
  */
-export type AsyncState<Value = any, Error = any> = StateBase<
-  Value | typeof PENDING
-> &
+export interface AsyncState<Value = any, Error = any> extends StateBase<Value> {
   /** @internal */
-  Internal<AsyncStateProperties> & {
-    /** @internal */
-    readonly _withoutLoading?: true;
-    /** @internal */
-    readonly _awaitOnly?: true;
-    /** A state that holds the latest error, if one occurred during loading. */
-    readonly error: ErrorState<Error>;
-    /** A state that indicates whether the state has successfully loaded */
-    readonly isLoaded: IsLoadedState;
-    /** @internal */
-    _commonSet: State['set'];
-    /** @internal */
-    _load?(...args: any[]): (() => void) | void;
-    get(): Value | undefined;
-    /** @internal */
-    set(value: any, isError?: boolean): void;
-    set(value: Value): void;
-  };
+  readonly _root: this;
+  /** @internal */
+  readonly _awaitOnly?: true;
+  /** A state that holds the latest error, if one occurred during loading. */
+  readonly error: ErrorState<Error>;
+  /** A state that indicates whether the state has successfully loaded */
+  readonly isLoaded: IsLoadedState;
+  /** @internal */
+  _commonSet: State['set'];
+  /** @internal */
+  _load?(...args: any[]): (() => void) | void;
+  get(): Value | undefined;
+  /** @internal */
+  set(value: any, path?: readonly string[], isError?: boolean): void;
+  set(value: Value): void;
+  /** @internal */
+  _isLoaded(value: any, prevValue: any, attempt: number | undefined): boolean;
+  /** @internal */
+  readonly _slowLoading: {
+    readonly _timeout: number;
+    _timeoutId: ReturnType<typeof setTimeout> | undefined;
+    readonly _callbackSet: Set<() => void>;
+  } | null;
+  /** @internal */
+  _counter: number;
+  /** @internal */
+  _isLoadable: boolean;
+  /** @internal */
+  _promise: {
+    readonly _promise: Promise<any>;
+    _resolve(value: any): void;
+    _reject(error: any): void;
+  } | null;
+  /** @internal */
+  _unload: (() => void) | void | undefined;
+  /** @internal */
+  _attempt: number | undefined;
+  /** @internal */
+  readonly _reloadIfStale: {
+    readonly _timeout: number;
+    _timeoutId: ReturnType<typeof setTimeout> | undefined;
+  } | null;
+  /** @internal */
+  readonly _reloadOnFocus: {
+    readonly _timeout: number;
+    _timeoutId: ReturnType<typeof setTimeout> | undefined;
+    _isLoadable: boolean;
+    _focusListener: (() => void) | undefined;
+  } | null;
+  /** @internal */
+  _isFetchInProgress: boolean;
+  /** @internal */
+  readonly _keys?: any[];
+  /** @internal */
+  _tickStart(): void;
+  /** @internal */
+  _tickEnd(): void;
+  /** @internal */
+  readonly _parent: PaginatedStorage<any> | undefined;
+}
 
 /**
  * Represents a state that supports loading functionality, extending {@link AsyncState}
@@ -202,8 +190,9 @@ type ProcessScope<
   S extends State,
   M = Exclude<Value, Nil>,
   N = Extract<Value, Nil>,
-> = (IsAny<Value> extends false
-  ? M extends Primitive
+> = (0 extends 1 & Value
+  ? { readonly [key in string | number]: ProcessScope<any, S, any, any> }
+  : M extends Primitive
     ? {}
     : M extends any[]
       ? {
@@ -211,16 +200,13 @@ type ProcessScope<
         }
       : {
           readonly [key in keyof M]-?: ProcessScope<M[key] | N, S>;
-        }
-  : { readonly [key in string | number]: ProcessScope<any, S, any, any> }) &
-  EndOfScope<
-    S extends LoadableState<any, infer E, infer C>
-      ? LoadableState<Value, E, C>
-      : S extends AsyncState<any, infer E>
-        ? AsyncState<Value, E>
-        : State<Value>
-  > &
-  ScopeMarker<Value>;
+        }) & {
+  readonly [$tate]: S extends LoadableState<any, infer E, infer C>
+    ? LoadableState<Value, E, C>
+    : S extends AsyncState<any, infer E>
+      ? AsyncState<Value, E>
+      : State<Value>;
+} & ScopeMarker<Value>;
 
 declare class Scope {}
 
@@ -238,23 +224,14 @@ export type LoadableStateScope<
 export type PollableStateScope<Value = any, Error = any> = Scope &
   LoadableStateScope<Value, Error, PollableMethods>;
 
-type EndOfScope<T> = {
-  readonly [$tate]: T;
-};
-
 type StringToNumber<T> = T extends `${infer K extends number}` ? K : never;
 
 type ToIndex<T> = [Exclude<T, keyof []>] extends [never]
   ? number
   : StringToNumber<T>;
 
-type IsAny<T> = 0 extends 1 & T ? true : false;
-
 export type AnyAsyncState<Value = any, Error = any> =
   | AsyncState<Value, Error>
-  | AnyLoadableState<Value, Error>;
-
-export type AnyLoadableState<Value = any, Error = any> =
   | LoadableState<Value, Error>
   | LoadableState<Value, Error, any>;
 
@@ -273,21 +250,13 @@ export type ExtractErrors<T extends Array<AsyncState | Falsy>> = Readonly<{
     : undefined;
 }>;
 
-export type ArrayOfUndefined<T extends any[]> = Readonly<{
-  [index in keyof T]: undefined;
-}>;
-
 export type AsyncStateOptions<
   T,
   E = any,
   Keys extends PrimitiveOrNested[] = never,
 > = {
   /** The initial value of the state or a function to resolve it using keys. */
-  value?:
-    | ResolvedValue<T>
-    | ((
-        ...args: [Keys] extends [never] ? [] : [keys: Keys]
-      ) => ResolvedValue<T>);
+  value?: T | ((...args: [Keys] extends [never] ? [] : [keys: Keys]) => T);
   /** A function to determine if the state is considered loaded, based on the {@link value current} and {@link prevValue previous} values and the number of loading {@link attempt attempts}. */
   isLoaded?(value: T, prevValue: T | undefined, attempt: number): boolean;
   /** The timeout in milliseconds for considering the loading process slow. */
@@ -342,7 +311,7 @@ export type RequestableStateOptions<
    * A function that starts the loading process for the state and returns a promise
    * that resolves with the loaded value.
    */
-  fetch(...keys: [Keys] extends [never] ? [] : Keys): Promise<ResolvedValue<T>>;
+  fetch(...keys: [Keys] extends [never] ? [] : Keys): Promise<T>;
   /**
    * A function that determines whether the loading process should be retried after an error occurs.
    * @param err - The error encountered during the loading attempt.
@@ -379,18 +348,18 @@ export type PollableStateOptions<
   };
 
 export type StorageRecord = {
-  [key in string]: StorageItem | StateStorageMarker<any[], StorageItem>;
+  [key in string]: StorageItem | StorageMarker<any[], StorageItem>;
 };
 
 export type StorageItem =
   | State
   | ScopeMarker
   | StorageRecord
-  | Omit<PaginatedStateStorage<any>, 'usePages'>;
+  | Omit<PaginatedStorage<any>, 'usePages'>;
 
 declare const STATE_STORAGE_IDENTIFIER: unique symbol;
 
-type StateStorageMarker<Keys extends PrimitiveOrNested[], Item> = {
+type StorageMarker<Keys extends PrimitiveOrNested[], Item> = {
   [STATE_STORAGE_IDENTIFIER]: [Keys, Item];
 };
 
@@ -404,10 +373,10 @@ type PartialTuple<T extends unknown[]> = T extends [...infer Rest, infer _]
  * Represents a structured state storage system that allows retrieval and deletion
  * of state entries using specified keys.
  */
-export type StateStorage<
+export type Storage<
   T extends StorageItem,
-  Keys extends PrimitiveOrNested[] = any[],
-> = StateStorageMarker<Keys, T> & {
+  Keys extends PrimitiveOrNested[],
+> = StorageMarker<Keys, T> & {
   /**
    * Retrieves a state within the storage using the provided keys.
    *
@@ -441,10 +410,12 @@ export type StateStorage<
 /**
  * Represents a paginated state storage system for managing state entries across multiple pages.
  */
-export type PaginatedStateStorage<T extends LoadableState | ScopeMarker> = {
+export type PaginatedStorage<T extends LoadableState | ScopeMarker> = {
   /** @internal */
   readonly _keys: any[] | undefined;
-  readonly page: State<number>;
+  readonly page: State<number> &
+    /** @internal */
+    InternalSetData<ValueChangeCallbacks>;
   /** @internal */
   readonly _storage: Map<number, T>;
   /** @internal */
@@ -475,7 +446,7 @@ export type PaginatedStateStorage<T extends LoadableState | ScopeMarker> = {
 } & (T extends ScopeMarker
   ? {
       /**
-       * A hook that retrieves an array of items and errors for the current {@link PaginatedStateStorage.page page state value} in the paginated storage.
+       * A hook that retrieves an array of items and errors for the current {@link PaginatedStorage.page page state value} in the paginated storage.
        *
        * @example
        * ```js
@@ -493,7 +464,7 @@ export type PaginatedStateStorage<T extends LoadableState | ScopeMarker> = {
     }
   : {
       /**
-       * A hook that retrieves an array of items and errors for the current {@link PaginatedStateStorage.page page state value} in the paginated storage.
+       * A hook that retrieves an array of items and errors for the current {@link PaginatedStorage.page page state value} in the paginated storage.
        *
        * @example
        * ```js

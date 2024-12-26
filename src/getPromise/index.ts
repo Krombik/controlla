@@ -17,9 +17,7 @@ const getPromise: {
   /** @internal */
   (state: AsyncState, isRoot: true): Promise<any>;
 } = (state: AsyncState, isRoot?: true) => {
-  const utils = state._internal;
-
-  const data = utils._promise;
+  const data = state._promise;
 
   const path = state._path;
 
@@ -29,8 +27,8 @@ const getPromise: {
     promise = data._promise;
   } else if (state.isLoaded._value) {
     promise =
-      utils._value !== undefined
-        ? Promise.resolve(utils._value)
+      state._value !== undefined
+        ? Promise.resolve(state._value)
         : Promise.reject(state.error._value);
   } else {
     let _resolve!: (value: any) => void, _reject!: (error: any) => void;
@@ -41,7 +39,7 @@ const getPromise: {
       _reject = rej;
     });
 
-    utils._promise = {
+    state._promise = {
       _promise: promise,
       _reject,
       _resolve,

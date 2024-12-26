@@ -21,9 +21,7 @@ const createState: {
 ) =>
   handleState<State, ValueChangeCallbacks>(
     {
-      _internal: {
-        _value: undefined,
-      },
+      _value: undefined,
       get,
       _setData: new Set(),
       set,

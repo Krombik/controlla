@@ -1,8 +1,8 @@
 import { useLayoutEffect } from 'react';
 import type {
   AnyAsyncState,
+  AsyncState,
   Falsy,
-  HandlePending,
   StateBase as State,
 } from '../types';
 import onValueChange from '../onValueChange';
@@ -31,7 +31,9 @@ const useValue = ((state: AnyAsyncState | Falsy) => {
    */
   <S extends State | Falsy>(
     state: S
-  ): S extends State<infer T> ? HandlePending<T> : undefined;
+  ): S extends State<infer K>
+    ? K | (S extends AsyncState ? undefined : never)
+    : never;
 };
 
 export default useValue;

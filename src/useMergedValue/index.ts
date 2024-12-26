@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef } from 'react';
 import type {
   AnyAsyncState,
-  HandlePending,
+  AsyncState,
   LoadableState,
   StateBase as State,
 } from '../types';
@@ -47,7 +47,7 @@ const useMergedValue = ((
     for (let i = 0; i < states.length; i++) {
       const state = states[i];
 
-      if (state._load && !state._withoutLoading) {
+      if ((state as LoadableState).load) {
         loadUnlisteners.push((state as LoadableState).load());
       }
     }
@@ -77,9 +77,9 @@ const useMergedValue = ((
   <const S extends State[], V>(
     states: S,
     merger: (values: {
-      [index in keyof S]: HandlePending<
-        S[index] extends State<infer T> ? T : never
-      >;
+      [index in keyof S]: S[index] extends State<infer K>
+        ? K | (S[index] extends AsyncState ? undefined : never)
+        : never;
     }) => V,
     isEqual?: (nextMergedValue: V, prevMergedValue: V) => boolean
   ): V;
