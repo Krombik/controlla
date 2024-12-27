@@ -9,14 +9,28 @@ const awaitOnly = <S extends AsyncState>(
   : S extends AsyncState<any, infer E>
     ? AsyncState<void, E>
     : never =>
-  ({
-    _root: state as any,
-    load: (state as any as LoadableState).load && load,
-    get,
-    set,
-    _onValueChange,
-    control: (state as any as LoadableState<any, any, any>).control,
-    _awaitOnly: true,
-  }) as LoadableState<any, any, any> as any;
+  ('_path' in state
+    ? {
+        _root: state._root,
+        load: state._load,
+        get: state.get,
+        set: state.set,
+        _onValueChange: state._onValueChange,
+        error: state.error,
+        isLoaded: state.isLoaded,
+        control: (state as any as LoadableState<any, any, any>).control,
+        _awaitOnly: true,
+      }
+    : {
+        _root: state as any,
+        load: (state as any as LoadableState).load && load,
+        get,
+        set,
+        _onValueChange,
+        error: state.error,
+        isLoaded: state.isLoaded,
+        control: (state as any as LoadableState<any, any, any>).control,
+        _awaitOnly: true,
+      }) as LoadableState<any, any, any> as any;
 
 export default awaitOnly;

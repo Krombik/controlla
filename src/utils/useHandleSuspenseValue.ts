@@ -17,29 +17,21 @@ const useHandleSuspenseValue = (
       );
     }
 
-    let isPreviousExist = state._root._value !== undefined;
+    const root = state._root;
 
-    let isError = false;
+    let isPreviousExist = root._value !== undefined;
 
     return handleUnlisteners(
-      onValueChange([state._root, state.error], ([value, error]) => {
-        if (error === undefined) {
-          isError = false;
+      onValueChange([root, state.error], () => {
+        const isCurrentExist = root._value !== undefined;
 
-          const isCurrentExist = value !== undefined;
-
-          if (isPreviousExist != isCurrentExist) {
-            isPreviousExist = isCurrentExist;
-
-            forceRerender();
-          }
-        } else if (!isError) {
-          isError = true;
+        if (isPreviousExist != isCurrentExist) {
+          isPreviousExist = isCurrentExist;
 
           forceRerender();
         }
       }),
-      state
+      root
     );
   }, [state]);
 

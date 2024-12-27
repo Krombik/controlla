@@ -1,5 +1,5 @@
 import noop from 'lodash.noop';
-import type { LoadableState } from '../types';
+import type { LoadableState, Mutable } from '../types';
 import alwaysFalse from '../utils/alwaysFalse';
 import type { ContextType } from 'react';
 import type SuspenseContext from '../utils/SuspenseContext';
@@ -74,6 +74,7 @@ const SKELETON_STATE = {
   _onValueChange: alwaysNoop,
   get: noop,
   set: noop,
+  _root: undefined!,
   error: {
     get: noop,
     set: noop,
@@ -87,5 +88,7 @@ const SKELETON_STATE = {
     _value: false,
   } as Partial<LoadableState['isLoaded']> as LoadableState['isLoaded'],
 } as Partial<SkeletonState> as SkeletonState;
+
+(SKELETON_STATE as Mutable<typeof SKELETON_STATE>)._root = SKELETON_STATE;
 
 export default SKELETON_STATE;

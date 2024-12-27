@@ -17,19 +17,19 @@ const getPromise: {
   /** @internal */
   (state: AsyncState, isRoot: true): Promise<any>;
 } = (state: AsyncState, isRoot?: true) => {
-  const data = state._promise;
+  const root = state._root;
 
-  const path = state._path;
+  const data = root._promise;
 
   let promise: Promise<any>;
 
   if (data) {
     promise = data._promise;
-  } else if (state.isLoaded._value) {
+  } else if (root.isLoaded._value) {
     promise =
-      state._value !== undefined
-        ? Promise.resolve(state._value)
-        : Promise.reject(state.error._value);
+      root._value !== undefined
+        ? Promise.resolve(root._value)
+        : Promise.reject(root.error._value);
   } else {
     let _resolve!: (value: any) => void, _reject!: (error: any) => void;
 
@@ -39,16 +39,14 @@ const getPromise: {
       _reject = rej;
     });
 
-    state._promise = {
+    root._promise = {
       _promise: promise,
       _reject,
       _resolve,
     };
   }
 
-  return path && path.length && !isRoot
-    ? promise.then(() => state.get())
-    : promise;
+  return state._path && !isRoot ? promise.then(() => state.get()) : promise;
 };
 
 export default getPromise;
