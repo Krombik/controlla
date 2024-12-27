@@ -16,19 +16,20 @@ const finalizationRegistry: Pick<
     })
   : { register: noop };
 
-if (typeof WeakRef == 'undefined') {
-  window.WeakRef = class WeakRef {
-    _item: any;
+const _WeakRef =
+  typeof WeakRef != 'undefined'
+    ? WeakRef
+    : (class WeakRef {
+        _item: any;
 
-    constructor(item: any) {
-      this._item = item;
-    }
+        constructor(item: any) {
+          this._item = item;
+        }
 
-    deref() {
-      return this._item;
-    }
-  } as typeof WeakRef;
-}
+        deref() {
+          return this._item;
+        }
+      } as typeof WeakRef);
 
 const handleState = <S extends State | AsyncState, D = any>(
   state: Omit<S, symbol> & InternalSetData<D>,
@@ -64,7 +65,7 @@ const handleState = <S extends State | AsyncState, D = any>(
         }
       });
 
-      const stateRef = new WeakRef(state);
+      const stateRef = new _WeakRef(state);
 
       finalizationRegistry.register(
         state,

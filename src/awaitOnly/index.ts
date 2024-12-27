@@ -9,16 +9,17 @@ const awaitOnly = <S extends AsyncState>(
   : S extends AsyncState<any, infer E>
     ? AsyncState<void, E>
     : never =>
-  ('_path' in state
+  (state._root != state
     ? {
         _root: state._root,
-        load: state._load,
+        load: (state as any as LoadableState<any, any, any>).load,
         get: state.get,
         set: state.set,
         _onValueChange: state._onValueChange,
         error: state.error,
         isLoaded: state.isLoaded,
         control: (state as any as LoadableState<any, any, any>).control,
+        _path: state._path,
         _awaitOnly: true,
       }
     : {

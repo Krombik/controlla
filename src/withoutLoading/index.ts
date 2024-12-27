@@ -7,7 +7,7 @@ import { get, set, _onValueChange } from '../utils/state/wrapped';
  * will not initiate the loading, allowing you to access the current value without triggering a load.
  */
 const withoutLoading = <S extends LoadableState>(state: S): Omit<S, 'load'> =>
-  ('_path' in state
+  (state._root != state
     ? {
         _root: state._root,
         get: state.get,
@@ -16,6 +16,8 @@ const withoutLoading = <S extends LoadableState>(state: S): Omit<S, 'load'> =>
         error: state.error,
         isLoaded: state.isLoaded,
         control: (state as any as LoadableState<any, any, any>).control,
+        _path: state._path,
+        _awaitOnly: state._awaitOnly,
       }
     : {
         _root: state as any,
@@ -25,7 +27,6 @@ const withoutLoading = <S extends LoadableState>(state: S): Omit<S, 'load'> =>
         error: state.error,
         isLoaded: state.isLoaded,
         control: (state as any as LoadableState<any, any, any>).control,
-        _awaitOnly: true,
       }) as LoadableState<any, any, any> as any;
 
 export default withoutLoading;
