@@ -407,6 +407,12 @@ export type Storage<
   readonly _arg3?: any;
 };
 
+export type PaginatedStorageOptions<T> = {
+  shouldRevalidate?:
+    | boolean
+    | ((...args: T extends LoadableState ? [state: T] : [scope: T]) => boolean);
+};
+
 /**
  * Represents a paginated state storage system for managing state entries across multiple pages.
  */
@@ -429,11 +435,9 @@ export type PaginatedStorage<T extends LoadableState | ScopeMarker> = {
   /** @internal */
   readonly _getItem: (...args: any[]) => any;
   /** @internal */
-  readonly _arg1: any;
+  readonly _arg1: PaginatedStorageOptions<any>;
   /** @internal */
   readonly _arg2: StateInitializer | undefined;
-  /** @internal */
-  _shouldRevalidate(state: LoadableState): boolean;
   /** Retrieves a state entry for the specified page number within the paginated storage. */
   get(page: number): T;
   /**

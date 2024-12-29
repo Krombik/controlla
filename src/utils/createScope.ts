@@ -4,8 +4,8 @@ import { $tate } from './constants';
 import { load } from './state/wrapped';
 
 type Child = {
-  readonly _state: State | LoadableState<any, any, any>;
-  readonly _map: Map<string, State | Child>;
+  readonly _root: State | LoadableState<any, any, any>;
+  readonly _storage: Map<string, State | Child>;
   readonly _path: readonly string[];
 };
 
@@ -38,22 +38,22 @@ function _onValueChange(this: State, cb: (value: any) => void) {
 
 const childHandler: ProxyHandler<Child> = {
   get(target, prop: string) {
-    const { _map } = target;
+    const { _storage } = target;
 
-    if (_map.has(prop)) {
-      return _map.get(prop);
+    if (_storage.has(prop)) {
+      return _storage.get(prop);
     }
 
-    const state = target._state;
+    const state = target._root;
 
     const next =
       prop != $tate
         ? new Proxy(
             {
-              _map: new Map(),
+              _storage: new Map(),
+              _root: state,
               _path: concat(target._path, prop),
-              _state: state,
-            } as Child,
+            },
             childHandler
           )
         : '_load' in state
@@ -62,11 +62,11 @@ const childHandler: ProxyHandler<Child> = {
               _path: target._path,
               get,
               set,
+              _onValueChange,
               load: (state as AsyncState)._load && load,
               control: state.control,
               error: state.error,
               isLoaded: state.isLoaded,
-              _onValueChange,
             } as Partial<LoadableState<any, any, any>> as LoadableState<
               any,
               any,
@@ -80,28 +80,28 @@ const childHandler: ProxyHandler<Child> = {
               _onValueChange,
             } as State);
 
-    _map.set(prop, next);
+    _storage.set(prop, next);
 
     return next;
   },
 };
 
 const rootHandler: ProxyHandler<ScopeMap> = {
-  get(_map, prop: string) {
-    if (_map.has(prop)) {
-      return _map.get(prop);
+  get(_storage, prop: string) {
+    if (_storage.has(prop)) {
+      return _storage.get(prop);
     }
 
     const next = new Proxy(
       {
-        _map: new Map(),
+        _storage: new Map(),
+        _root: _storage.get($tate)!,
         _path: [prop],
-        _state: _map.get($tate)!,
       },
       childHandler
     );
 
-    _map.set(prop, next);
+    _storage.set(prop, next);
 
     return next;
   },

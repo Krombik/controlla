@@ -9,6 +9,7 @@ import type {
   PollableState,
   LoadableStateScope,
   PollableStateScope,
+  PaginatedStorageOptions,
 } from '../types';
 import onValueChange from '../onValueChange';
 import alwaysFalse from '../utils/alwaysFalse';
@@ -103,20 +104,22 @@ function usePages(
   const errors = new Array(count);
 
   for (let i = 0; i < count; i++) {
-    const state = getState(self.get(i));
-
-    values[i] = (
-      stableStorage.has(i)
-        ? ({
-            _root: { _value: stableStorage.get(i) },
-            _value: stableStorage.get(i),
-            get: state.get,
-            _path: state._path,
-          } as LoadableState)
-        : state
-    ).get();
+    let state = getState(self.get(i));
 
     errors[i] = state.error.get();
+
+    if (stableStorage.has(i)) {
+      const _value = stableStorage.get(i);
+
+      state = {
+        _root: { _value },
+        _value,
+        get: state.get,
+        _path: state._path,
+      } as LoadableState;
+    }
+
+    values[i] = state.get();
   }
 
   useEffect(() => {
@@ -154,12 +157,20 @@ function usePages(
     const unlisten = self.page._onValueChange((nextPage: number) => {
       if (nextPage > prevPage) {
         if (!self._promise) {
-          const { _shouldRevalidate } = self;
+          const { shouldRevalidate: _shouldRevalidate } = self._arg1;
+
+          const shouldRevalidate = _shouldRevalidate
+            ? _shouldRevalidate != true
+              ? _shouldRevalidate
+              : alwaysTrue
+            : alwaysFalse;
 
           for (let i = 0; i < prevPage; i++) {
-            const state = getState(self.get(i));
+            const item = self.get(i);
 
-            if (_shouldRevalidate(state)) {
+            const state = getState(item);
+
+            if (shouldRevalidate(item)) {
               const prev = cleanupMap.get(i)!;
 
               cleanupMap.set(i, state.load(true));
@@ -207,15 +218,9 @@ function usePages(
   return [values, errors] as const;
 }
 
-type Options<T> = {
-  shouldRevalidate?:
-    | boolean
-    | ((...args: T extends LoadableState ? [state: T] : [scope: T]) => boolean);
-};
-
 type Args<CreateState, T, O> = WithInitModule<
   T,
-  [createState: CreateState, options: O & Options<T>]
+  [createState: CreateState, options: O & PaginatedStorageOptions<T>]
 >;
 
 export type PaginatedRequestableStateArgs<
@@ -279,13 +284,11 @@ const createPaginatedStorage: {
   ): PaginatedStorage<PollableStateScope<T, Error>>;
 } = (
   createState: any,
-  options: Options<any>,
+  options: PaginatedStorageOptions<any>,
   stateInitializer?: StateInitializer,
   keys?: any[]
-): any => {
-  const { shouldRevalidate } = options;
-
-  return {
+): any =>
+  ({
     _storage: new Map(),
     _pages: new Set(),
     _stableStorage: new Map(),
@@ -299,19 +302,13 @@ const createPaginatedStorage: {
     _getItem: createState,
     _arg1: options,
     _arg2: stateInitializer,
-    _shouldRevalidate: shouldRevalidate
-      ? shouldRevalidate != true
-        ? shouldRevalidate
-        : alwaysTrue
-      : alwaysFalse,
     get: getItem,
     delete: _delete,
     _promise: undefined,
     _resolve: noop,
     _keys: keys,
     usePages,
-  } as PaginatedStorage<any>;
-};
+  }) as PaginatedStorage<any>;
 
 export type { PaginatedStorage };
 
