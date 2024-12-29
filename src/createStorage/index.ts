@@ -428,16 +428,8 @@ const createStorage: CreateStorage = (
   keys?: any[]
 ): any => {
   return (
-    typeof arg1 == 'object'
+    typeof arg1 != 'object'
       ? {
-          _storage: new Map(),
-          delete: _delete,
-          get,
-          _getItem: createStorageRecord,
-          _arg1: arg1,
-          _keys: keys,
-        }
-      : {
           _storage: new Map(),
           delete: _delete,
           get,
@@ -445,6 +437,14 @@ const createStorage: CreateStorage = (
           _arg1: arg2,
           _arg2: arg3,
           _arg3: arg4,
+          _keys: keys,
+        }
+      : {
+          _storage: new Map(),
+          delete: _delete,
+          get,
+          _getItem: createStorageRecord,
+          _arg1: arg1,
           _keys: keys,
         }
   ) as Storage<any, any>;
