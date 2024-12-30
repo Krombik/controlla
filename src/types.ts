@@ -62,8 +62,6 @@ export type ErrorState<Error> = StateBase<Error> &
     set(error: Error | undefined): void;
     get(): Error | undefined;
     /** @internal */
-    _value: any;
-    /** @internal */
     readonly _parent: AsyncState;
     /** @internal */
     _isExpectedError?(err: any): boolean;

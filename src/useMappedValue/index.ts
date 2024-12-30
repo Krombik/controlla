@@ -19,7 +19,7 @@ const useMappedValue = ((
   const mappedValue = mapper(
     state.get(),
     isLoadedState && isLoadedState._value,
-    errorState && errorState._value
+    errorState && errorState.get()
   );
 
   const mappedValueRef = useRef(mappedValue);
@@ -42,7 +42,7 @@ const useMappedValue = ((
               nextValue = mapper(
                 state.get(),
                 isLoadedState && isLoadedState._value,
-                errorState && errorState._value
+                errorState && errorState.get()
               );
             } catch {
               forceRerender();

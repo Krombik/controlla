@@ -133,6 +133,8 @@ export function set(
 
   let currentNode: StateCallbackMap | null | undefined = self._setData;
 
+  let prevValue = self._value;
+
   const root = currentNode._root;
 
   const l = path ? path.length : 0;
@@ -143,7 +145,7 @@ export function set(
 
   const pushToValuesArr = valuesArr.push.bind(valuesArr);
 
-  const pushArr: ((value: any) => void)[] = [];
+  const pushArr: ((value: any) => void)[] = new Array(l);
 
   for (let i = 0; i < l; i++) {
     const k = path![i];
@@ -154,20 +156,24 @@ export function set(
       if (currentNode._root) {
         nodesQueue.push(currentNode._root);
 
-        pushArr.push(pushToValuesArr);
+        pushArr[i] = pushToValuesArr;
       } else {
-        pushArr.push(noop);
+        pushArr[i] = noop;
       }
     } else {
       for (; i < l; i++) {
-        pushArr.push(noop);
+        prevValue = prevValue ? prevValue[path![i]] : undefined;
+
+        pushArr[i] = noop;
       }
 
       break;
     }
+
+    prevValue = prevValue ? prevValue[k] : undefined;
   }
 
-  if (processStateChanges(this.get(), nextValue, currentNode)) {
+  if (processStateChanges(prevValue, nextValue, currentNode)) {
     if (path) {
       nextValue = deepSet(self._value, nextValue, path, 0, l - 1, pushArr);
     }

@@ -15,7 +15,7 @@ export class PollingControl implements PollableMethods {
   _sleepPromise: Promise<void> | void | false = undefined;
   _resume: () => void = noop;
   reset: () => void = noop;
-  readonly _state: AsyncState;
+  readonly _root: AsyncState;
 
   constructor(options: PollableStateOptions, state: AsyncState) {
     const { hiddenInterval } = options;
@@ -26,11 +26,11 @@ export class PollingControl implements PollableMethods {
 
     this._sleep = hiddenInterval == null ? commonSleep : smartSleep;
 
-    this._state = state;
+    this._root = state;
   }
 
   _handleInterval(interval: number | ((value: any) => number)) {
-    return typeof interval == 'number' ? interval : interval(this._state.get());
+    return typeof interval == 'number' ? interval : interval(this._root._value);
   }
 
   pause() {
