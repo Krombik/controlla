@@ -15,37 +15,39 @@ export const scheduleBatch = () => {
     batchInPending = false;
 
     RESOLVED_PROMISE.then(() => {
-      do {
-        for (let i = 0; i < beforeBatchCallbacks.length; i++) {
-          beforeBatchCallbacks[i]();
-        }
+      for (let i = 0; i < beforeBatchCallbacks.length; i++) {
+        beforeBatchCallbacks[i]();
+      }
 
-        beforeBatchCallbacks.length = 0;
+      beforeBatchCallbacks.length = 0;
 
-        const currMap = batchMap;
+      const currMap = batchMap;
 
-        batchMap = new Map();
+      batchMap = new Map();
 
-        const it = currMap.keys();
+      const it = currMap.keys();
 
-        const next = it.next.bind(it);
+      const next = it.next.bind(it);
 
-        for (let i = currMap.size; i--; ) {
-          const state: State = next().value;
+      for (let i = currMap.size; i--; ) {
+        const state: State = next().value;
 
-          state._valueToggler = (state._valueToggler ^ 1) as 0 | 1;
+        state._valueToggler = (state._valueToggler ^ 1) as 0 | 1;
 
-          executeSetters(state._callbacks, currMap.get(state));
-        }
+        executeSetters(state._callbacks, currMap.get(state));
+      }
 
-        for (let i = 0; i < postBatchCallbacks.length; i++) {
-          postBatchCallbacks[i]();
-        }
+      for (let i = 0; i < postBatchCallbacks.length; i++) {
+        postBatchCallbacks[i]();
+      }
 
-        postBatchCallbacks.length = 0;
+      postBatchCallbacks.length = 0;
 
-        batchInPending = true;
-      } while (beforeBatchCallbacks.length || batchMap.size);
+      batchInPending = true;
+
+      if (beforeBatchCallbacks.length || batchMap.size) {
+        scheduleBatch();
+      }
     });
   }
 };

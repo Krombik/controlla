@@ -93,16 +93,16 @@ export function set(
   if (processStateChanges(prevValue, nextValue, currentNode)) {
     if (path) {
       nextValue = deepSet(self._value, nextValue, path, 0, l - 1, pushArr);
+
+      for (let i = nodesQueue.length; i--; ) {
+        addToBatch(nodesQueue[i], valuesArr[i]);
+      }
+
+      if (self._callbacks.size) {
+        addToBatch(self, nextValue);
+      }
     }
 
     self._value = nextValue;
-
-    for (let i = nodesQueue.length; i--; ) {
-      addToBatch(nodesQueue[i], valuesArr[i]);
-    }
-
-    if (self._callbacks.size) {
-      addToBatch(self, nextValue);
-    }
   }
 }
