@@ -25,7 +25,7 @@ export { default as useOnValueChange } from './useOnValueChange';
 export { default as batchedUpdates } from './batchedUpdates';
 
 export { default as awaitOnly } from './awaitOnly';
-export { default as withoutLoading } from './withoutLoading';
+export { default as useWithoutLoading } from './useWithoutLoading';
 
 export { default as wrapErrorBoundary } from './wrapErrorBoundary';
 

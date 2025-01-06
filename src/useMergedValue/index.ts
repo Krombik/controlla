@@ -1,70 +1,48 @@
-import { useLayoutEffect, useRef } from 'react';
-import type {
-  AnyAsyncState,
-  AsyncState,
-  LoadableState,
-  StateBase as State,
-} from '../types';
-import onValueChange from '../onValueChange';
-import useForceRerender from 'react-helpful-utils/useForceRerender';
-import simpleIsEqual from '../utils/simpleIsEqual';
+import { useCallback, useSyncExternalStore } from 'react';
+import type { AnyAsyncState, AsyncState, StateBase as State } from '../types';
+import noop from 'lodash.noop';
+import { postBatchCallbacksPush } from '../utils/batching';
 
 const useMergedValue = ((
   states: AnyAsyncState[],
-  merger: (values: any[]) => any,
-  isEqual: (
-    nextMergedValue: any,
-    prevMergedValue: any
-  ) => boolean = simpleIsEqual
-) => {
-  const forceRerender = useForceRerender();
+  merger: (values: any[]) => any
+) =>
+  useSyncExternalStore(
+    useCallback((cb) => {
+      let isAvailable = true;
 
-  const mergedValue = merger(states.map((state) => state.get()));
+      const fn = () => {
+        if (isAvailable) {
+          isAvailable = false;
 
-  const mergedValueRef = useRef(mergedValue);
+          postBatchCallbacksPush(() => {
+            cb();
 
-  mergedValueRef.current = mergedValue;
-
-  useLayoutEffect(() => {
-    const valuesUnlistener = onValueChange(states, () => {
-      let nextValue;
-
-      try {
-        nextValue = merger(states.map((state) => state.get()));
-      } catch {
-        forceRerender();
-
-        return;
-      }
-
-      if (!isEqual(nextValue, mergedValueRef.current)) {
-        forceRerender();
-      }
-    });
-
-    const loadUnlisteners: Array<() => void> = [];
-
-    for (let i = 0; i < states.length; i++) {
-      const state = states[i];
-
-      if ((state as LoadableState).load) {
-        loadUnlisteners.push((state as LoadableState).load());
-      }
-    }
-
-    return loadUnlisteners.length
-      ? () => {
-          valuesUnlistener();
-
-          for (let i = 0; i < loadUnlisteners.length; i++) {
-            loadUnlisteners[i]();
-          }
+            isAvailable = true;
+          });
         }
-      : valuesUnlistener;
-  }, states);
+      };
 
-  return mergedValue;
-}) as {
+      const l = states.length;
+
+      const unlisteners = new Array<() => void>(l);
+
+      for (let i = 0; i < l; i++) {
+        const state = states[i];
+
+        unlisteners[i] = (state._subscribeWithLoad || state._onValueChange)(fn);
+      }
+
+      return () => {
+        for (let i = 0; i < l; i++) {
+          unlisteners[i]();
+        }
+
+        cb = noop;
+      };
+    }, states),
+    () => merger(states.map((state) => state.get()))
+  )) as {
   /**
    * A hook to merge values from multiple {@link states}.
    * It applies a provided {@link merger} function to combine the state values, ensuring the component re-renders only when the merged value changes.
@@ -80,8 +58,7 @@ const useMergedValue = ((
       [index in keyof S]: S[index] extends State<infer K>
         ? K | (S[index] extends AsyncState ? undefined : never)
         : never;
-    }) => V,
-    isEqual?: (nextMergedValue: V, prevMergedValue: V) => boolean
+    }) => V
   ): V;
 };
 

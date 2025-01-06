@@ -1,5 +1,5 @@
 import type { AsyncState, LoadableState } from '../types';
-import { get, load, set, _onValueChange } from '../utils/state/wrapped';
+import { get, set } from '../utils/state/wrapped';
 
 /** Makes the given {@link state} to be awaited only, without triggering re-renders on state changes. */
 const awaitOnly = <S extends AsyncState>(
@@ -12,10 +12,12 @@ const awaitOnly = <S extends AsyncState>(
   (state._root != state
     ? {
         _root: state._root,
-        load: (state as any as LoadableState<any, any, any>).load,
+        load: (state as any as LoadableState).load,
         get: state.get,
         set: state.set,
         _onValueChange: state._onValueChange,
+        _subscribeWithError: state._subscribeWithError,
+        _subscribeWithLoad: state._subscribeWithLoad,
         error: state.error,
         isLoaded: state.isLoaded,
         control: (state as any as LoadableState<any, any, any>).control,
@@ -24,10 +26,12 @@ const awaitOnly = <S extends AsyncState>(
       }
     : {
         _root: state as any,
-        load: (state as any as LoadableState).load && load,
+        load: (state as any as LoadableState).load,
         get,
         set,
-        _onValueChange,
+        _onValueChange: state._onValueChange,
+        _subscribeWithError: state._subscribeWithError,
+        _subscribeWithLoad: state._subscribeWithLoad,
         error: state.error,
         isLoaded: state.isLoaded,
         control: (state as any as LoadableState<any, any, any>).control,

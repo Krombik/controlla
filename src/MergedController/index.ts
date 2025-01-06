@@ -12,8 +12,6 @@ type Props<S extends State[], V> = {
   }): V;
   /** Function that renders the merged value. */
   render(mergedValue: V): ReturnType<FC>;
-  /** Optional comparison function to determine if the next merged value is equal to the previous. */
-  isEqual?(nextMergedValue: V, prevMergedValue: V): boolean;
 };
 
 /**
@@ -30,7 +28,6 @@ type Props<S extends State[], V> = {
  */
 const MergedController = <const S extends State[], V>(
   props: Props<S, V>
-): ReturnType<FC> =>
-  props.render(useMergedValue(props.states, props.merger, props.isEqual));
+): ReturnType<FC> => props.render(useMergedValue(props.states, props.merger));
 
 export default MergedController;

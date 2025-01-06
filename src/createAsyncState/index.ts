@@ -4,27 +4,24 @@ import type {
   LoadableState,
   LoadableStateOptions,
   StateInitializer,
-  ValueChangeCallbacks,
 } from '../types';
 
 import getAsyncState from '../utils/getAsyncState';
 
-import { set, _onValueChange } from '../utils/state/common';
+import { set } from '../utils/state/common';
 
 const createAsyncState = ((
   options: LoadableStateOptions<any, any, any>,
   stateInitializer?: StateInitializer,
   keys?: any[]
 ) =>
-  getAsyncState<ValueChangeCallbacks>(
+  getAsyncState(
     set,
-    _onValueChange,
-    options,
+    options || {},
     stateInitializer,
     keys,
-    new Set(),
-    options.load,
-    options.Control
+    options && options.load,
+    options && options.Control
   )) as {
   /**
    * Creates a {@link LoadableState loadable state} with basic loading capabilities.

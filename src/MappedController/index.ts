@@ -14,8 +14,6 @@ type Props<S extends State, V> = {
   ): V;
   /** Function to render the mapped value. */
   render(mappedValue: V): ReturnType<FC>;
-  /** Optional comparison function to determine if the next mapped value is equal to the previous. */
-  isEqual?(nextMappedValue: V, prevMappedValue: V): boolean;
 };
 
 const MappedController: {
@@ -39,6 +37,6 @@ const MappedController: {
    */
   <S extends State, V>(props: Props<S, V>): ReturnType<FC>;
 } = (props: Props<any, any>) =>
-  props.render(useMappedValue(props.state, props.mapper, props.isEqual));
+  props.render(useMappedValue(props.state, props.mapper));
 
 export default MappedController;

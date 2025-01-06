@@ -1,7 +1,6 @@
 import type {
   StateInitializer,
   PollableStateOptions,
-  ValueChangeCallbacks,
   LoadableState,
   PollableState,
 } from '../types';
@@ -9,7 +8,7 @@ import createLoader from '../utils/createLoader';
 import getAsyncState from '../utils/getAsyncState';
 import { handlePolling, PollingControl } from '../utils/handlePolling';
 
-import { _onValueChange, set } from '../utils/state/common';
+import { set } from '../utils/state/common';
 
 const createPollableState = ((
   options: PollableStateOptions<any, any, any[]>,
@@ -19,13 +18,11 @@ const createPollableState = ((
   tickEnd?: () => void,
   parent?: any
 ) =>
-  getAsyncState<ValueChangeCallbacks>(
+  getAsyncState(
     set,
-    _onValueChange,
     options,
     stateInitializer,
     keys,
-    new Set(),
     createLoader(handlePolling, options),
     PollingControl,
     tickStart,

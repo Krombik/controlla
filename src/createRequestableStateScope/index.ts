@@ -1,14 +1,13 @@
 import type {
   StateInitializer,
   RequestableStateOptions,
-  StateCallbackMap,
   LoadableStateScope,
 } from '../types';
 import createLoader from '../utils/createLoader';
 import createScope from '../utils/createScope';
 import getAsyncState from '../utils/getAsyncState';
 import { handleFetch } from '../utils/handleFetch';
-import { _onValueChange, set } from '../utils/state/scope';
+import { set } from '../utils/state/scope';
 
 const createRequestableStateScope: {
   /**
@@ -29,13 +28,11 @@ const createRequestableStateScope: {
   parent?: any
 ) =>
   createScope(
-    getAsyncState<StateCallbackMap>(
+    getAsyncState(
       set,
-      _onValueChange,
       options,
       stateInitializer,
       keys,
-      { _root: null, _children: null },
       createLoader(handleFetch, options),
       undefined,
       tickStart,

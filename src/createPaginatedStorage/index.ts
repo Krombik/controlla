@@ -24,7 +24,7 @@ import handleUnlisteners from '../utils/handleUnlisteners';
 import concat from '../utils/concat';
 import noop from 'lodash.noop';
 import identity from 'lodash.identity';
-import { _onValueChange, set, get } from '../utils/state/common';
+import createSimpleState from '../utils/createSimpleState';
 
 function getItem(this: PaginatedStorage<any>, page: number) {
   const self = this;
@@ -292,13 +292,7 @@ const createPaginatedStorage: {
     _storage: new Map(),
     _pages: new Set(),
     _stableStorage: new Map(),
-    page: {
-      _onValueChange,
-      _value: 1,
-      get,
-      set,
-      _setData: new Set(),
-    } as PaginatedStorage<any>['page'],
+    page: createSimpleState(1),
     _getItem: createState,
     _arg1: options,
     _arg2: stateInitializer,

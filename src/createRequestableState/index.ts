@@ -2,12 +2,11 @@ import type {
   StateInitializer,
   LoadableState,
   RequestableStateOptions,
-  ValueChangeCallbacks,
 } from '../types';
 import createLoader from '../utils/createLoader';
 import getAsyncState from '../utils/getAsyncState';
 import { handleFetch } from '../utils/handleFetch';
-import { _onValueChange, set } from '../utils/state/common';
+import { set } from '../utils/state/common';
 
 const createRequestableState = ((
   options: RequestableStateOptions<any, any, any[]>,
@@ -17,13 +16,11 @@ const createRequestableState = ((
   tickEnd?: () => void,
   parent?: any
 ) =>
-  getAsyncState<ValueChangeCallbacks>(
+  getAsyncState(
     set,
-    _onValueChange,
     options,
     stateInitializer,
     keys,
-    new Set(),
     createLoader(handleFetch, options),
     undefined,
     tickStart,

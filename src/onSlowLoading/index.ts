@@ -32,7 +32,7 @@ const onSlowLoading = (state: AsyncState, cb: () => void) => {
     throw new Error('slow loading timeout was not provided');
   }
 
-  const set = slowLoading._callbackSet;
+  const set = slowLoading._callbacks;
 
   set.add(cb);
 

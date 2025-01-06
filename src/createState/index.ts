@@ -1,6 +1,7 @@
 import type { StateInitializer, State, ValueChangeCallbacks } from '../types';
+import createSubscribe from '../utils/createSubscribe';
 import handleState from '../utils/handleState';
-import { get, _onValueChange, set } from '../utils/state/common';
+import { get, set } from '../utils/state/common';
 
 /**
  * Creates a {@link State state} for managing simple state value.
@@ -18,19 +19,23 @@ const createState: {
   value?: unknown | (() => unknown),
   stateInitializer?: StateInitializer,
   keys?: any[]
-) =>
-  handleState<State, ValueChangeCallbacks>(
+) => {
+  const callbacks: ValueChangeCallbacks = new Set();
+
+  return handleState<State>(
     {
       _value: undefined,
       get,
-      _setData: new Set(),
+      _callbacks: callbacks,
       set,
-      _onValueChange,
+      _onValueChange: createSubscribe(callbacks),
+      _valueToggler: 0,
     },
     value,
     stateInitializer,
     keys
   );
+};
 
 export type { State };
 

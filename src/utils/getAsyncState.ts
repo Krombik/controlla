@@ -1,9 +1,9 @@
 import noop from 'lodash.noop';
 import type {
+  ValueChangeCallbacks,
   AnyAsyncState,
   AsyncState,
   ErrorState,
-  IsLoadedState,
   LoadableState,
   LoadableStateOptions,
   Mutable,
@@ -14,7 +14,14 @@ import alwaysTrue from './alwaysTrue';
 import { addToBatch } from './batching';
 import executeSetters from './executeSetters';
 import handleState from './handleState';
-import { _onValueChange, get } from './state/common';
+import { get } from './state/common';
+import createSimpleState from './createSimpleState';
+import createSubscribe from './createSubscribe';
+import alwaysNoop from './alwaysNoop';
+import {
+  createLoadableSubscribe,
+  createSubscribeWithError,
+} from './createAsyncSubscribe';
 
 const handleReloadOn = (
   reloadData: NonNullable<AsyncState['_reloadIfStale']>,
@@ -43,7 +50,7 @@ const handleSlowLoading = (
     slowLoading._timeoutId = isLoaded
       ? undefined
       : setTimeout(() => {
-          executeSetters(slowLoading._callbackSet);
+          executeSetters(slowLoading._callbacks);
         }, slowLoading._timeout);
   }
 };
@@ -78,7 +85,7 @@ function set(
     }
   }
 
-  self.isLoaded._set(isLoaded);
+  self.isLoaded.set(isLoaded);
 
   if (isLoaded) {
     self._isLoadable = false;
@@ -109,94 +116,89 @@ function set(
   handleSlowLoading(self._slowLoading, isLoaded);
 }
 
-function load(this: LoadableState, reload?: boolean) {
-  let isNotCanceled = true;
+const createLoader = (
+  load: (...keys: any[]) => (() => void) | void,
+  self: LoadableState
+) => {
+  load = load.bind(self);
 
-  const self = this;
+  return (reload?: boolean) => {
+    let isNotCanceled = true;
 
-  const { _reloadOnFocus } = self;
+    const { _reloadOnFocus } = self;
 
-  if (reload && !self._isFetchInProgress) {
-    handleUnload(self);
+    if (reload && !self._isFetchInProgress) {
+      handleUnload(self);
 
-    self._isLoadable = true;
-  }
-
-  if (self._isLoadable) {
-    self._isLoadable = false;
-
-    self.isLoaded._set(false);
-
-    handleSlowLoading(self._slowLoading, false);
-
-    if (_reloadOnFocus && _reloadOnFocus._timeoutId != null) {
-      clearInterval(_reloadOnFocus._timeoutId);
-
-      _reloadOnFocus._timeoutId = undefined;
+      self._isLoadable = true;
     }
 
-    if (self._reloadIfStale && self._reloadIfStale._timeoutId != null) {
-      clearInterval(self._reloadIfStale._timeoutId);
+    if (self._isLoadable) {
+      self._isLoadable = false;
 
-      self._reloadIfStale._timeoutId = undefined;
+      self.isLoaded.set(false);
+
+      handleSlowLoading(self._slowLoading, false);
+
+      if (_reloadOnFocus && _reloadOnFocus._timeoutId != null) {
+        clearInterval(_reloadOnFocus._timeoutId);
+
+        _reloadOnFocus._timeoutId = undefined;
+      }
+
+      if (self._reloadIfStale && self._reloadIfStale._timeoutId != null) {
+        clearInterval(self._reloadIfStale._timeoutId);
+
+        self._reloadIfStale._timeoutId = undefined;
+      }
+
+      const keys = self._keys;
+
+      const unload = keys ? load(...keys) : load();
+
+      if (unload) {
+        self._unload = unload;
+      }
     }
 
-    const keys = self._keys;
+    if (_reloadOnFocus && !_reloadOnFocus._focusListener) {
+      const listener = () => {
+        if (!document.hidden && _reloadOnFocus._isLoadable) {
+          _reloadOnFocus._isLoadable = false;
 
-    const unload = keys ? self._load(...keys) : self._load();
+          self.load!(true)();
+        }
+      };
 
-    if (unload) {
-      self._unload = unload;
+      _reloadOnFocus._focusListener = listener;
+
+      document.addEventListener('visibilitychange', listener);
     }
-  }
 
-  if (_reloadOnFocus && !_reloadOnFocus._focusListener) {
-    const listener = () => {
-      if (!document.hidden && _reloadOnFocus._isLoadable) {
-        _reloadOnFocus._isLoadable = false;
+    self._counter++;
 
-        self.load!(true)();
+    return () => {
+      if (isNotCanceled) {
+        isNotCanceled = false;
+
+        if (!--self._counter) {
+          handleUnload(self);
+
+          if (!self.isLoaded._value) {
+            self._isLoadable = true;
+          }
+
+          if (self._reloadOnFocus) {
+            document.removeEventListener(
+              'visibilitychange',
+              self._reloadOnFocus._focusListener!
+            );
+          }
+        }
       }
     };
-
-    _reloadOnFocus._focusListener = listener;
-
-    document.addEventListener('visibilitychange', listener);
-  }
-
-  self._counter++;
-
-  return () => {
-    if (isNotCanceled) {
-      isNotCanceled = false;
-
-      if (!--self._counter) {
-        handleUnload(self);
-
-        if (!self.isLoaded._value) {
-          self._isLoadable = true;
-        }
-
-        if (self._reloadOnFocus) {
-          document.removeEventListener(
-            'visibilitychange',
-            self._reloadOnFocus._focusListener!
-          );
-        }
-      }
-    }
   };
-}
-
-function setInner(this: IsLoadedState, value: any) {
-  const self = this;
-
-  if (self._value !== value) {
-    self._value = value;
-
-    addToBatch(self._setData, value);
-  }
-}
+};
 
 function setError(this: ErrorState<any>, value: any) {
   const self = this;
@@ -204,7 +206,9 @@ function setError(this: ErrorState<any>, value: any) {
   if (self._value !== value) {
     self._value = value;
 
-    addToBatch(self._setData, value);
+    if (self._callbacks.size) {
+      addToBatch(self, value);
+    }
 
     if (value !== undefined) {
       const parent = self._parent;
@@ -232,13 +236,11 @@ function getError(this: ErrorState<any>) {
   throw err;
 }
 
-const getAsyncState = <D>(
+const getAsyncState = (
   _commonSet: LoadableState['_commonSet'],
-  onValueChange: LoadableState['_onValueChange'],
   options: Omit<LoadableStateOptions, 'load'>,
   stateInitializer: StateInitializer | undefined,
   _keys: any[] | undefined,
-  _setData: D,
   _load?: LoadableStateOptions<any, any, any, any[]>['load'],
   Control?: LoadableStateOptions<any, any, any>['Control'],
   _tickStart?: () => void,
@@ -253,15 +255,19 @@ const getAsyncState = <D>(
     loadingTimeout,
   } = options;
 
+  const errorCallbacks: ValueChangeCallbacks = new Set();
+
   const errorState = {
-    _onValueChange,
+    _onValueChange: createSubscribe(errorCallbacks),
     get: isExpectedError ? getError : get,
     set: setError,
     _isExpectedError: isExpectedError,
     _parent: undefined!,
     _value: undefined,
-    _setData: new Set(),
+    _callbacks: errorCallbacks,
   } as Partial<ErrorState<any>> as ErrorState<any>;
+
+  const stateCallbacks: ValueChangeCallbacks = new Set();
 
   const state = handleState<LoadableState<any, any, any>>(
     {
@@ -289,7 +295,7 @@ const getAsyncState = <D>(
         ? {
             _timeout: loadingTimeout,
             _timeoutId: undefined,
-            _callbackSet: new Set(),
+            _callbacks: new Set(),
           }
         : null,
       _keys,
@@ -297,25 +303,36 @@ const getAsyncState = <D>(
       _tickStart: _tickStart || noop,
       _parent,
       get,
-      _setData,
+      _callbacks: stateCallbacks,
+      _children: undefined,
       set,
       _commonSet,
-      _onValueChange: onValueChange,
-      load: (_load && load)!,
-      _load: _load!,
+      _onValueChange: createSubscribe(stateCallbacks),
+      load: _load as any,
       error: errorState,
-      isLoaded: {
-        _onValueChange,
-        get,
-        _set: setInner,
-        _value: false,
-        _setData: new Set(),
-      } as IsLoadedState,
+      isLoaded: createSimpleState(false),
       control: undefined!,
+      _subscribeWithError: alwaysNoop,
+      _subscribeWithLoad: _load && alwaysNoop,
+      _valueToggler: 0,
     },
     options.value,
     stateInitializer,
     _keys
+  );
+
+  const load = _load && createLoader(_load, state);
+
+  if (load) {
+    state.load = load;
+
+    state._subscribeWithLoad = createLoadableSubscribe(stateCallbacks, load);
+  }
+
+  state._subscribeWithError = createSubscribeWithError(
+    stateCallbacks,
+    errorCallbacks,
+    load || alwaysNoop
   );
 
   const value = state._value;

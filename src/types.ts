@@ -12,15 +12,9 @@ export type Falsy = Nil | false | 0 | '';
 
 export type ValueChangeCallbacks = Set<(value: any) => void>;
 
-export type StateCallbackMap = {
-  _root: ValueChangeCallbacks | null;
-  _children: Map<string, StateCallbackMap> | null;
-  readonly _parent?: StateCallbackMap;
-};
-
-export type InternalSetData<D> = {
-  readonly _setData: D;
-};
+export type ScopeCallbackMap = Partial<
+  Pick<StateBase, '_callbacks' | '_children'>
+>;
 
 declare const STATE_MARKER: unique symbol;
 
@@ -29,14 +23,17 @@ export declare class StateBase<T = any> {
   _value: any;
   [STATE_MARKER]: T;
   /** @internal */
-  _onValueChange(
-    cb: (value: any) => void,
-    path?: readonly string[]
-  ): () => void;
+  _onValueChange(cb: (value: any) => void): () => void;
   /** @internal */
   get(): any;
   /** @internal */
   readonly _path?: readonly string[];
+  /** @internal */
+  readonly _callbacks: ValueChangeCallbacks;
+  /** @internal */
+  _children?: Map<string, ScopeCallbackMap> | undefined;
+  /** @internal */
+  _valueToggler: 0 | 1;
 }
 
 /**
@@ -56,24 +53,20 @@ export interface State<Value = any> extends StateBase<Value> {
   get(): Value;
 }
 
-export type ErrorState<Error> = StateBase<Error> &
+export type ErrorState<Error> = StateBase<Error> & {
+  set(error: Error | undefined): void;
+  get(): Error | undefined;
   /** @internal */
-  InternalSetData<ValueChangeCallbacks> & {
-    set(error: Error | undefined): void;
-    get(): Error | undefined;
-    /** @internal */
-    readonly _parent: AsyncState;
-    /** @internal */
-    _isExpectedError?(err: any): boolean;
-  };
+  readonly _parent: AsyncState;
+  /** @internal */
+  _isExpectedError?(err: any): boolean;
+};
 
-export type IsLoadedState = StateBase<boolean> &
+export type IsLoadedState = StateBase<boolean> & {
   /** @internal */
-  InternalSetData<ValueChangeCallbacks> & {
-    /** @internal */
-    _set(value: boolean): void;
-    get(): boolean;
-  };
+  set(value: boolean): void;
+  get(): boolean;
+};
 
 /**
  * Represents a state that manages an asynchronous value, including {@link AsyncState.isLoaded loading} and {@link AsyncState.error error} states.
@@ -90,8 +83,6 @@ export interface AsyncState<Value = any, Error = any> extends StateBase<Value> {
   readonly isLoaded: IsLoadedState;
   /** @internal */
   _commonSet: State['set'];
-  /** @internal */
-  _load?(...args: any[]): (() => void) | void;
   get(): Value | undefined;
   /** @internal */
   set(value: any, path?: readonly string[], isError?: boolean): void;
@@ -102,7 +93,7 @@ export interface AsyncState<Value = any, Error = any> extends StateBase<Value> {
   readonly _slowLoading: {
     readonly _timeout: number;
     _timeoutId: ReturnType<typeof setTimeout> | undefined;
-    readonly _callbackSet: Set<() => void>;
+    readonly _callbacks: Set<() => void>;
   } | null;
   /** @internal */
   _counter: number;
@@ -140,6 +131,10 @@ export interface AsyncState<Value = any, Error = any> extends StateBase<Value> {
   _tickEnd(): void;
   /** @internal */
   readonly _parent: PaginatedStorage<any> | undefined;
+  /** @internal */
+  _subscribeWithLoad?(cb: () => void): () => void;
+  /** @internal */
+  _subscribeWithError(cb: () => void): () => void;
 }
 
 /**
@@ -173,8 +168,6 @@ export type LoadableState<
    * ```
    */
   load(force?: boolean): () => void;
-  /** @internal */
-  _load(...args: any[]): (() => void) | void;
 } & ([Control] extends [never] ? {} : { readonly control: Control });
 
 declare const SCOPE_MARKER: unique symbol;
@@ -417,9 +410,7 @@ export type PaginatedStorageOptions<T> = {
 export type PaginatedStorage<T extends LoadableState | ScopeMarker> = {
   /** @internal */
   readonly _keys: any[] | undefined;
-  readonly page: State<number> &
-    /** @internal */
-    InternalSetData<ValueChangeCallbacks>;
+  readonly page: State<number>;
   /** @internal */
   readonly _storage: Map<number, T>;
   /** @internal */
@@ -497,3 +488,20 @@ export type StateInitializer<T = any> = (
 export type ContainerType =
   | ComponentType<PropsWithChildren>
   | keyof JSX.IntrinsicElements;
+
+export type Converter<T> = {
+  /**
+   * Serializes the specified value into a string.
+   *
+   * @param value - The value to be serialized.
+   * @returns The serialized value as a string.
+   */
+  stringify(value: T): string;
+  /**
+   * Parses the specified string and returns the deserialized value.
+   *
+   * @param value - The string to be parsed.
+   * @returns The deserialized value.
+   */
+  parse(value: string): T;
+};

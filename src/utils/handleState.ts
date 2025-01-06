@@ -1,11 +1,6 @@
 import noop from 'lodash.noop';
-import type {
-  AsyncState,
-  InternalSetData,
-  State,
-  StateInitializer,
-} from '../types';
-import { postBatchCallbacksPush } from './batching';
+import type { AsyncState, State, StateInitializer } from '../types';
+import { postBatchCallbacksPush, scheduleBatch } from './batching';
 
 const finalizationRegistry: Pick<
   FinalizationRegistry<() => void>,
@@ -31,8 +26,8 @@ const _WeakRef =
         }
       } as typeof WeakRef);
 
-const handleState = <S extends State | AsyncState, D = any>(
-  state: Omit<S, symbol> & InternalSetData<D>,
+const handleState = <S extends State | AsyncState>(
+  state: Omit<S, symbol>,
   value: unknown | (() => unknown) | undefined,
   stateInitializer: StateInitializer | undefined,
   keys: any[] | undefined
@@ -57,10 +52,12 @@ const handleState = <S extends State | AsyncState, D = any>(
     state._value = value;
 
     if (observe) {
-      let callable = true;
+      let storageValue: any;
+
+      let isSafe = true;
 
       state._onValueChange((value) => {
-        if (callable) {
+        if (isSafe || value !== storageValue) {
           set(value);
         }
       });
@@ -73,8 +70,6 @@ const handleState = <S extends State | AsyncState, D = any>(
           const state = stateRef.deref();
 
           if (state) {
-            callable = false;
-
             if (newValue === undefined) {
               newValue =
                 typeof originalValue == 'function'
@@ -82,11 +77,19 @@ const handleState = <S extends State | AsyncState, D = any>(
                   : originalValue;
             }
 
-            state.set(newValue);
+            isSafe = false;
+
+            storageValue = newValue;
 
             postBatchCallbacksPush(() => {
-              callable = true;
+              isSafe = true;
+
+              storageValue = undefined;
             });
+
+            scheduleBatch();
+
+            state.set(newValue);
           }
         })
       );
@@ -94,12 +97,12 @@ const handleState = <S extends State | AsyncState, D = any>(
       state._onValueChange(set);
     }
 
-    return state as any as S;
+    return state as any;
   }
 
   state._value = typeof value == 'function' ? value(keys) : value;
 
-  return state as any as S;
+  return state as any;
 };
 
 export default handleState;

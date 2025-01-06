@@ -1,11 +1,10 @@
-import { useContext } from 'react';
+import { useContext, useSyncExternalStore } from 'react';
 import type { AsyncState, Falsy } from '../types';
-import useNoop from '../utils/useNoop';
 import ErrorBoundaryContext from '../utils/ErrorBoundaryContext';
 import SuspenseContext from '../utils/SuspenseContext';
 import handleSuspense from '../utils/handleSuspense';
-import useHandleSuspenseValue from '../utils/useHandleSuspenseValue';
-import useForceRerender from 'react-helpful-utils/useForceRerender';
+import alwaysNoop from '../utils/alwaysNoop';
+import noop from 'lodash.noop';
 
 const use: {
   /**
@@ -67,7 +66,16 @@ const use: {
     }
 
     if (state._root._value !== undefined || isError) {
-      const value = useHandleSuspenseValue(state, useForceRerender());
+      const withValueWatching = !state._awaitOnly;
+
+      useSyncExternalStore(state._subscribeWithError, () =>
+        withValueWatching
+          ? (state.error._valueToggler << 1) | state._valueToggler
+          : (((state.error !== undefined) as any) << 1) |
+            ((state._root._value !== undefined) as any)
+      );
+
+      const value = withValueWatching ? state.get() : undefined;
 
       return safeReturn ? [value, err] : value;
     }
@@ -75,7 +83,7 @@ const use: {
     throw handleSuspense(state, errorBoundaryCtx, suspenseCtx);
   }
 
-  useNoop();
+  useSyncExternalStore(alwaysNoop, noop);
 };
 
 export default use;

@@ -17,9 +17,7 @@ const onValueChange = ((
       const values = state.map((state) => state.get());
 
       for (let i = 0; i < l; i++) {
-        const item = state[i];
-
-        unlisteners[i] = item._onValueChange((value) => {
+        unlisteners[i] = state[i]._onValueChange((value) => {
           values[i] = value;
 
           if (isAvailable) {
@@ -47,9 +45,7 @@ const onValueChange = ((
       };
 
       for (let i = 0; i < l; i++) {
-        const item = state[i];
-
-        unlisteners[i] = item._onValueChange(fn);
+        unlisteners[i] = state[i]._onValueChange(fn);
       }
     }
 

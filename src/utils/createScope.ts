@@ -1,12 +1,23 @@
-import type { AsyncState, LoadableState, State } from '../types';
+import type {
+  LoadableState,
+  ScopeCallbackMap,
+  State,
+  ValueChangeCallbacks,
+} from '../types';
+import alwaysNoop from './alwaysNoop';
 import concat from './concat';
 import { $tate } from './constants';
-import { load } from './state/wrapped';
+import {
+  createLoadableSubscribe,
+  createSubscribeWithError,
+} from './createAsyncSubscribe';
+import createSubscribe from './createSubscribe';
 
 type Child = {
   readonly _root: State | LoadableState<any, any, any>;
-  readonly _storage: Map<string, State | Child>;
+  readonly _storage: ScopeMap;
   readonly _path: readonly string[];
+  _parent: ScopeCallbackMap;
 };
 
 type ScopeMap = Map<typeof $tate, State | LoadableState<any, any, any>> &
@@ -32,10 +43,6 @@ function set(this: State, value: any) {
   return this._root!.set(value, this._path, false);
 }
 
-function _onValueChange(this: State, cb: (value: any) => void) {
-  return this._root!._onValueChange(cb, this._path);
-}
-
 const childHandler: ProxyHandler<Child> = {
   get(target, prop: string) {
     const { _storage } = target;
@@ -44,43 +51,74 @@ const childHandler: ProxyHandler<Child> = {
       return _storage.get(prop);
     }
 
-    const state = target._root;
+    const rootState = target._root;
 
-    const next =
-      prop != $tate
-        ? new Proxy(
-            {
-              _storage: new Map(),
-              _root: state,
-              _path: concat(target._path, prop),
-            },
-            childHandler
-          )
-        : '_load' in state
+    const currentState = target._parent;
+
+    let next;
+
+    if (prop != $tate) {
+      const nextState: ScopeCallbackMap = { _children: undefined };
+
+      next = new Proxy(
+        {
+          _storage: new Map(),
+          _root: rootState,
+          _path: concat(target._path, prop),
+          _parent: nextState,
+        },
+        childHandler
+      );
+
+      if (!currentState._children) {
+        currentState._children = new Map();
+      }
+
+      currentState._children.set(prop, nextState);
+    } else {
+      const callbacks: ValueChangeCallbacks = new Set();
+
+      next = Object.assign(
+        currentState,
+        'load' in rootState
           ? ({
-              _root: state,
+              _root: rootState,
               _path: target._path,
               get,
               set,
-              _onValueChange,
-              load: (state as AsyncState)._load && load,
-              control: state.control,
-              error: state.error,
-              isLoaded: state.isLoaded,
+              _onValueChange: createSubscribe(callbacks),
+              _subscribeWithError: createSubscribeWithError(
+                callbacks,
+                rootState.error._callbacks,
+                rootState.load || alwaysNoop
+              ),
+              _subscribeWithLoad:
+                rootState.load &&
+                createLoadableSubscribe(callbacks, rootState.load),
+              load: rootState.load,
+              control: rootState.control,
+              error: rootState.error,
+              isLoaded: rootState.isLoaded,
+              _valueToggler: 0,
+              _children: currentState._children,
             } as Partial<LoadableState<any, any, any>> as LoadableState<
               any,
               any,
               any
             >)
           : ({
-              _root: state,
+              _root: rootState,
               _path: target._path,
               get,
               set,
-              _onValueChange,
-            } as State);
+              _onValueChange: createSubscribe(callbacks),
+              _valueToggler: 0,
+              _children: currentState._children,
+            } as State)
+      );
+    }
 
-    _storage.set(prop, next);
+    _storage.set(prop, next as any);
 
     return next;
   },
@@ -92,14 +130,25 @@ const rootHandler: ProxyHandler<ScopeMap> = {
       return _storage.get(prop);
     }
 
+    const state = _storage.get($tate)!;
+
+    const nextState: ScopeCallbackMap = { _children: undefined };
+
     const next = new Proxy(
       {
         _storage: new Map(),
-        _root: _storage.get($tate)!,
+        _root: state,
         _path: [prop],
+        _parent: nextState,
       },
       childHandler
     );
+
+    if (!state._children) {
+      state._children = new Map();
+    }
+
+    state._children.set(prop, nextState);
 
     _storage.set(prop, next);
 
@@ -107,12 +156,7 @@ const rootHandler: ProxyHandler<ScopeMap> = {
   },
 };
 
-const createScope = (state: State) => {
-  const map: ScopeMap = new Map();
-
-  map.set($tate, state);
-
-  return new Proxy(map, rootHandler) as any;
-};
+const createScope = (state: State): any =>
+  new Proxy(new Map().set($tate, state), rootHandler);
 
 export default createScope;

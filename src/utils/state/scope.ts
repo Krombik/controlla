@@ -1,14 +1,9 @@
 import noop from 'lodash.noop';
-import type {
-  InternalSetData,
-  State,
-  StateCallbackMap,
-  ValueChangeCallbacks,
-} from '../../types';
+import type { State, ScopeCallbackMap } from '../../types';
 import { addToBatch } from '../batching';
 import processStateChanges from '../processStateChanges';
 
-type ScopedState = State & InternalSetData<StateCallbackMap>;
+type ScopedState = State & ScopeCallbackMap;
 
 const deepSet = (
   value: any,
@@ -48,82 +43,6 @@ const deepSet = (
   return arr;
 };
 
-export function _onValueChange(
-  this: ScopedState,
-  cb: (value: any) => void,
-  path?: readonly string[]
-) {
-  let length = path ? path.length : 0;
-
-  let parent = this._setData;
-
-  let set: ValueChangeCallbacks | undefined;
-
-  for (let i = 0, l = length; i < l; i++) {
-    if (parent._children) {
-      let child = parent._children.get(path![i]);
-
-      if (child) {
-        parent = child;
-
-        continue;
-      }
-    } else {
-      parent._children = new Map();
-    }
-
-    let children = parent._children;
-
-    for (l--; i < l; i++) {
-      children.set(
-        path![i],
-        (parent = {
-          _root: null,
-          _children: (children = new Map()),
-          _parent: parent,
-        })
-      );
-    }
-
-    children.set(
-      path![l],
-      (parent = { _root: (set = new Set()), _children: null, _parent: parent })
-    );
-  }
-
-  if (!set) {
-    if (parent._root) {
-      set = parent._root;
-    } else {
-      parent._root = set = new Set();
-    }
-  }
-
-  set.add(cb);
-
-  return () => {
-    if (set.delete(cb) && !set.size) {
-      parent._root = null;
-
-      if (!parent._children) {
-        for (parent = parent._parent!; length--; parent = parent._parent!) {
-          const children = parent._children;
-
-          if (children && children.size != 1) {
-            children.delete(path![length]);
-          } else {
-            parent._children = null;
-          }
-
-          if (parent._root) {
-            break;
-          }
-        }
-      }
-    }
-  };
-}
-
 export function set(
   this: ScopedState,
   nextValue: any,
@@ -131,15 +50,13 @@ export function set(
 ) {
   const self = this;
 
-  let currentNode: StateCallbackMap | null | undefined = self._setData;
+  let currentNode: ScopeCallbackMap | State | undefined = self;
 
   let prevValue = self._value;
 
-  const root = currentNode._root;
-
   const l = path ? path.length : 0;
 
-  const nodesQueue: ValueChangeCallbacks[] = [];
+  const nodesQueue: State[] = [];
 
   const valuesArr: any[] = [];
 
@@ -153,8 +70,8 @@ export function set(
     currentNode = currentNode._children && currentNode._children.get(k);
 
     if (currentNode) {
-      if (currentNode._root) {
-        nodesQueue.push(currentNode._root);
+      if (currentNode._callbacks && currentNode._callbacks.size) {
+        nodesQueue.push(currentNode as State);
 
         pushArr[i] = pushToValuesArr;
       } else {
@@ -184,8 +101,8 @@ export function set(
       addToBatch(nodesQueue[i], valuesArr[i]);
     }
 
-    if (root) {
-      addToBatch(root, nextValue);
+    if (self._callbacks.size) {
+      addToBatch(self, nextValue);
     }
   }
 }

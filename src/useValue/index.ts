@@ -1,28 +1,24 @@
-import { useLayoutEffect } from 'react';
+import { useSyncExternalStore } from 'react';
 import type {
   AnyAsyncState,
   AsyncState,
   Falsy,
   StateBase as State,
 } from '../types';
-import onValueChange from '../onValueChange';
-import useNoop from '../utils/useNoop';
-import useForceRerender from 'react-helpful-utils/useForceRerender';
-import handleUnlisteners from '../utils/handleUnlisteners';
+import noop from 'lodash.noop';
+import alwaysNoop from '../utils/alwaysNoop';
 
 const useValue = ((state: AnyAsyncState | Falsy) => {
   if (state) {
-    const forceRerender = useForceRerender();
-
-    useLayoutEffect(
-      () => handleUnlisteners(onValueChange(state, forceRerender), state),
-      [state]
+    useSyncExternalStore(
+      state._subscribeWithLoad || state._onValueChange,
+      () => state._valueToggler
     );
 
     return state.get();
   }
 
-  useNoop();
+  useSyncExternalStore(alwaysNoop, noop);
 }) as {
   /**
    * A hook to retrieve the current value from the provided {@link state}.

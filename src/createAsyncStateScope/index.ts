@@ -4,11 +4,10 @@ import type {
   LoadableStateScope,
   LoadableStateOptions,
   StateInitializer,
-  StateCallbackMap,
 } from '../types';
 import createScope from '../utils/createScope';
 import getAsyncState from '../utils/getAsyncState';
-import { _onValueChange, set } from '../utils/state/scope';
+import { set } from '../utils/state/scope';
 
 const createAsyncStateScope: {
   /**
@@ -43,15 +42,13 @@ const createAsyncStateScope: {
   keys?: any[]
 ) =>
   createScope(
-    getAsyncState<StateCallbackMap>(
+    getAsyncState(
       set,
-      _onValueChange,
-      options,
+      options || {},
       stateInitializer,
       keys,
-      { _root: null, _children: null },
-      options.load,
-      options.Control
+      options && options.load,
+      options && options.Control
     )
   );
 

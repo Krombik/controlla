@@ -1,11 +1,11 @@
-import type { StateCallbackMap } from '../types';
+import type { ScopeCallbackMap, State } from '../types';
 import alwaysFalse from './alwaysFalse';
 import { addToBatch } from './batching';
 
 const objectPrototype = Object.prototype;
 
 const forEachChild = (
-  storage: Map<string, StateCallbackMap>,
+  storage: Map<string, ScopeCallbackMap>,
   fn: (key: string) => void
 ) => {
   const it = storage.keys();
@@ -20,7 +20,7 @@ const forEachChild = (
 const handleMandatoryCheck = (
   prevValue: any,
   nextValue: any,
-  storage: Map<string, StateCallbackMap>
+  storage: Map<string, ScopeCallbackMap>
 ): ((key: string) => boolean) | false => {
   let equalList: Set<string> | false = new Set();
 
@@ -32,8 +32,8 @@ const handleMandatoryCheck = (
     if (processStateChanges(prevValue[key], newValue, child)) {
       equalList = false;
 
-      if (child._root) {
-        addToBatch(child._root, newValue);
+      if (child._callbacks && child._callbacks.size) {
+        addToBatch(child as State, newValue);
       }
     } else if (equalList) {
       equalList.add(key);
@@ -46,12 +46,12 @@ const handleMandatoryCheck = (
 const handleNil = (
   prevValue: any,
   nextValue: any,
-  storage: StateCallbackMap
+  state: State | ScopeCallbackMap
 ) => {
-  const { _children, _root } = storage;
+  const { _children, _callbacks } = state;
 
-  if (_root) {
-    addToBatch(_root, nextValue);
+  if (_callbacks && _callbacks.size) {
+    addToBatch(state as State, nextValue);
   }
 
   if (_children && prevValue != nextValue) {
@@ -79,15 +79,15 @@ const handleNil = (
 const processStateChanges = (
   prevValue: any,
   nextValue: any,
-  storage: StateCallbackMap | undefined | false | null
+  state: State | ScopeCallbackMap | undefined | false | null
 ) => {
   if (prevValue === nextValue) {
     return false;
   }
 
   if (prevValue == null || nextValue == null) {
-    if (storage) {
-      handleNil(prevValue, nextValue, storage);
+    if (state) {
+      handleNil(prevValue, nextValue, state);
     }
 
     return true;
@@ -95,14 +95,12 @@ const processStateChanges = (
 
   const aPrototype = Object.getPrototypeOf(prevValue);
 
-  const root = storage && storage._root;
-
-  const children = storage && storage._children;
+  const children = state && state._children;
 
   if (aPrototype != Object.getPrototypeOf(nextValue)) {
-    if (storage) {
-      if (root) {
-        addToBatch(root, nextValue);
+    if (state) {
+      if (state._callbacks && state._callbacks.size) {
+        addToBatch(state as State, nextValue);
       }
 
       if (children) {

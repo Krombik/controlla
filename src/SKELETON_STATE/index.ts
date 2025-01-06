@@ -4,6 +4,7 @@ import alwaysFalse from '../utils/alwaysFalse';
 import type { ContextType } from 'react';
 import type SuspenseContext from '../utils/SuspenseContext';
 import type ErrorBoundaryContext from '../utils/ErrorBoundaryContext';
+import alwaysNoop from '../utils/alwaysNoop';
 
 export type SkeletonState = {
   /** @internal */
@@ -18,8 +19,6 @@ const NOOP_PROMISE_DESCRIPTOR: PropertyDescriptor = {
     return this;
   },
 };
-
-const alwaysNoop = () => noop;
 
 /**
  * A special state that remains permanently in a pending state.
@@ -58,7 +57,7 @@ const SKELETON_STATE = {
     }),
   } as LoadableState['_promise'],
   _slowLoading: {
-    _callbackSet: { add: noop, delete: noop },
+    _callbacks: { add: noop, delete: noop },
   } as LoadableState['_slowLoading'],
   _value: undefined,
   load: alwaysNoop,
@@ -83,10 +82,11 @@ const SKELETON_STATE = {
   } as Partial<LoadableState['error']> as LoadableState['error'],
   isLoaded: {
     get: alwaysFalse,
-    _set: noop,
+    set: noop,
     _onValueChange: alwaysNoop,
     _value: false,
   } as Partial<LoadableState['isLoaded']> as LoadableState['isLoaded'],
+  _subscribeWithError: alwaysNoop,
 } as Partial<SkeletonState> as SkeletonState;
 
 (SKELETON_STATE as Mutable<typeof SKELETON_STATE>)._root = SKELETON_STATE;

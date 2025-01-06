@@ -1,4 +1,4 @@
-import { useContext, useLayoutEffect } from 'react';
+import { useContext, useSyncExternalStore } from 'react';
 import type {
   AnyAsyncState,
   Falsy,
@@ -10,8 +10,7 @@ import noop from 'lodash.noop';
 import ErrorBoundaryContext from '../utils/ErrorBoundaryContext';
 import handleSuspense from '../utils/handleSuspense';
 import SuspenseContext from '../utils/SuspenseContext';
-import useForceRerender from 'react-helpful-utils/useForceRerender';
-import useHandleSuspenseValue from '../utils/useHandleSuspenseValue';
+import alwaysNoop from '../utils/alwaysNoop';
 
 /**
  * A hook to retrieve the current values and errors from multiple {@link states}.
@@ -86,8 +85,6 @@ const useAll = <
 
   const suspenseCtx = useContext(SuspenseContext);
 
-  const forceRerender = useForceRerender();
-
   for (let i = 0; i < l; i++) {
     const state = states[i];
 
@@ -101,7 +98,18 @@ const useAll = <
       }
 
       if (state._root._value !== undefined || isError) {
-        values[i] = useHandleSuspenseValue(state, forceRerender);
+        const withValueWatching = !state._awaitOnly;
+
+        useSyncExternalStore(state._subscribeWithError, () =>
+          withValueWatching
+            ? (state.error._valueToggler << 1) | state._valueToggler
+            : (((state.error !== undefined) as any) << 1) |
+              ((state._root._value !== undefined) as any)
+        );
+
+        if (withValueWatching) {
+          values[i] = state.get();
+        }
 
         errors[i] = err;
       } else {
@@ -157,7 +165,7 @@ const useAll = <
         });
       }
     } else {
-      useLayoutEffect(noop, [0]);
+      useSyncExternalStore(alwaysNoop, noop);
     }
   }
 

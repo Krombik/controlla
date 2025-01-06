@@ -269,7 +269,7 @@ interface CreateStorage {
       Keys
     >
   ): Storage<LoadableStateScope<T, E>, Keys>;
-  <T, const Keys extends PrimitiveOrNested[], E = any>(
+  <T, Keys extends PrimitiveOrNested[], E = any>(
     ...args: RequestableStateArgs<typeof createRequestableState, T, E, Keys>
   ): Storage<LoadableState<T, E>, Keys>;
 
