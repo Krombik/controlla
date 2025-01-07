@@ -4,7 +4,6 @@ import type {
   State,
   ValueChangeCallbacks,
 } from '../types';
-import alwaysNoop from './alwaysNoop';
 import concat from './concat';
 import { $tate } from './constants';
 import {
@@ -12,6 +11,7 @@ import {
   createSubscribeWithError,
 } from './createAsyncSubscribe';
 import createSubscribe from './createSubscribe';
+import { load } from './state/wrapped';
 
 type Child = {
   readonly _root: State | LoadableState<any, any, any>;
@@ -80,7 +80,7 @@ const childHandler: ProxyHandler<Child> = {
 
       next = Object.assign(
         currentState,
-        'load' in rootState
+        '_load' in rootState
           ? ({
               _root: rootState,
               _path: target._path,
@@ -90,12 +90,13 @@ const childHandler: ProxyHandler<Child> = {
               _subscribeWithError: createSubscribeWithError(
                 callbacks,
                 rootState.error._callbacks,
-                rootState.load || alwaysNoop
+                rootState
               ),
               _subscribeWithLoad:
-                rootState.load &&
-                createLoadableSubscribe(callbacks, rootState.load),
-              load: rootState.load,
+                rootState._load &&
+                createLoadableSubscribe(callbacks, rootState),
+              _callbacks: callbacks,
+              load: rootState._load && load,
               control: rootState.control,
               error: rootState.error,
               isLoaded: rootState.isLoaded,
@@ -112,6 +113,7 @@ const childHandler: ProxyHandler<Child> = {
               get,
               set,
               _onValueChange: createSubscribe(callbacks),
+              _callbacks: callbacks,
               _valueToggler: 0,
               _children: currentState._children,
             } as State)

@@ -97,10 +97,10 @@ export function set(
       for (let i = nodesQueue.length; i--; ) {
         addToBatch(nodesQueue[i], valuesArr[i]);
       }
+    }
 
-      if (self._callbacks.size) {
-        addToBatch(self, nextValue);
-      }
+    if (self._callbacks.size) {
+      addToBatch(self, nextValue);
     }
 
     self._value = nextValue;

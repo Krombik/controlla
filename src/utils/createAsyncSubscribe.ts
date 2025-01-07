@@ -1,12 +1,12 @@
 import noop from 'lodash.noop';
-import type { ValueChangeCallbacks } from '../types';
+import type { LoadableState, ValueChangeCallbacks } from '../types';
 import { postBatchCallbacksPush } from './batching';
 
 export const createLoadableSubscribe =
-  (set: ValueChangeCallbacks, load: () => () => void) => (cb: () => void) => {
+  (set: ValueChangeCallbacks, state: LoadableState) => (cb: () => void) => {
     set.add(cb);
 
-    const unload = load();
+    const unload = state.load();
 
     return () => {
       set.delete(cb);
@@ -19,12 +19,12 @@ export const createSubscribeWithError =
   (
     set: ValueChangeCallbacks,
     errorSet: ValueChangeCallbacks,
-    load: () => () => void
+    state: LoadableState
   ) =>
   (cb: () => void) => {
     let isAvailable = true;
 
-    const unload = load();
+    const unload = state._load ? state.load() : noop;
 
     const fn = () => {
       if (isAvailable) {

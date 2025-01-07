@@ -4,18 +4,11 @@ import { addToBatch } from './batching';
 
 const objectPrototype = Object.prototype;
 
-const forEachChild = (
-  storage: Map<string, ScopeCallbackMap>,
-  fn: (key: string) => void
-) => {
-  const it = storage.keys();
+const arrayPrototype = Array.prototype;
 
-  const next = it.next.bind(it);
+const datePrototype = Date.prototype;
 
-  for (let i = storage.size; i--; ) {
-    fn(next().value);
-  }
-};
+const getPrototypeOf = Object.getPrototypeOf;
 
 const handleMandatoryCheck = (
   prevValue: any,
@@ -24,55 +17,82 @@ const handleMandatoryCheck = (
 ): ((key: string) => boolean) | false => {
   let equalList: Set<string> | false = new Set();
 
-  forEachChild(storage, (key) => {
-    const child = storage.get(key)!;
+  const it = storage.keys();
+
+  const next = it.next.bind(it);
+
+  for (let i = storage.size; i--; ) {
+    const key = next().value;
+
+    const state = storage.get(key)!;
 
     const newValue = nextValue[key];
 
-    if (processStateChanges(prevValue[key], newValue, child)) {
+    if (processStateChanges(prevValue[key], newValue, state)) {
       equalList = false;
 
-      if (child._callbacks && child._callbacks.size) {
-        addToBatch(child as State, newValue);
+      if (state._callbacks && state._callbacks.size) {
+        addToBatch(state as State, newValue);
       }
     } else if (equalList) {
       equalList.add(key);
     }
-  });
+  }
 
   return equalList && equalList.has.bind(equalList);
 };
 
-const handleNil = (
-  prevValue: any,
+const handlePrevNil = (
   nextValue: any,
-  state: State | ScopeCallbackMap
+  storage: Map<string, ScopeCallbackMap>
 ) => {
-  const { _children, _callbacks } = state;
+  const it = storage.keys();
 
-  if (_callbacks && _callbacks.size) {
-    addToBatch(state as State, nextValue);
+  const itNext = it.next.bind(it);
+
+  for (let i = storage.size; i--; ) {
+    const key = itNext().value;
+
+    const next = nextValue[key];
+
+    if (next !== undefined) {
+      const state = storage.get(key)!;
+
+      if (state._children) {
+        handlePrevNil(next, state._children);
+      }
+
+      if (state._callbacks && state._callbacks.size) {
+        addToBatch(state as State, next);
+      }
+    }
   }
+};
 
-  if (_children && prevValue != nextValue) {
-    forEachChild(
-      _children,
-      prevValue == null
-        ? (key) => {
-            const next = nextValue[key];
+const handleNextNil = (
+  prevValue: any,
+  storage: Map<string, ScopeCallbackMap>
+) => {
+  const it = storage.keys();
 
-            if (next !== undefined) {
-              handleNil(undefined, next, _children.get(key)!);
-            }
-          }
-        : (key) => {
-            const prev = prevValue[key];
+  const next = it.next.bind(it);
 
-            if (prev !== undefined) {
-              handleNil(prev, undefined, _children.get(key)!);
-            }
-          }
-    );
+  for (let i = storage.size; i--; ) {
+    const key = next().value;
+
+    const prev = prevValue[key];
+
+    if (prev !== undefined) {
+      const state = storage.get(key)!;
+
+      if (state._children) {
+        handleNextNil(prev, state._children);
+      }
+
+      if (state._callbacks && state._callbacks.size) {
+        addToBatch(state as State, undefined);
+      }
+    }
   }
 };
 
@@ -85,27 +105,29 @@ const processStateChanges = (
     return false;
   }
 
+  const children = state && state._children;
+
   if (prevValue == null || nextValue == null) {
-    if (state) {
-      handleNil(prevValue, nextValue, state);
+    if (children) {
+      if (nextValue === undefined && prevValue !== undefined) {
+        handleNextNil(prevValue, children);
+      } else if (prevValue === undefined && nextValue !== undefined) {
+        handlePrevNil(nextValue, children);
+      }
     }
 
     return true;
   }
 
-  const aPrototype = Object.getPrototypeOf(prevValue);
+  if (typeof prevValue != 'object' && typeof nextValue != 'object') {
+    return true;
+  }
 
-  const children = state && state._children;
+  const aPrototype = getPrototypeOf(prevValue);
 
-  if (aPrototype != Object.getPrototypeOf(nextValue)) {
-    if (state) {
-      if (state._callbacks && state._callbacks.size) {
-        addToBatch(state as State, nextValue);
-      }
-
-      if (children) {
-        handleMandatoryCheck(prevValue, nextValue, children);
-      }
+  if (aPrototype != getPrototypeOf(nextValue)) {
+    if (children) {
+      handleMandatoryCheck(prevValue, nextValue, children);
     }
 
     return true;
@@ -122,15 +144,15 @@ const processStateChanges = (
 
     const aKeys = Object.keys(prevValue);
 
-    let i = aKeys.length;
+    const l = aKeys.length;
 
-    if (i != Object.keys(nextValue).length) {
+    if (l != Object.keys(nextValue).length) {
       return true;
     }
 
     const getStorage = children ? children.get.bind(children) : alwaysFalse;
 
-    while (i--) {
+    for (let i = 0; i < l; i++) {
       const key = aKeys[i];
 
       if (
@@ -144,7 +166,7 @@ const processStateChanges = (
     return false;
   }
 
-  if (Array.isArray(prevValue)) {
+  if (aPrototype == arrayPrototype) {
     const isChecked = children
       ? handleMandatoryCheck(prevValue, nextValue, children)
       : alwaysFalse;
@@ -175,7 +197,7 @@ const processStateChanges = (
     return false;
   }
 
-  if (prevValue instanceof Date) {
+  if (aPrototype == datePrototype) {
     return prevValue.getTime() != nextValue.getTime();
   }
 

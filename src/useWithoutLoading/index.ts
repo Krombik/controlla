@@ -2,7 +2,8 @@ import { useMemo } from 'react';
 import type { LoadableState } from '../types';
 import { get, set } from '../utils/state/wrapped';
 import { createSubscribeWithError } from '../utils/createAsyncSubscribe';
-import alwaysNoop from '../utils/alwaysNoop';
+
+const EMPTY_LOAD = { _load: undefined } as LoadableState;
 
 /**
  * A utility function to prevent hooks from triggering the loading behavior of a {@link state}.
@@ -23,7 +24,7 @@ const useWithoutLoading = <S extends LoadableState>(
             _subscribeWithError: createSubscribeWithError(
               state._root._callbacks,
               state.error._callbacks,
-              alwaysNoop
+              EMPTY_LOAD
             ),
             error: state.error,
             isLoaded: state.isLoaded,
@@ -39,7 +40,7 @@ const useWithoutLoading = <S extends LoadableState>(
             _subscribeWithError: createSubscribeWithError(
               state._callbacks,
               state.error._callbacks,
-              alwaysNoop
+              EMPTY_LOAD
             ),
             error: state.error,
             isLoaded: state.isLoaded,

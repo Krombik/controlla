@@ -135,6 +135,8 @@ export interface AsyncState<Value = any, Error = any> extends StateBase<Value> {
   _subscribeWithLoad?(cb: () => void): () => void;
   /** @internal */
   _subscribeWithError(cb: () => void): () => void;
+  /** @internal */
+  _load?(...args: any[]): (() => void) | void;
 }
 
 /**
