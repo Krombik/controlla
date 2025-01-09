@@ -219,7 +219,7 @@ export type PollableStateScope<Value = any, Error = any> = Scope &
 
 type StringToNumber<T> = T extends `${infer K extends number}` ? K : never;
 
-type ToIndex<T> = [Exclude<T, keyof []>] extends [never]
+export type ToIndex<T> = [Exclude<T, keyof []>] extends [never]
   ? number
   : StringToNumber<T>;
 
