@@ -34,7 +34,9 @@ export const scheduleBatch = () => {
 
         state._valueToggler = (state._valueToggler ^ 1) as 0 | 1;
 
-        executeSetters(state._callbacks, currMap.get(state));
+        if (state._callbacks.size) {
+          executeSetters(state._callbacks, currMap.get(state));
+        }
       }
 
       for (let i = 0; i < postBatchCallbacks.length; i++) {

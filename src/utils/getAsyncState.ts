@@ -201,9 +201,7 @@ function setError(this: ErrorState<any>, value: any) {
   if (self._value !== value) {
     self._value = value;
 
-    if (self._callbacks.size) {
-      addToBatch(self, value);
-    }
+    addToBatch(self, value);
 
     if (value !== undefined) {
       const parent = self._parent;

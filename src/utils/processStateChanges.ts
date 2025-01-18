@@ -31,7 +31,7 @@ const handleMandatoryCheck = (
     if (processStateChanges(prevValue[key], newValue, state)) {
       equalList = false;
 
-      if (state._callbacks && state._callbacks.size) {
+      if (state._callbacks) {
         addToBatch(state as State, newValue);
       }
     } else if (equalList) {
@@ -58,11 +58,11 @@ const handlePrevNil = (
     if (next !== undefined) {
       const state = storage.get(key)!;
 
-      if (state._children) {
+      if (state._children && next && typeof next == 'object') {
         handlePrevNil(next, state._children);
       }
 
-      if (state._callbacks && state._callbacks.size) {
+      if (state._callbacks) {
         addToBatch(state as State, next);
       }
     }
@@ -85,11 +85,11 @@ const handleNextNil = (
     if (prev !== undefined) {
       const state = storage.get(key)!;
 
-      if (state._children) {
+      if (state._children && prev && typeof prev == 'object') {
         handleNextNil(prev, state._children);
       }
 
-      if (state._callbacks && state._callbacks.size) {
+      if (state._callbacks) {
         addToBatch(state as State, undefined);
       }
     }
@@ -109,9 +109,17 @@ const processStateChanges = (
 
   if (prevValue == null || nextValue == null) {
     if (children) {
-      if (nextValue === undefined && prevValue !== undefined) {
+      if (
+        nextValue === undefined &&
+        prevValue &&
+        typeof prevValue == 'object'
+      ) {
         handleNextNil(prevValue, children);
-      } else if (prevValue === undefined && nextValue !== undefined) {
+      } else if (
+        prevValue === undefined &&
+        nextValue &&
+        typeof nextValue == 'object'
+      ) {
         handlePrevNil(nextValue, children);
       }
     }

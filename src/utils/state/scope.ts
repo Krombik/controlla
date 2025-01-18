@@ -70,7 +70,7 @@ export function set(
     currentNode = currentNode._children && currentNode._children.get(k);
 
     if (currentNode) {
-      if (currentNode._callbacks && currentNode._callbacks.size) {
+      if (currentNode._callbacks) {
         nodesQueue.push(currentNode as State);
 
         pushArr[i] = pushToValuesArr;
@@ -99,9 +99,7 @@ export function set(
       }
     }
 
-    if (self._callbacks.size) {
-      addToBatch(self, nextValue);
-    }
+    addToBatch(self, nextValue);
 
     self._value = nextValue;
   }

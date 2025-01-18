@@ -7,9 +7,7 @@ export function set(this: State, value: any) {
   if (self._value !== value) {
     self._value = value;
 
-    if (self._callbacks.size) {
-      addToBatch(self, value);
-    }
+    addToBatch(self, value);
   }
 }
 

@@ -2,7 +2,7 @@ import { State, ValueChangeCallbacks } from '../types';
 import createSubscribe from './createSubscribe';
 import { get, set } from './state/common';
 
-const createSimpleState = <T>(value: T) => {
+const createSimpleState = <T>(value?: T) => {
   const callbacks: ValueChangeCallbacks = new Set();
 
   return {
