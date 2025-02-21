@@ -15,20 +15,22 @@ const handleSuspense = (
   }
 
   if ((state as LoadableState).load) {
-    if (suspenseCtx) {
+    if (!suspenseCtx) {
+      throw new Error('No Suspense Wrapper');
+    }
+
+    if (!suspenseCtx.has(state)) {
       const unload = (state as LoadableState).load();
 
-      suspenseCtx.push(unload);
+      suspenseCtx.set(state, unload);
 
       if (errorBoundaryCtx) {
         errorBoundaryCtx.add(unload);
       }
-    } else {
-      throw new Error('No Suspense Wrapper');
     }
   }
 
-  return getPromise(state, true);
+  return getPromise(state);
 };
 
 export default handleSuspense;

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState } from 'react';
+import { useEffect } from 'react';
 import type { AsyncState, StateBase as State } from '../types';
 import onValueChange from '../onValueChange';
 
@@ -26,22 +26,12 @@ const useOnValueChange: {
     }) => void
   ): void;
 } = (state: State | State[], cb: (values: any[]) => void) => {
-  const [error, setError] = useState<any>();
-
-  if (error) {
-    throw error;
-  }
-
   const isArr = 'length' in state;
 
-  useLayoutEffect(
+  useEffect(
     () =>
       onValueChange(state as any, () => {
-        try {
-          cb(isArr ? state.map((state) => state.get()) : state.get());
-        } catch (err) {
-          setError(err);
-        }
+        cb(isArr ? state.map((state) => state.get()) : state.get());
       }),
     isArr ? state : [state]
   );

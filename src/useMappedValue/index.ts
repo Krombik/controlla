@@ -58,7 +58,7 @@ const useMappedValue = ((
       [state]
     ),
     () =>
-      mapper(state.get(), isLoadedState._value, errorState && errorState.get())
+      mapper(state.get(), isLoadedState._value, errorState && errorState._value)
   );
 }) as {
   /**

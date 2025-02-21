@@ -13,12 +13,15 @@ type SafeStorage = {
    * listener to observe storage changes
    * @returns a function to unsubscribe.
    */
-  listen?(key: string, onChange: (value: string) => void): () => void;
+  listen?(
+    key: string,
+    onChange: (value: string | undefined) => void
+  ): () => void;
 };
 
 type Converter<T> = {
   parse(value: string): T;
-  stringify(value: T): string;
+  stringify(value: Exclude<T, undefined>): string;
 };
 
 type Options<T> = {
@@ -59,8 +62,10 @@ export const safeLocalStorage =
     },
     listen(key, onChange) {
       const listener = (e: StorageEvent) => {
-        if (e.key == key && e.newValue != null) {
-          onChange(e.newValue);
+        if (e.key == key) {
+          const value = e.newValue;
+
+          onChange(value != null ? value : undefined);
         }
       };
 
@@ -109,7 +114,7 @@ const getPersistInitializer = <T>({
       },
       set(value) {
         if (value !== undefined) {
-          storage.setItem(key, converter.stringify(value));
+          storage.setItem(key, converter.stringify(value as any));
         } else {
           storage.removeItem(key);
         }
@@ -120,14 +125,16 @@ const getPersistInitializer = <T>({
               storage.listen!(key, (value) => {
                 let parsedValue: T;
 
-                try {
-                  parsedValue = converter.parse(value);
-                } catch {
-                  return;
+                if (value !== undefined) {
+                  try {
+                    parsedValue = converter.parse(value);
+                  } catch {
+                    return;
+                  }
                 }
 
-                if (isValid(parsedValue)) {
-                  setState(parsedValue);
+                if (isValid(parsedValue!)) {
+                  setState(parsedValue!);
                 }
               })
           : undefined,

@@ -39,7 +39,7 @@ const SKELETON_STATE = {
   _fakeSuspense(suspenseCtx, errorBoundaryCtx) {
     if (suspenseCtx) {
       return new Promise<void>((res) => {
-        suspenseCtx.push(res);
+        suspenseCtx.set({} as any, res);
 
         if (errorBoundaryCtx) {
           errorBoundaryCtx.add(res);
@@ -79,14 +79,17 @@ const SKELETON_STATE = {
     set: noop,
     _onValueChange: alwaysNoop,
     _value: undefined,
+    _valueToggler: 0,
   } as Partial<LoadableState['error']> as LoadableState['error'],
   isLoaded: {
     get: alwaysFalse,
     set: noop,
     _onValueChange: alwaysNoop,
     _value: false,
+    _valueToggler: 0,
   } as Partial<LoadableState['isLoaded']> as LoadableState['isLoaded'],
   _subscribeWithError: alwaysNoop,
+  _valueToggler: 0,
 } as Partial<SkeletonState> as SkeletonState;
 
 (SKELETON_STATE as Mutable<typeof SKELETON_STATE>)._root = SKELETON_STATE;

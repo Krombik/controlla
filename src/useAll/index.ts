@@ -89,7 +89,9 @@ const useAll = <
     const state = states[i];
 
     if (state) {
-      const err = state.error.get();
+      const errorState = state.error;
+
+      const err = errorState._value;
 
       const isError = err !== undefined;
 
@@ -97,14 +99,16 @@ const useAll = <
         throw err;
       }
 
-      if (state._root._value !== undefined || isError) {
+      const root = state._root;
+
+      if (root._value !== undefined || isError) {
         const withValueWatching = !state._awaitOnly;
 
         useSyncExternalStore(state._subscribeWithError, () =>
           withValueWatching
-            ? (state.error._valueToggler << 1) | state._valueToggler
-            : (((state.error !== undefined) as any) << 1) |
-              ((state._root._value !== undefined) as any)
+            ? (errorState._valueToggler << 1) | state._valueToggler
+            : (((errorState._value === undefined) as any) << 1) |
+              ((root._value !== undefined) as any)
         );
 
         if (withValueWatching) {
@@ -119,7 +123,7 @@ const useAll = <
           const state = states[i];
 
           if (state) {
-            const err = state.error.get();
+            const err = state.error._value;
 
             if (err === undefined) {
               if (state._root._value === undefined) {
@@ -142,25 +146,14 @@ const useAll = <
             }
           };
 
+          const rej = safeReturn ? onResolve : res;
+
           for (let i = 0; i < l; i++) {
-            const state = unloadedStates[i];
-
-            const error = state.error;
-
-            handleSuspense(state, errorBoundaryCtx, suspenseCtx).then(
-              onResolve,
-              safeReturn
-                ? error._isExpectedError
-                  ? (err) => {
-                      if (error._isExpectedError!(err)) {
-                        onResolve();
-                      } else {
-                        res();
-                      }
-                    }
-                  : onResolve
-                : res
-            );
+            handleSuspense(
+              unloadedStates[i]._root,
+              errorBoundaryCtx,
+              suspenseCtx
+            ).then(onResolve, rej);
           }
         });
       }

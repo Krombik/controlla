@@ -14,7 +14,10 @@ const createState: {
     keys?: any[]
   ): State;
   <T>(): State<T | undefined>;
-  <T>(value: T | (() => T), stateInitializer?: StateInitializer<T>): State<T>;
+  <T>(
+    value: T | (() => T),
+    stateInitializer?: StateInitializer<T | undefined>
+  ): State<T>;
 } = (
   value?: unknown | (() => unknown),
   stateInitializer?: StateInitializer,

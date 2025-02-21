@@ -54,14 +54,13 @@ type AsyncStateCreator = typeof createAsyncState | typeof createAsyncStateScope;
 type AsyncGetStateArgs<
   CreateState extends AsyncStateCreator,
   T,
-  E,
   Keys extends PrimitiveOrNested[],
   ParentKeys extends PrimitiveOrNested[] = [],
 > = WithInitModule<
-  T,
+  T | undefined,
   [
     createState: CreateState,
-    options?: AsyncStateOptions<T, E, [...ParentKeys, ...Keys]>,
+    options?: AsyncStateOptions<T, [...ParentKeys, ...Keys]>,
   ]
 >;
 
@@ -73,7 +72,7 @@ type LoadableStateArgs<
   Keys extends PrimitiveOrNested[],
   ParentKeys extends PrimitiveOrNested[] = [],
 > = WithInitModule<
-  T,
+  T | undefined,
   [
     createState: CreateState,
     options: LoadableStateOptions<T, E, Control, [...ParentKeys, ...Keys]>,
@@ -91,7 +90,7 @@ type RequestableStateArgs<
   Keys extends PrimitiveOrNested[],
   ParentKeys extends PrimitiveOrNested[] = [],
 > = WithInitModule<
-  T,
+  T | undefined,
   [
     createState: CreateState,
     options: RequestableStateOptions<T, E, [...ParentKeys, ...Keys]>,
@@ -109,7 +108,7 @@ type PollableStateArgs<
   Keys extends PrimitiveOrNested[],
   ParentKeys extends PrimitiveOrNested[] = [],
 > = WithInitModule<
-  T,
+  T | undefined,
   [
     createState: CreateState,
     options: PollableStateOptions<T, E, [...ParentKeys, ...Keys]>,
@@ -164,13 +163,12 @@ type StateCreationArguments<
           Keys,
           ParentKeys
         >
-  : T extends AsyncState<infer V, infer E>
+  : T extends AsyncState<infer V>
     ? AsyncGetStateArgs<
         T extends AsyncStateScope
           ? typeof createAsyncStateScope
           : typeof createAsyncState,
         V,
-        E,
         Keys,
         ParentKeys
       >
@@ -255,10 +253,10 @@ interface CreateStorage {
   ): Storage<PollableState<T, E>, Keys>;
 
   <T, Keys extends PrimitiveOrNested[], E = any>(
-    ...args: AsyncGetStateArgs<typeof createAsyncStateScope, T, E, Keys>
+    ...args: AsyncGetStateArgs<typeof createAsyncStateScope, T, Keys>
   ): Storage<AsyncStateScope<T, E>, Keys>;
   <T, Keys extends PrimitiveOrNested[], E = any>(
-    ...args: AsyncGetStateArgs<typeof createAsyncState, T, E, Keys>
+    ...args: AsyncGetStateArgs<typeof createAsyncState, T, Keys>
   ): Storage<AsyncState<T, E>, Keys>;
 
   <T, Keys extends PrimitiveOrNested[], E = any>(

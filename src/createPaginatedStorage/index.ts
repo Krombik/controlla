@@ -106,7 +106,7 @@ function usePages(
   for (let i = 0; i < count; i++) {
     let state = getState(self.get(i));
 
-    errors[i] = state.error.get();
+    errors[i] = state.error._value;
 
     if (stableStorage.has(i)) {
       const _value = stableStorage.get(i);
@@ -219,7 +219,7 @@ function usePages(
 }
 
 type Args<CreateState, T, O> = WithInitModule<
-  T,
+  T | undefined,
   [createState: CreateState, options: O & PaginatedStorageOptions<T>]
 >;
 

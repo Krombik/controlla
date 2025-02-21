@@ -27,7 +27,7 @@ const createStateScope: {
   <T>(): StateScope<T | undefined>;
   <T>(
     value: T | (() => T),
-    stateInitializer?: StateInitializer<T>
+    stateInitializer?: StateInitializer<T | undefined>
   ): StateScope<T>;
 } = (
   value?: unknown | (() => unknown),

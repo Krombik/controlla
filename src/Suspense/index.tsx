@@ -21,15 +21,17 @@ const Fallback: FC<PropsWithChildren<{ _ctx: Ctx }>> = (props) => {
 
   useEffect(
     () => () => {
-      for (let i = ctx.length; i--; ) {
-        const unload = ctx[i];
+      const it = ctx.values();
+
+      for (let i = ctx.size; i--; ) {
+        const unload = it.next().value;
 
         unload();
 
         errorBoundaryCtx.delete(unload);
       }
 
-      ctx.length = 0;
+      ctx.clear();
     },
     []
   );
@@ -47,7 +49,7 @@ const Fallback: FC<PropsWithChildren<{ _ctx: Ctx }>> = (props) => {
  * ```
  */
 const Suspense: FC<SuspenseProps> = (props) => {
-  const ctx = useRef<Ctx>([]).current;
+  const ctx = useRef<Ctx>(new Map()).current;
 
   return (
     <ReactSuspense fallback={<Fallback _ctx={ctx}>{props.fallback}</Fallback>}>
