@@ -22,7 +22,7 @@ const createAsyncStateScope: {
    */
   <T, E = any, Control = never>(
     options: LoadableStateOptions<T, E, Control>,
-    stateInitializer?: StateInitializer<T>
+    stateInitializer?: StateInitializer<T | undefined>
   ): LoadableStateScope<T, E>;
   /**
    * Creates a {@link AsyncNestedState basic asynchronous nested state}
@@ -33,8 +33,8 @@ const createAsyncStateScope: {
    * ```
    */
   <T, E = any>(
-    options?: AsyncStateOptions<T, E>,
-    stateInitializer?: StateInitializer<T>
+    options?: AsyncStateOptions<T>,
+    stateInitializer?: StateInitializer<T | undefined>
   ): AsyncStateScope<T, E>;
 } = (
   options: LoadableStateOptions<any, any, any, any[]>,

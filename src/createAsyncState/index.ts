@@ -35,7 +35,7 @@ const createAsyncState = ((
    */
   <T, E = any, Control = never>(
     options: LoadableStateOptions<T, E, Control>,
-    stateInitializer?: StateInitializer<T>
+    stateInitializer?: StateInitializer<T | undefined>
   ): LoadableState<T, E, Control>;
   /**
    * Creates a {@link AsyncState basic asynchronous state}
@@ -46,8 +46,8 @@ const createAsyncState = ((
    * ```
    */
   <T, E = any>(
-    options?: AsyncStateOptions<T, E>,
-    stateInitializer?: StateInitializer<T>
+    options?: AsyncStateOptions<T>,
+    stateInitializer?: StateInitializer<T | undefined>
   ): AsyncState<T, E>;
 };
 

@@ -22,6 +22,7 @@ import {
   createLoadableSubscribe,
   createSubscribeWithError,
 } from './createAsyncSubscribe';
+import { RESOLVED_PROMISE } from './constants';
 
 const handleReloadOn = (
   reloadData: NonNullable<AsyncState['_reloadIfStale']>,
@@ -116,8 +117,53 @@ function set(
   handleSlowLoading(self._slowLoading, isLoaded);
 }
 
+const loaderCleanupSet = new Set<LoadableState>();
+
+let isLoadCleanupPending = true;
+
+const batchedUnload = (state: LoadableState) => {
+  loaderCleanupSet.add(state);
+
+  if (isLoadCleanupPending) {
+    isLoadCleanupPending = false;
+
+    RESOLVED_PROMISE.then(() => {
+      const it = loaderCleanupSet.values();
+
+      for (let i = loaderCleanupSet.size; i--; ) {
+        const state: LoadableState = it.next().value;
+
+        if (!state._counter) {
+          handleUnload(state);
+
+          if (!state.isLoaded._value) {
+            state._isLoadable = true;
+          }
+
+          if (state._reloadOnFocus) {
+            document.removeEventListener(
+              'visibilitychange',
+              state._reloadOnFocus._focusListener!
+            );
+          }
+        }
+      }
+
+      loaderCleanupSet.clear();
+
+      isLoadCleanupPending = true;
+    });
+  }
+};
+
 function load(this: LoadableState, reload?: boolean) {
-  let isNotCanceled = true;
+  let cleanup = () => {
+    cleanup = noop;
+
+    if (!--self._counter) {
+      batchedUnload(self);
+    }
+  };
 
   const self = this;
 
@@ -174,24 +220,7 @@ function load(this: LoadableState, reload?: boolean) {
   self._counter++;
 
   return () => {
-    if (isNotCanceled) {
-      isNotCanceled = false;
-
-      if (!--self._counter) {
-        handleUnload(self);
-
-        if (!self.isLoaded._value) {
-          self._isLoadable = true;
-        }
-
-        if (self._reloadOnFocus) {
-          document.removeEventListener(
-            'visibilitychange',
-            self._reloadOnFocus._focusListener!
-          );
-        }
-      }
-    }
+    cleanup();
   };
 }
 
@@ -217,18 +246,6 @@ function setError(this: ErrorState<any>, value: any) {
   }
 }
 
-function getError(this: ErrorState<any>) {
-  const self = this;
-
-  const err = self._value;
-
-  if (err === undefined || self._isExpectedError!(err)) {
-    return err;
-  }
-
-  throw err;
-}
-
 const getAsyncState = (
   _commonSet: LoadableState['_commonSet'],
   options: Omit<LoadableStateOptions, 'load'>,
@@ -240,21 +257,14 @@ const getAsyncState = (
   _tickEnd?: () => void,
   _parent?: PaginatedStorage<any>
 ): AnyAsyncState => {
-  const {
-    isExpectedError,
-    isLoaded,
-    reloadIfStale,
-    reloadOnFocus,
-    loadingTimeout,
-  } = options;
+  const { isLoaded, reloadIfStale, reloadOnFocus, loadingTimeout } = options;
 
   const errorCallbacks: ValueChangeCallbacks = new Set();
 
   const errorState = {
     _onValueChange: createSubscribe(errorCallbacks),
-    get: isExpectedError ? getError : get,
+    get,
     set: setError,
-    _isExpectedError: isExpectedError,
     _parent: undefined!,
     _value: undefined,
     _callbacks: errorCallbacks,

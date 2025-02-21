@@ -57,7 +57,9 @@ const use: {
   const suspenseCtx = useContext(SuspenseContext);
 
   if (state) {
-    const err = state.error.get();
+    const errorState = state.error;
+
+    const err = errorState._value;
 
     const isError = err !== undefined;
 
@@ -65,14 +67,16 @@ const use: {
       throw err;
     }
 
-    if (state._root._value !== undefined || isError) {
+    const root = state._root;
+
+    if (root._value !== undefined || isError) {
       const withValueWatching = !state._awaitOnly;
 
       useSyncExternalStore(state._subscribeWithError, () =>
         withValueWatching
-          ? (state.error._valueToggler << 1) | state._valueToggler
-          : (((state.error !== undefined) as any) << 1) |
-            ((state._root._value !== undefined) as any)
+          ? (errorState._valueToggler << 1) | state._valueToggler
+          : (((errorState._value === undefined) as any) << 1) |
+            ((root._value !== undefined) as any)
       );
 
       const value = withValueWatching ? state.get() : undefined;
@@ -80,7 +84,7 @@ const use: {
       return safeReturn ? [value, err] : value;
     }
 
-    throw handleSuspense(state, errorBoundaryCtx, suspenseCtx);
+    throw handleSuspense(root, errorBoundaryCtx, suspenseCtx);
   }
 
   useSyncExternalStore(alwaysNoop, noop);

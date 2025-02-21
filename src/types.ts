@@ -58,8 +58,6 @@ export type ErrorState<Error> = StateBase<Error> & {
   get(): Error | undefined;
   /** @internal */
   readonly _parent: AsyncState;
-  /** @internal */
-  _isExpectedError?(err: any): boolean;
 };
 
 export type IsLoadedState = StateBase<boolean> & {
@@ -243,25 +241,13 @@ export type ExtractErrors<T extends Array<AsyncState | Falsy>> = Readonly<{
     : undefined;
 }>;
 
-export type AsyncStateOptions<
-  T,
-  E = any,
-  Keys extends PrimitiveOrNested[] = never,
-> = {
+export type AsyncStateOptions<T, Keys extends PrimitiveOrNested[] = never> = {
   /** The initial value of the state or a function to resolve it using keys. */
   value?: T | ((...args: [Keys] extends [never] ? [] : [keys: Keys]) => T);
   /** A function to determine if the state is considered loaded, based on the {@link value current} and {@link prevValue previous} values and the number of loading {@link attempt attempts}. */
   isLoaded?(value: T, prevValue: T | undefined, attempt: number): boolean;
   /** The timeout in milliseconds for considering the loading process slow. */
   loadingTimeout?: number;
-  /**
-   * A type guard function used to determine if an error is considered an expected error.
-   *
-   * If `isExpectedError` returns `false` for an error, subsequent attempts to retrieve
-   * the value of the associated error state using `getValue` or any hook will throw the error.
-   * This ensures that unexpected errors are surfaced when accessing the error state.
-   */
-  isExpectedError?(error: any): error is E;
 };
 
 interface WithControl<Control, S> {
@@ -273,7 +259,7 @@ export type LoadableStateOptions<
   E = any,
   Control = never,
   Keys extends PrimitiveOrNested[] = never,
-> = AsyncStateOptions<T, E, Keys> & {
+> = AsyncStateOptions<T, Keys> & {
   /**
    * A function to initiate the loading process. This method can optionally return
    * a cleanup function to be called when the loading is complete or canceled.
@@ -506,4 +492,189 @@ export type Converter<T> = {
    * @returns The deserialized value.
    */
   parse(value: string): T;
+};
+
+export type Route = {
+  readonly _key: string;
+  readonly _component: ComponentType;
+  readonly _scope: StateScope | undefined;
+  readonly _queryScheme: Record<string, SchemaItem<any>> | undefined;
+  readonly _paramsConverters: Record<string, Converter<any>>;
+  readonly _pathMap: Array<string | string[]>;
+  _path: string;
+  readonly _queryParams: Map<string, string> | undefined;
+};
+
+type ExtractParams<T extends string> =
+  T extends `${any}:${infer Param}/${infer Rest}`
+    ? Param | ExtractParams<Rest>
+    : T extends `${any}:${infer Param}`
+      ? Param
+      : never;
+
+type TakeAll<T extends string> = T extends `${infer K}|${infer Rest}`
+  ? K | (Rest extends `${any}|${any}` ? TakeAll<Rest> : Rest)
+  : never;
+
+type ExtractEnums<
+  T extends string,
+  Arr extends string[] = [],
+> = T extends `/${infer First}/${infer K}`
+  ? First extends `${any}|${any}`
+    ? [...Arr, TakeAll<First>, ...ExtractEnums<`/${K}`, Arr>]
+    : [...Arr, ...ExtractEnums<`/${K}`, Arr>]
+  : T extends `/${infer First}`
+    ? First extends `${any}|${any}`
+      ? [...Arr, TakeAll<First>]
+      : Arr
+    : [];
+
+type NumerableRecord<A extends any[]> = [] extends A
+  ? {}
+  : {
+      [key in ToIndex<keyof A>]: A[key];
+    };
+
+export type SchemaItem<T> = {
+  required?: boolean;
+  converter: Converter<T>;
+  defaultValue?: T;
+};
+
+type Params<R extends {}, Q extends {}> = { query: Q; route: R };
+
+export type RouterCreator<T extends Record<string, Params<any, any>> = {}> = {
+  add<
+    const K extends `/${string}`,
+    S extends {
+      [key in keyof Q]: SchemaItem<any>;
+    },
+    R extends { [key in ExtractParams<K>]?: any } = {},
+    Q extends { [key in string]: any } = {},
+  >(
+    key: K extends keyof T ? never : K extends `${any}/` ? never : K,
+    Component: ComponentType,
+    options?: {
+      query?: S & {
+        [key in keyof Q]: SchemaItem<Q[key]>;
+      };
+      alternatives?: {
+        [key in string]: ExtractParams<key> extends ExtractParams<K>
+          ?
+              | {
+                  [key in keyof R]: key extends ExtractParams<K>
+                    ? Converter<R[key]>
+                    : never;
+                }
+              | true
+          : never;
+      };
+      startsWith?: boolean;
+    } & ({} extends R
+      ? {}
+      : {
+          params?: {
+            [key in keyof R]: key extends ExtractParams<K>
+              ? Converter<R[key]>
+              : never;
+          };
+        })
+  ): RouterCreator<
+    T & {
+      [key in K]: Params<
+        R & {
+          [key in Exclude<ExtractParams<K>, keyof R>]: string;
+        } & NumerableRecord<ExtractEnums<K>>,
+        {
+          [key in keyof S]: key extends keyof Q
+            ?
+                | Q[key]
+                | (S[key]['required'] extends true
+                    ? never
+                    : S[key]['defaultValue'] extends Q[key]
+                      ? never
+                      : undefined)
+            : never;
+        }
+      >;
+    }
+  >;
+  create(): Router<T>;
+};
+
+type Path = {
+  /** @internal */
+  readonly _route: Route;
+  /** @internal */
+  readonly _path: string | undefined;
+  /** @params */
+  readonly _params: Trr<Record<string, unknown>> | undefined;
+};
+
+export interface Navigation {
+  /** @internal */
+  readonly _router: Router<any>;
+
+  /** @internal */
+  readonly _items: Path[];
+
+  concat<R extends Router<any>, K extends R[typeof ROUTER_MARKER]>(
+    router: R,
+    route: K,
+    ...args: R extends Router<infer T>
+      ? T[K extends keyof T ? K : never] extends Params<infer P, infer Q>
+        ? {} extends P & Q
+          ? []
+          : [params: Trr<P & Q>]
+        : never
+      : never
+  ): this;
+  concat<R extends Router<any>, K extends R[typeof ROUTER_MARKER]>(
+    router: R,
+    route: K,
+    path: string,
+    ...args: R extends Router<infer T>
+      ? T[K extends keyof T ? K : never] extends Params<any, infer Q>
+        ? {} extends Q
+          ? []
+          : [params: Trr<Q>]
+        : never
+      : never
+  ): this;
+  navigate(replace?: boolean): void;
+}
+
+declare const ROUTER_MARKER: unique symbol;
+
+type Trr<T extends {}> = { [key in keyof T]: T[key] | State<T[key]> };
+
+export type Router<T extends Record<string, Params<any, any>>> = {
+  [ROUTER_MARKER]: keyof T;
+
+  /** @internal */
+  _getRoute(key: string): Route | undefined;
+
+  /** @internal */
+  _isMounted: boolean;
+
+  /** @internal */
+  _parent: Router<any> | null;
+
+  readonly currentRoute: State<keyof T | undefined>;
+
+  getParams<K extends keyof T>(): {} extends T[K]['query'] & T[K]['route']
+    ? undefined
+    : StateScope<T[K]['query'] & T[K]['route']>;
+
+  nav<K extends keyof T>(
+    route: K,
+    ...args: {} extends T[K]['query'] & T[K]['route']
+      ? []
+      : [params: Trr<T[K]['query'] & T[K]['route']>]
+  ): Navigation;
+  nav<K extends keyof T>(
+    route: K,
+    path: string,
+    ...args: {} extends T[K]['query'] ? [] : [params: Trr<T[K]['query']>]
+  ): Navigation;
 };

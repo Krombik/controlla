@@ -32,7 +32,7 @@ const createPollableState = ((
   /** Creates a {@link LoadableState loadable state} with polling capabilities. */
   <T, E = any>(
     options: PollableStateOptions<T, E>,
-    stateInitializer?: StateInitializer<T>
+    stateInitializer?: StateInitializer<T | undefined>
   ): PollableState<T, E>;
 };
 

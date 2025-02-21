@@ -17,7 +17,7 @@ const createRequestableStateScope: {
    */
   <T, E = any>(
     options: RequestableStateOptions<T, E>,
-    stateInitializer?: StateInitializer<T>
+    stateInitializer?: StateInitializer<T | undefined>
   ): LoadableStateScope<T, E>;
 } = (
   options: RequestableStateOptions<any, any, any[]>,

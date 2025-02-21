@@ -34,7 +34,7 @@ const createRequestableState = ((
    */
   <T, E = any>(
     options: RequestableStateOptions<T, E>,
-    stateInitializer?: StateInitializer<T>
+    stateInitializer?: StateInitializer<T | undefined>
   ): LoadableState<T, E>;
 };
 

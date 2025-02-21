@@ -13,7 +13,7 @@ const createPollableStateScope: {
   /** Creates a {@link ControllableLoadableNestedState controllable loadable nested state} with polling capabilities. */
   <T, E = any>(
     options: PollableStateOptions<T, E>,
-    stateInitializer?: StateInitializer<T>
+    stateInitializer?: StateInitializer<T | undefined>
   ): PollableStateScope<T, E>;
 } = (
   options: PollableStateOptions<any, any, any[]>,
