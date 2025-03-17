@@ -57,7 +57,7 @@ const handleSlowLoading = (
 };
 
 function set(
-  this: AsyncState,
+  this: LoadableState,
   value: any,
   path?: readonly string[],
   isError?: boolean
@@ -108,7 +108,11 @@ function set(
     self.error.set(undefined);
 
     if (!isSet) {
-      self._isLoadable = true;
+      if (self._counter) {
+        self.load(true)();
+      } else {
+        self._isLoadable = true;
+      }
     } else if (self._promise) {
       self._promise._resolve(newRootValue);
 
