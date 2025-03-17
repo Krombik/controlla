@@ -107,7 +107,9 @@ function set(
   if (!isError) {
     self.error.set(undefined);
 
-    if (isSet && self._promise) {
+    if (!isSet) {
+      self._isLoadable = true;
+    } else if (self._promise) {
       self._promise._resolve(newRootValue);
 
       self._promise = null;
