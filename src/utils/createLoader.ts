@@ -1,21 +1,22 @@
 import type {
+  InternalAsyncState,
   LoadableState,
   LoadableStateOptions,
   RequestableStateOptions,
 } from '../types';
 import becomingOnline from './becomingOnline';
-import { RESOLVED_PROMISE } from './constants';
+import { RESOLVED_PROMISE, ROOT } from './constants';
 
 const createLoader = <U extends Record<string, any> = never>(
   handleLoad: (
     cancelPromise: Promise<void>,
     fetch: () => Promise<true | void>,
-    self: LoadableState<any, any, U>
+    self: InternalAsyncState
   ) => void | Promise<void>,
   { fetch, shouldRetryOnError }: RequestableStateOptions<any, any, any[]>
 ) =>
   function (this: LoadableState<any, any, U>, ...args: any[]) {
-    const self = this;
+    const self = this as Partial<InternalAsyncState> as InternalAsyncState;
 
     let attempt = 0;
 
@@ -38,7 +39,7 @@ const createLoader = <U extends Record<string, any> = never>(
               attempt = 0;
 
               if (isRunning) {
-                self.set(value);
+                self._set(value);
 
                 return true;
               }
@@ -61,7 +62,7 @@ const createLoader = <U extends Record<string, any> = never>(
                   }
                 }
 
-                self.error.set(err);
+                self._errorState[ROOT]._set(err);
               }
             }
           )

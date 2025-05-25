@@ -1,5 +1,6 @@
+import noop from 'lodash.noop';
 import type { AsyncState, LoadableState } from '../types';
-import { get, load, set } from '../utils/state/wrapped';
+import { ROOT } from '../utils/constants';
 
 /** Makes the given {@link state} to be awaited only, without triggering re-renders on state changes. */
 const awaitOnly = <S extends AsyncState>(
@@ -8,34 +9,32 @@ const awaitOnly = <S extends AsyncState>(
   ? LoadableState<void, E, C>
   : S extends AsyncState<any, infer E>
     ? AsyncState<void, E>
-    : never =>
-  (state._root != state
-    ? {
-        _root: state._root,
-        load: (state as any as LoadableState).load,
-        get: state.get,
-        set: state.set,
-        _onValueChange: state._onValueChange,
-        _subscribeWithError: state._subscribeWithError,
-        _subscribeWithLoad: state._subscribeWithLoad,
-        error: state.error,
-        isLoaded: state.isLoaded,
-        control: (state as any as LoadableState<any, any, any>).control,
-        _path: state._path,
-        _awaitOnly: true,
-      }
-    : {
-        _root: state as any,
-        load: (state as any as LoadableState).load && load,
-        get,
-        set,
-        _onValueChange: state._onValueChange,
-        _subscribeWithError: state._subscribeWithError,
-        _subscribeWithLoad: state._subscribeWithLoad,
-        error: state.error,
-        isLoaded: state.isLoaded,
-        control: (state as any as LoadableState<any, any, any>).control,
-        _awaitOnly: true,
-      }) as LoadableState<any, any, any> as any;
+    : never => {
+  const utils = state[ROOT];
+
+  const root = utils[ROOT];
+
+  return {
+    [ROOT]:
+      root != utils
+        ? {
+            [ROOT]: root,
+            _get: noop,
+            _onValueChange: utils._onValueChange,
+            _subscribeWithError: utils._subscribeWithError,
+            _subscribeWithLoad: utils._subscribeWithLoad,
+            _path: utils._path,
+            _awaitOnly: true,
+          }
+        : {
+            [ROOT]: utils,
+            _get: noop,
+            _onValueChange: utils._onValueChange,
+            _subscribeWithError: utils._subscribeWithError,
+            _subscribeWithLoad: utils._subscribeWithLoad,
+            _awaitOnly: true,
+          },
+  } as LoadableState<any, any, any> as any;
+};
 
 export default awaitOnly;

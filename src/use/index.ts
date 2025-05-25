@@ -5,6 +5,7 @@ import SuspenseContext from '../utils/SuspenseContext';
 import handleSuspense from '../utils/handleSuspense';
 import alwaysNoop from '../utils/alwaysNoop';
 import noop from 'lodash.noop';
+import { ROOT } from '../utils/constants';
 
 const use: {
   /**
@@ -52,12 +53,12 @@ const use: {
       : Readonly<[value: T, error: undefined] | [value: undefined, error: E]>
     : undefined;
 } = (state, safeReturn) => {
-  const errorBoundaryCtx = useContext(ErrorBoundaryContext);
-
-  const suspenseCtx = useContext(SuspenseContext);
-
   if (state) {
-    const errorState = state.error;
+    const utils = state[ROOT];
+
+    const root = utils[ROOT];
+
+    const errorState = root._errorState[ROOT];
 
     const err = errorState._value;
 
@@ -67,24 +68,26 @@ const use: {
       throw err;
     }
 
-    const root = state._root;
-
     if (root._value !== undefined || isError) {
-      const withValueWatching = !state._awaitOnly;
+      const withValueWatching = !utils._awaitOnly;
 
-      useSyncExternalStore(state._subscribeWithError, () =>
+      useSyncExternalStore(utils._subscribeWithError, () =>
         withValueWatching
-          ? (errorState._valueToggler << 1) | state._valueToggler
+          ? (errorState._valueToggler << 1) | utils._valueToggler
           : (((errorState._value === undefined) as any) << 1) |
             ((root._value !== undefined) as any)
       );
 
-      const value = withValueWatching ? state.get() : undefined;
+      const value = withValueWatching ? utils._get() : undefined;
 
       return safeReturn ? [value, err] : value;
     }
 
-    throw handleSuspense(root, errorBoundaryCtx, suspenseCtx);
+    throw handleSuspense(
+      root,
+      useContext(ErrorBoundaryContext),
+      useContext(SuspenseContext)
+    );
   }
 
   useSyncExternalStore(alwaysNoop, noop);

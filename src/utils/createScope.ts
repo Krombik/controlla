@@ -1,34 +1,23 @@
 import type {
-  LoadableState,
-  ScopeCallbackMap,
-  State,
+  InternalAsyncState,
+  InternalState,
+  Mutable,
   ValueChangeCallbacks,
 } from '../types';
 import concat from './concat';
-import { $tate } from './constants';
+import { ROOT } from './constants';
 import {
   createLoadableSubscribe,
   createSubscribeWithError,
 } from './createAsyncSubscribe';
 import createSubscribe from './createSubscribe';
-import { load } from './state/wrapped';
 
-type Child = {
-  readonly _root: State | LoadableState<any, any, any>;
-  readonly _storage: ScopeMap;
-  readonly _path: readonly string[];
-  _parent: ScopeCallbackMap;
-};
-
-type ScopeMap = Map<typeof $tate, State | LoadableState<any, any, any>> &
-  Map<string, Child>;
-
-function get(this: State) {
+function get(this: InternalState) {
   const path = this._path!;
 
   const l = path.length;
 
-  let value = this._root!._value;
+  let value = this[ROOT]!._value;
 
   for (
     let i = 0;
@@ -39,126 +28,101 @@ function get(this: State) {
   return value;
 }
 
-function set(this: State, value: any) {
-  return this._root!.set(value, this._path, false);
-}
-
-const childHandler: ProxyHandler<Child> = {
-  get(target, prop: string) {
-    const { _storage } = target;
-
-    if (_storage.has(prop)) {
-      return _storage.get(prop);
-    }
-
-    const rootState = target._root;
-
-    const currentState = target._parent;
-
-    let next;
-
-    if (prop != $tate) {
-      const nextState: ScopeCallbackMap = { _children: undefined };
-
-      next = new Proxy(
-        {
-          _storage: new Map(),
-          _root: rootState,
-          _path: concat(target._path, prop),
-          _parent: nextState,
-        },
-        childHandler
-      );
-
-      if (!currentState._children) {
-        currentState._children = new Map();
+const childHandler: ProxyHandler<InternalState | InternalAsyncState> = {
+  get(state, prop: string | typeof ROOT) {
+    if (prop == ROOT) {
+      if (state._callbacks) {
+        return state;
       }
 
-      currentState._children.set(prop, nextState);
-    } else {
+      const root = state[ROOT]!;
+
       const callbacks: ValueChangeCallbacks = new Set();
 
-      next = Object.assign(
-        currentState,
-        '_load' in rootState
-          ? ({
-              _root: rootState,
-              _path: target._path,
-              get,
-              set,
-              _onValueChange: createSubscribe(callbacks),
-              _subscribeWithError: createSubscribeWithError(
-                callbacks,
-                rootState.error._callbacks,
-                rootState
-              ),
-              _subscribeWithLoad:
-                rootState._load &&
-                createLoadableSubscribe(callbacks, rootState),
-              _callbacks: callbacks,
-              load: rootState._load && load,
-              control: rootState.control,
-              error: rootState.error,
-              isLoaded: rootState.isLoaded,
-              _valueToggler: 0,
-              _children: currentState._children,
-            } as Partial<LoadableState<any, any, any>> as LoadableState<
-              any,
-              any,
-              any
-            >)
-          : ({
-              _root: rootState,
-              _path: target._path,
-              get,
-              set,
-              _onValueChange: createSubscribe(callbacks),
-              _callbacks: callbacks,
-              _valueToggler: 0,
-              _children: currentState._children,
-            } as State)
-      );
+      state._get = get;
+
+      state._onValueChange = createSubscribe(callbacks);
+
+      (state as Mutable<typeof state>)._callbacks = callbacks;
+
+      state._valueToggler = 0;
+
+      if ('_load' in root) {
+        (state as InternalAsyncState)._subscribeWithError =
+          createSubscribeWithError(
+            callbacks,
+            root._errorState[ROOT]._callbacks,
+            root
+          );
+
+        if (root._load) {
+          (state as InternalAsyncState)._subscribeWithLoad =
+            createLoadableSubscribe(callbacks, root);
+        }
+      }
+
+      return state;
     }
 
-    _storage.set(prop, next as any);
-
-    return next;
-  },
-};
-
-const rootHandler: ProxyHandler<ScopeMap> = {
-  get(_storage, prop: string) {
-    if (_storage.has(prop)) {
-      return _storage.get(prop);
-    }
-
-    const state = _storage.get($tate)!;
-
-    const nextState: ScopeCallbackMap = { _children: undefined };
-
-    const next = new Proxy(
-      {
-        _storage: new Map(),
-        _root: state,
-        _path: [prop],
-        _parent: nextState,
-      },
-      childHandler
-    );
-
-    if (!state._children) {
+    if (!state._storage) {
       state._children = new Map();
+
+      state._storage = new Map();
+    } else if (state._storage.has(prop)) {
+      return state._storage.get(prop);
     }
 
-    state._children.set(prop, nextState);
+    const nextState = {
+      [ROOT]: state[ROOT]!,
+      _path: concat(state._path!, prop),
+      _callbacks: undefined,
+      _children: undefined,
+      _storage: undefined,
+    } as Partial<InternalState> as InternalState;
 
-    _storage.set(prop, next);
+    const next = new Proxy(nextState, childHandler);
+
+    state._children!.set(prop, nextState);
+
+    state._storage.set(prop, next);
 
     return next;
   },
 };
 
-const createScope = (state: State): any =>
-  new Proxy(new Map().set($tate, state), rootHandler);
+const rootHandler: ProxyHandler<InternalState | InternalAsyncState> = {
+  get(state, prop: string | typeof ROOT) {
+    if (prop == ROOT) {
+      return state;
+    }
+
+    if (!state._storage) {
+      state._children = new Map();
+
+      state._storage = new Map();
+    } else if (state._storage.has(prop)) {
+      return state._storage.get(prop);
+    }
+
+    const nextState = {
+      [ROOT]: state,
+      _path: [prop],
+      _callbacks: undefined,
+      _children: undefined,
+      _storage: undefined,
+    } as Partial<InternalState> as InternalState;
+
+    const next = new Proxy(nextState, childHandler);
+
+    state._children!.set(prop, nextState);
+
+    state._storage.set(prop, next);
+
+    return next;
+  },
+};
+
+const createScope = (state: InternalState | InternalAsyncState): any =>
+  new Proxy(state, rootHandler);
 
 export default createScope;

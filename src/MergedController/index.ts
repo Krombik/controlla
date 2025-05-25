@@ -1,12 +1,12 @@
 import type { FC } from 'react';
-import type { AsyncState, StateBase as State } from '../types';
+import type { AsyncState, ReadonlyState } from '../types';
 import useMergedValue from '../useMergedValue';
 
-type Props<S extends State[], V> = {
+type Props<S extends ReadonlyState[], V> = {
   states: S;
   /** Function that merges the values from the provided {@link Props.states states}. */
   merger(values: {
-    [index in keyof S]: S[index] extends State<infer K>
+    [index in keyof S]: S[index] extends ReadonlyState<infer K>
       ? K | (S[index] extends AsyncState ? undefined : never)
       : never;
   }): V;
@@ -26,7 +26,7 @@ type Props<S extends State[], V> = {
  * />
  * ```
  */
-const MergedController = <const S extends State[], V>(
+const MergedController = <const S extends ReadonlyState[], V>(
   props: Props<S, V>
 ): ReturnType<FC> => props.render(useMergedValue(props.states, props.merger));
 

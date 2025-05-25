@@ -3,6 +3,7 @@ import type {
   LoadableState,
   RequestableStateOptions,
 } from '../types';
+import { ROOT } from '../utils/constants';
 import createLoader from '../utils/createLoader';
 import getAsyncState from '../utils/getAsyncState';
 import { handleFetch } from '../utils/handleFetch';
@@ -15,8 +16,8 @@ const createRequestableState = ((
   tickStart?: () => void,
   tickEnd?: () => void,
   parent?: any
-) =>
-  getAsyncState(
+) => ({
+  [ROOT]: getAsyncState(
     set,
     options,
     stateInitializer,
@@ -26,7 +27,8 @@ const createRequestableState = ((
     tickStart,
     tickEnd,
     parent
-  )) as {
+  ),
+})) as {
   /**
    * Creates a {@link LoadableState loadable state} that supports asynchronous data loading on request.
    * The created state manages loading and error handling for data requests, providing

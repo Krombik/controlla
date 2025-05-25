@@ -1,7 +1,7 @@
-import type { State } from '../../types';
+import type { InternalState } from '../../types';
 import { addToBatch } from '../batching';
 
-export function set(this: State, value: any) {
+export function set(this: InternalState, value: any) {
   const self = this;
 
   if (self._value !== value) {
@@ -11,6 +11,6 @@ export function set(this: State, value: any) {
   }
 }
 
-export function get(this: State) {
+export function get(this: InternalState) {
   return this._value;
 }

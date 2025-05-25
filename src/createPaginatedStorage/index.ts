@@ -99,9 +99,9 @@ function usePages(
 
   const forceRerender = useForceRerender();
 
-  const values = new Array(count);
+  const values = Array(count);
 
-  const errors = new Array(count);
+  const errors = Array(count);
 
   for (let i = 0; i < count; i++) {
     let state = getState(self.get(i));

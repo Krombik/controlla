@@ -10,6 +10,9 @@ export { default as createPollableState } from './createPollableState';
 export { default as createPaginatedStorage } from './createPaginatedStorage';
 export { default as createStorage } from './createStorage';
 
+export { default as getValue } from './getValue';
+export { default as setValue } from './setValue';
+
 export { default as clear } from './clear';
 export { default as onValueChange } from './onValueChange';
 export { default as getPromise } from './getPromise';
@@ -20,7 +23,6 @@ export { default as useMappedValue } from './useMappedValue';
 export { default as useMergedValue } from './useMergedValue';
 export { default as use } from './use';
 export { default as useAll } from './useAll';
-export { default as useOnValueChange } from './useOnValueChange';
 
 export { default as batchedUpdates } from './batchedUpdates';
 
@@ -40,7 +42,6 @@ export { default as SuspenseOnlyController } from './SuspenseOnlyController';
 export { default as SuspenseOnlyAllController } from './SuspenseOnlyAllController';
 
 export { default as SKELETON_STATE } from './SKELETON_STATE';
-export { default as SKELETON_STATE_SCOPE } from './SKELETON_STATE_SCOPE';
 
 export {
   default as persistModule,

@@ -1,15 +1,16 @@
 import type {
   StateInitializer,
   StateScope,
-  State,
   Mutable,
   ValueChangeCallbacks,
+  InternalState,
 } from '../types';
 import handleState from '../utils/handleState';
 import createScope from '../utils/createScope';
 import { set } from '../utils/state/scope';
 import { get } from '../utils/state/common';
 import createSubscribe from '../utils/createSubscribe';
+import { ROOT } from '../utils/constants';
 
 /**
  * Creates a {@link StateScope state scope} for managing complex state structures.
@@ -36,13 +37,13 @@ const createStateScope: {
 ) => {
   const callbacks: ValueChangeCallbacks = new Set();
 
-  const state = handleState<State>(
+  const state = handleState<InternalState>(
     {
       _value: undefined,
-      _root: undefined!,
-      get,
+      [ROOT]: undefined!,
+      _get: get,
       _callbacks: callbacks,
-      set,
+      _set: set,
       _onValueChange: createSubscribe(callbacks),
       _children: undefined,
       _valueToggler: 0,
@@ -52,7 +53,7 @@ const createStateScope: {
     keys
   );
 
-  (state as Mutable<typeof state>)._root = state;
+  (state as Mutable<typeof state>)[ROOT] = state;
 
   return createScope(state);
 };

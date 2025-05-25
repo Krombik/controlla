@@ -1,5 +1,6 @@
 import { useCallback, useSyncExternalStore } from 'react';
-import type { AnyAsyncState, AsyncState, StateBase as State } from '../types';
+import type { AnyAsyncState, AsyncState, ReadonlyState } from '../types';
+import { ROOT } from '../utils/constants';
 import { postBatchCallbacksPush } from '../utils/batching';
 import noop from 'lodash.noop';
 
@@ -7,18 +8,22 @@ const useMappedValue = ((
   state: AnyAsyncState,
   mapper: (value: any, isLoaded?: boolean, error?: any) => any
 ) => {
+  const utils = state[ROOT];
+
   const l = mapper.length;
 
   if (l < 2) {
     return useSyncExternalStore(
-      state._subscribeWithLoad || state._onValueChange,
-      () => mapper(state.get())
+      utils._subscribeWithLoad || utils._onValueChange,
+      () => mapper(utils._get())
     );
   }
 
-  const isLoadedState = state.isLoaded;
+  const root = utils[ROOT];
 
-  const errorState = l > 2 && state.error;
+  const isLoadedState = root._isLoadedState[ROOT];
+
+  const errorState = l > 2 && root._errorState[ROOT];
 
   return useSyncExternalStore(
     useCallback(
@@ -38,7 +43,7 @@ const useMappedValue = ((
         };
 
         const unlistenValue = (
-          state._subscribeWithLoad || state._onValueChange
+          utils._subscribeWithLoad || utils._onValueChange
         )(fn);
 
         const unlistenIsLoaded = isLoadedState._onValueChange(fn);
@@ -55,10 +60,14 @@ const useMappedValue = ((
           cb = noop;
         };
       },
-      [state]
+      [utils]
     ),
     () =>
-      mapper(state.get(), isLoadedState._value, errorState && errorState._value)
+      mapper(
+        utils._get(),
+        isLoadedState._value,
+        errorState && errorState._value
+      )
   );
 }) as {
   /**
@@ -75,7 +84,7 @@ const useMappedValue = ((
    * @param mapper - Function that maps the value.
    * @param isEqual - Optional comparison function to determine equality of the mapped values.
    */
-  <T, V>(state: State<T>, mapper: (value: T) => V): V;
+  <T, V>(state: ReadonlyState<T>, mapper: (value: T) => V): V;
 };
 
 export default useMappedValue;

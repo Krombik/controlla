@@ -1,23 +1,28 @@
 import noop from 'lodash.noop';
-import type { AsyncState, StateBase as State } from '../types';
+import type { AsyncState, ReadonlyState } from '../types';
 import { postBatchCallbacksPush } from '../utils/batching';
+import { ROOT } from '../utils/constants';
 
 const onValueChange = ((
-  state: State | State[],
+  state: ReadonlyState | ReadonlyState[],
   cb: (values?: any[]) => void
 ): (() => void) => {
-  if ('length' in state) {
+  if (Array.isArray(state)) {
     let isAvailable = true;
 
     const l = state.length;
 
-    const unlisteners: Array<() => void> = new Array(l);
+    const unlisteners: Array<() => void> = Array(l);
 
     if (cb.length) {
-      const values = state.map((state) => state.get());
+      const values = Array(l);
 
       for (let i = 0; i < l; i++) {
-        unlisteners[i] = state[i]._onValueChange((value) => {
+        const utils = state[i][ROOT];
+
+        values[i] = utils._get();
+
+        unlisteners[i] = utils._onValueChange((value) => {
           values[i] = value;
 
           if (isAvailable) {
@@ -45,7 +50,7 @@ const onValueChange = ((
       };
 
       for (let i = 0; i < l; i++) {
-        unlisteners[i] = state[i]._onValueChange(fn);
+        unlisteners[i] = state[i][ROOT]._onValueChange(fn);
       }
     }
 
@@ -58,7 +63,7 @@ const onValueChange = ((
     };
   }
 
-  return state._onValueChange(cb);
+  return state[ROOT]._onValueChange(cb);
 }) as {
   /**
    * Registers a callback to be invoked when the value of a single {@link state} changes.
@@ -77,7 +82,7 @@ const onValueChange = ((
    * @returns a function to unsubscribe from the value change event.
    *
    */
-  <T>(state: State<T>, cb: (value: T) => void): () => void;
+  <T>(state: ReadonlyState<T>, cb: (value: T) => void): () => void;
   /**
    * Registers a callback to be invoked when the values of multiple {@link states} change.
    *
@@ -85,10 +90,10 @@ const onValueChange = ((
    * @param cb - The callback function invoked with the new values of the states.
    * @returns a function to unsubscribe from the values change event.
    */
-  <const S extends State[]>(
+  <const S extends ReadonlyState[]>(
     states: S,
     cb: (values: {
-      [index in keyof S]: S[index] extends State<infer K>
+      [index in keyof S]: S[index] extends ReadonlyState<infer K>
         ? K | (S[index] extends AsyncState ? undefined : never)
         : never;
     }) => void
