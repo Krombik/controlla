@@ -1,4 +1,5 @@
 import type { AsyncState } from '../types';
+import { ROOT } from '../utils/constants';
 
 /**
  * @returns a promise that resolves with the current value of the given {@link state}.
@@ -13,7 +14,9 @@ import type { AsyncState } from '../types';
  * ```
  */
 const getPromise = <T>(state: AsyncState<T>): Promise<T> => {
-  const root = state._root;
+  const utils = state[ROOT];
+
+  const root = utils[ROOT];
 
   const data = root._promise;
 
@@ -21,11 +24,11 @@ const getPromise = <T>(state: AsyncState<T>): Promise<T> => {
 
   if (data) {
     promise = data._promise;
-  } else if (root.isLoaded._value) {
+  } else if (root._isLoadedState[ROOT]._value) {
     promise =
       root._value !== undefined
         ? Promise.resolve(root._value)
-        : Promise.reject(root.error._value);
+        : Promise.reject(root._errorState[ROOT]._value);
   } else {
     let _resolve!: (value: any) => void, _reject!: (error: any) => void;
 
@@ -42,7 +45,7 @@ const getPromise = <T>(state: AsyncState<T>): Promise<T> => {
     };
   }
 
-  return state._path ? promise.then(() => state.get()) : promise;
+  return utils._path ? promise.then(() => utils._get()) : promise;
 };
 
 export default getPromise;

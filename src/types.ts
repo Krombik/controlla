@@ -1,5 +1,5 @@
 import type { Primitive, PrimitiveOrNested } from 'keyweaver';
-import type { $tate } from './utils/constants';
+import type { ROOT } from './utils/constants';
 import type { ComponentType, PropsWithChildren } from 'react';
 
 export type Mutable<T> = {
@@ -13,28 +13,85 @@ export type Falsy = Nil | false | 0 | '';
 export type ValueChangeCallbacks = Set<(value: any) => void>;
 
 export type ScopeCallbackMap = Partial<
-  Pick<StateBase, '_callbacks' | '_children'>
+  Pick<InternalState, '_callbacks' | '_children'>
 >;
+
+export interface InternalState {
+  readonly [ROOT]?: this;
+  _value: any;
+  _onValueChange(cb: (value: any) => void): () => void;
+  _get(): any;
+  _set(value: any, path?: readonly string[]): void;
+  readonly _path?: readonly string[];
+  readonly _callbacks: ValueChangeCallbacks;
+  _children?: Map<string, ScopeCallbackMap>;
+  /** storage of proxies */
+  _storage?: Map<string, InternalState>;
+  _valueToggler: 0 | 1;
+}
+
+export interface InternalAsyncState extends InternalState {
+  readonly [ROOT]: this;
+  readonly _awaitOnly?: true;
+  readonly _errorState: Omit<ReadonlyState, typeof STATE_MARKER> & {
+    [ROOT]: { readonly _parent: InternalAsyncState };
+  };
+  readonly _isLoadedState: Omit<ReadonlyState<boolean>, typeof STATE_MARKER>;
+  _commonSet: InternalState['_set'];
+  _set(value: any, path?: readonly string[], isError?: boolean): void;
+  _isLoaded(value: any, prevValue: any, attempt: number | undefined): boolean;
+  readonly _slowLoading: {
+    readonly _timeout: number;
+    _timeoutId: ReturnType<typeof setTimeout> | undefined;
+    readonly _callbacks: Set<() => void>;
+  } | null;
+  _counter: number;
+  _isLoadable: boolean;
+  _promise: {
+    readonly _promise: Promise<any>;
+    _resolve(value: any): void;
+    _reject(error: any): void;
+  } | null;
+  _unload: (() => void) | void | undefined;
+  _attempt: number | undefined;
+  readonly _reloadIfStale: {
+    readonly _timeout: number;
+    _timeoutId: ReturnType<typeof setTimeout> | undefined;
+  } | null;
+  readonly _reloadOnFocus: {
+    readonly _timeout: number;
+    _timeoutId: ReturnType<typeof setTimeout> | undefined;
+    _isLoadable: boolean;
+    _focusListener: (() => void) | undefined;
+  } | null;
+  _isFetchInProgress: boolean;
+  readonly _keys?: any[];
+  _tickStart(): void;
+  _tickEnd(): void;
+  readonly _parent: PaginatedStorage<any> | undefined;
+  _subscribeWithLoad?(cb: () => void): () => void;
+  _subscribeWithError(cb: () => void): () => void;
+  _load?(...args: any[]): (() => void) | void;
+  readonly _loadingProcess: any;
+}
 
 declare const STATE_MARKER: unique symbol;
 
-export declare class StateBase<T = any> {
+declare const SETABLE_MARKER: unique symbol;
+
+declare const ERROR_MARKER: unique symbol;
+
+declare const LOADABLE_MARKER: unique symbol;
+
+declare const LADING_PROCESS_MARKER: unique symbol;
+
+declare class _Base<T> {}
+
+export type ReadonlyState<T = any> = _Base<T> & {
   /** @internal */
-  _value: any;
+  readonly [ROOT]: InternalState;
   [STATE_MARKER]: T;
-  /** @internal */
-  _onValueChange(cb: (value: any) => void): () => void;
-  /** @internal */
-  get(): any;
-  /** @internal */
-  readonly _path?: readonly string[];
-  /** @internal */
-  readonly _callbacks: ValueChangeCallbacks;
-  /** @internal */
-  _children?: Map<string, ScopeCallbackMap> | undefined;
-  /** @internal */
-  _valueToggler: 0 | 1;
-}
+};
 
 /**
  * Represents a basic reactive state that holds a value.
@@ -44,98 +101,19 @@ export declare class StateBase<T = any> {
  * const state: State<number> = createState(0);
  * ```
  */
-export interface State<Value = any> extends StateBase<Value> {
-  /** @internal */
-  readonly _root?: this;
-  /** @internal */
-  set(value: any, path?: readonly string[], isError?: boolean): void;
-  set(value: Value): void;
-  get(): Value;
-}
-
-export type ErrorState<Error> = StateBase<Error> & {
-  set(error: Error | undefined): void;
-  get(): Error | undefined;
-  /** @internal */
-  readonly _parent: AsyncState;
-};
-
-export type IsLoadedState = StateBase<boolean> & {
-  /** @internal */
-  set(value: boolean): void;
-  get(): boolean;
+export type State<Value = any> = ReadonlyState<Value> & {
+  [SETABLE_MARKER]: true;
 };
 
 /**
  * Represents a state that manages an asynchronous value, including {@link AsyncState.isLoaded loading} and {@link AsyncState.error error} states.
  * Extends {@link State}.
  */
-export interface AsyncState<Value = any, Error = any> extends StateBase<Value> {
+export type AsyncState<Value = any, Error = any> = State<Value> & {
   /** @internal */
-  readonly _root: this;
-  /** @internal */
-  readonly _awaitOnly?: true;
-  /** A state that holds the latest error, if one occurred during loading. */
-  readonly error: ErrorState<Error>;
-  /** A state that indicates whether the state has successfully loaded */
-  readonly isLoaded: IsLoadedState;
-  /** @internal */
-  _commonSet: State['set'];
-  get(): Value | undefined;
-  /** @internal */
-  set(value: any, path?: readonly string[], isError?: boolean): void;
-  set(value: Value): void;
-  /** @internal */
-  _isLoaded(value: any, prevValue: any, attempt: number | undefined): boolean;
-  /** @internal */
-  readonly _slowLoading: {
-    readonly _timeout: number;
-    _timeoutId: ReturnType<typeof setTimeout> | undefined;
-    readonly _callbacks: Set<() => void>;
-  } | null;
-  /** @internal */
-  _counter: number;
-  /** @internal */
-  _isLoadable: boolean;
-  /** @internal */
-  _promise: {
-    readonly _promise: Promise<any>;
-    _resolve(value: any): void;
-    _reject(error: any): void;
-  } | null;
-  /** @internal */
-  _unload: (() => void) | void | undefined;
-  /** @internal */
-  _attempt: number | undefined;
-  /** @internal */
-  readonly _reloadIfStale: {
-    readonly _timeout: number;
-    _timeoutId: ReturnType<typeof setTimeout> | undefined;
-  } | null;
-  /** @internal */
-  readonly _reloadOnFocus: {
-    readonly _timeout: number;
-    _timeoutId: ReturnType<typeof setTimeout> | undefined;
-    _isLoadable: boolean;
-    _focusListener: (() => void) | undefined;
-  } | null;
-  /** @internal */
-  _isFetchInProgress: boolean;
-  /** @internal */
-  readonly _keys?: any[];
-  /** @internal */
-  _tickStart(): void;
-  /** @internal */
-  _tickEnd(): void;
-  /** @internal */
-  readonly _parent: PaginatedStorage<any> | undefined;
-  /** @internal */
-  _subscribeWithLoad?(cb: () => void): () => void;
-  /** @internal */
-  _subscribeWithError(cb: () => void): () => void;
-  /** @internal */
-  _load?(...args: any[]): (() => void) | void;
-}
+  readonly [ROOT]: InternalAsyncState;
+  [ERROR_MARKER]: Error;
+};
 
 /**
  * Represents a state that supports loading functionality, extending {@link AsyncState}
@@ -144,31 +122,11 @@ export interface AsyncState<Value = any, Error = any> extends StateBase<Value> {
 export type LoadableState<
   Value = any,
   Error = any,
-  Control = never,
+  LoadingProcess = never,
 > = AsyncState<Value, Error> & {
-  /**
-   * Initiates the loading process for the state if it has not already started.
-   * If the loading process is already active, it increases the load listener count.
-   *
-   * The returned function decreases the load listener count, and the loading process
-   * will only be canceled if there are no remaining load listeners.
-   *
-   * @param {boolean} [force=false] - If `true`, forces the loading process to reload,
-   * even if it has previously completed or is in progress.
-   * @returns - A function to decrease the load listener count. The loading
-   * process is only marked as cancelable when all listeners have been removed.
-   *
-   * @example
-   * ```ts
-   * const decreaseLoadListener = state.load();
-   *
-   * // Call decreaseLoadListener to decrease the load listener count.
-   * // The loading process is only canceled if no other listeners remain.
-   * decreaseLoadListener();
-   * ```
-   */
-  load(force?: boolean): () => void;
-} & ([Control] extends [never] ? {} : { readonly control: Control });
+  [LOADABLE_MARKER]: true;
+  [LADING_PROCESS_MARKER]: LoadingProcess;
+};
 
 declare const SCOPE_MARKER: unique symbol;
 
@@ -181,23 +139,23 @@ type ProcessScope<
   S extends State,
   M = Exclude<Value, Nil>,
   N = Extract<Value, Nil>,
-> = (0 extends 1 & Value
-  ? { readonly [key in string | number]: ProcessScope<any, S, any, any> }
-  : M extends Primitive
-    ? {}
-    : M extends any[]
-      ? {
-          readonly [key in ToIndex<keyof M>]-?: ProcessScope<M[key] | N, S>;
-        }
-      : {
-          readonly [key in keyof M]-?: ProcessScope<M[key] | N, S>;
-        }) & {
-  readonly [$tate]: S extends LoadableState<any, infer E, infer C>
-    ? LoadableState<Value, E, C>
-    : S extends AsyncState<any, infer E>
-      ? AsyncState<Value, E>
-      : State<Value>;
-} & ScopeMarker<Value>;
+> = (S extends LoadableState<any, infer E, infer C>
+  ? LoadableState<Value, E, C>
+  : S extends AsyncState<any, infer E>
+    ? AsyncState<Value, E>
+    : State<Value>) &
+  (0 extends 1 & Value
+    ? { readonly [key in string | number]: ProcessScope<any, S, any, any> }
+    : M extends Primitive
+      ? {}
+      : M extends any[]
+        ? {
+            readonly [key in ToIndex<keyof M>]-?: ProcessScope<M[key] | N, S>;
+          }
+        : {
+            readonly [key in keyof M]-?: ProcessScope<M[key] | N, S>;
+          }) &
+  ScopeMarker<Value>;
 
 declare class Scope {}
 
@@ -209,8 +167,8 @@ export type AsyncStateScope<Value = any, Error = any> = Scope &
 export type LoadableStateScope<
   Value = any,
   Error = any,
-  Control = never,
-> = Scope & ProcessScope<Value, LoadableState<any, Error, Control>>;
+  LoadingProcess = never,
+> = Scope & ProcessScope<Value, LoadableState<any, Error, LoadingProcess>>;
 
 export type PollableStateScope<Value = any, Error = any> = Scope &
   LoadableStateScope<Value, Error, PollableMethods>;
@@ -492,189 +450,4 @@ export type Converter<T> = {
    * @returns The deserialized value.
    */
   parse(value: string): T;
-};
-
-export type Route = {
-  readonly _key: string;
-  readonly _component: ComponentType;
-  readonly _scope: StateScope | undefined;
-  readonly _queryScheme: Record<string, SchemaItem<any>> | undefined;
-  readonly _paramsConverters: Record<string, Converter<any>>;
-  readonly _pathMap: Array<string | string[]>;
-  _path: string;
-  readonly _queryParams: Map<string, string> | undefined;
-};
-
-type ExtractParams<T extends string> =
-  T extends `${any}:${infer Param}/${infer Rest}`
-    ? Param | ExtractParams<Rest>
-    : T extends `${any}:${infer Param}`
-      ? Param
-      : never;
-
-type TakeAll<T extends string> = T extends `${infer K}|${infer Rest}`
-  ? K | (Rest extends `${any}|${any}` ? TakeAll<Rest> : Rest)
-  : never;
-
-type ExtractEnums<
-  T extends string,
-  Arr extends string[] = [],
-> = T extends `/${infer First}/${infer K}`
-  ? First extends `${any}|${any}`
-    ? [...Arr, TakeAll<First>, ...ExtractEnums<`/${K}`, Arr>]
-    : [...Arr, ...ExtractEnums<`/${K}`, Arr>]
-  : T extends `/${infer First}`
-    ? First extends `${any}|${any}`
-      ? [...Arr, TakeAll<First>]
-      : Arr
-    : [];
-
-type NumerableRecord<A extends any[]> = [] extends A
-  ? {}
-  : {
-      [key in ToIndex<keyof A>]: A[key];
-    };
-
-export type SchemaItem<T> = {
-  required?: boolean;
-  converter: Converter<T>;
-  defaultValue?: T;
-};
-
-type Params<R extends {}, Q extends {}> = { query: Q; route: R };
-
-export type RouterCreator<T extends Record<string, Params<any, any>> = {}> = {
-  add<
-    const K extends `/${string}`,
-    S extends {
-      [key in keyof Q]: SchemaItem<any>;
-    },
-    R extends { [key in ExtractParams<K>]?: any } = {},
-    Q extends { [key in string]: any } = {},
-  >(
-    key: K extends keyof T ? never : K extends `${any}/` ? never : K,
-    Component: ComponentType,
-    options?: {
-      query?: S & {
-        [key in keyof Q]: SchemaItem<Q[key]>;
-      };
-      alternatives?: {
-        [key in string]: ExtractParams<key> extends ExtractParams<K>
-          ?
-              | {
-                  [key in keyof R]: key extends ExtractParams<K>
-                    ? Converter<R[key]>
-                    : never;
-                }
-              | true
-          : never;
-      };
-      startsWith?: boolean;
-    } & ({} extends R
-      ? {}
-      : {
-          params?: {
-            [key in keyof R]: key extends ExtractParams<K>
-              ? Converter<R[key]>
-              : never;
-          };
-        })
-  ): RouterCreator<
-    T & {
-      [key in K]: Params<
-        R & {
-          [key in Exclude<ExtractParams<K>, keyof R>]: string;
-        } & NumerableRecord<ExtractEnums<K>>,
-        {
-          [key in keyof S]: key extends keyof Q
-            ?
-                | Q[key]
-                | (S[key]['required'] extends true
-                    ? never
-                    : S[key]['defaultValue'] extends Q[key]
-                      ? never
-                      : undefined)
-            : never;
-        }
-      >;
-    }
-  >;
-  create(): Router<T>;
-};
-
-type Path = {
-  /** @internal */
-  readonly _route: Route;
-  /** @internal */
-  readonly _path: string | undefined;
-  /** @params */
-  readonly _params: Trr<Record<string, unknown>> | undefined;
-};
-
-export interface Navigation {
-  /** @internal */
-  readonly _router: Router<any>;
-
-  /** @internal */
-  readonly _items: Path[];
-
-  concat<R extends Router<any>, K extends R[typeof ROUTER_MARKER]>(
-    router: R,
-    route: K,
-    ...args: R extends Router<infer T>
-      ? T[K extends keyof T ? K : never] extends Params<infer P, infer Q>
-        ? {} extends P & Q
-          ? []
-          : [params: Trr<P & Q>]
-        : never
-      : never
-  ): this;
-  concat<R extends Router<any>, K extends R[typeof ROUTER_MARKER]>(
-    router: R,
-    route: K,
-    path: string,
-    ...args: R extends Router<infer T>
-      ? T[K extends keyof T ? K : never] extends Params<any, infer Q>
-        ? {} extends Q
-          ? []
-          : [params: Trr<Q>]
-        : never
-      : never
-  ): this;
-  navigate(replace?: boolean): void;
-}
-
-declare const ROUTER_MARKER: unique symbol;
-
-type Trr<T extends {}> = { [key in keyof T]: T[key] | State<T[key]> };
-
-export type Router<T extends Record<string, Params<any, any>>> = {
-  [ROUTER_MARKER]: keyof T;
-
-  /** @internal */
-  _getRoute(key: string): Route | undefined;
-
-  /** @internal */
-  _isMounted: boolean;
-
-  /** @internal */
-  _parent: Router<any> | null;
-
-  readonly currentRoute: State<keyof T | undefined>;
-
-  getParams<K extends keyof T>(): {} extends T[K]['query'] & T[K]['route']
-    ? undefined
-    : StateScope<T[K]['query'] & T[K]['route']>;
-
-  nav<K extends keyof T>(
-    route: K,
-    ...args: {} extends T[K]['query'] & T[K]['route']
-      ? []
-      : [params: Trr<T[K]['query'] & T[K]['route']>]
-  ): Navigation;
-  nav<K extends keyof T>(
-    route: K,
-    path: string,
-    ...args: {} extends T[K]['query'] ? [] : [params: Trr<T[K]['query']>]
-  ): Navigation;
 };

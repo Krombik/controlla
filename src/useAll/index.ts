@@ -1,16 +1,17 @@
 import { useContext, useSyncExternalStore } from 'react';
 import type {
-  AnyAsyncState,
   Falsy,
   ExtractValues,
   AsyncState,
   ExtractErrors,
+  InternalAsyncState,
 } from '../types';
 import noop from 'lodash.noop';
 import ErrorBoundaryContext from '../utils/ErrorBoundaryContext';
 import handleSuspense from '../utils/handleSuspense';
 import SuspenseContext from '../utils/SuspenseContext';
 import alwaysNoop from '../utils/alwaysNoop';
+import { ROOT } from '../utils/constants';
 
 /**
  * A hook to retrieve the current values and errors from multiple {@link states}.
@@ -77,19 +78,19 @@ const useAll = <
     > => {
   const l = states.length;
 
-  const values = new Array(l);
+  const values = Array(l);
 
-  const errors = new Array(l);
-
-  const errorBoundaryCtx = useContext(ErrorBoundaryContext);
-
-  const suspenseCtx = useContext(SuspenseContext);
+  const errors = Array(l);
 
   for (let i = 0; i < l; i++) {
     const state = states[i];
 
     if (state) {
-      const errorState = state.error;
+      const utils = state[ROOT];
+
+      const root = utils[ROOT];
+
+      const errorState = root._errorState[ROOT];
 
       const err = errorState._value;
 
@@ -99,35 +100,35 @@ const useAll = <
         throw err;
       }
 
-      const root = state._root;
-
       if (root._value !== undefined || isError) {
-        const withValueWatching = !state._awaitOnly;
+        const withValueWatching = !utils._awaitOnly;
 
-        useSyncExternalStore(state._subscribeWithError, () =>
+        useSyncExternalStore(utils._subscribeWithError, () =>
           withValueWatching
-            ? (errorState._valueToggler << 1) | state._valueToggler
+            ? (errorState._valueToggler << 1) | utils._valueToggler
             : (((errorState._value === undefined) as any) << 1) |
               ((root._value !== undefined) as any)
         );
 
         if (withValueWatching) {
-          values[i] = state.get();
+          values[i] = utils._get();
         }
 
         errors[i] = err;
       } else {
-        const unloadedStates: AnyAsyncState[] = [state];
+        const unloadedStates: InternalAsyncState[] = [root];
 
         while (++i < l) {
           const state = states[i];
 
           if (state) {
-            const err = state.error._value;
+            const root = state[ROOT][ROOT];
+
+            const err = root._errorState[ROOT]._value;
 
             if (err === undefined) {
-              if (state._root._value === undefined) {
-                unloadedStates.push(state);
+              if (root._value === undefined) {
+                unloadedStates.push(root);
               }
             } else if (!safeReturn) {
               throw err;
@@ -148,9 +149,13 @@ const useAll = <
 
           const rej = safeReturn ? onResolve : res;
 
+          const errorBoundaryCtx = useContext(ErrorBoundaryContext);
+
+          const suspenseCtx = useContext(SuspenseContext);
+
           for (let i = 0; i < l; i++) {
             handleSuspense(
-              unloadedStates[i]._root,
+              unloadedStates[i],
               errorBoundaryCtx,
               suspenseCtx
             ).then(onResolve, rej);

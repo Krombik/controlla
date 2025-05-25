@@ -1,9 +1,7 @@
 import noop from 'lodash.noop';
-import type { State, ScopeCallbackMap } from '../../types';
+import type { ScopeCallbackMap, InternalState } from '../../types';
 import { addToBatch } from '../batching';
 import processStateChanges from '../processStateChanges';
-
-type ScopedState = State & ScopeCallbackMap;
 
 const deepSet = (
   value: any,
@@ -36,7 +34,7 @@ const deepSet = (
     return value ? { ...value, [key]: nextValue } : { [key]: nextValue };
   }
 
-  const arr = value ? value.slice() : new Array(+key + 1);
+  const arr = value ? value.slice() : Array(+key + 1);
 
   arr[key] = nextValue;
 
@@ -44,55 +42,45 @@ const deepSet = (
 };
 
 export function set(
-  this: ScopedState,
+  this: InternalState,
   nextValue: any,
   path?: readonly string[]
 ) {
   const self = this;
 
-  let currentNode: ScopeCallbackMap | State | undefined = self;
-
-  let prevValue = self._value;
-
   const l = path ? path.length : 0;
 
-  const nodesQueue: State[] = [];
+  const nodesQueue: InternalState[] = [];
 
   const valuesArr: any[] = [];
 
   const pushToValuesArr = valuesArr.push.bind(valuesArr);
 
-  const pushArr: ((value: any) => void)[] = new Array(l);
+  const pushArr: ((value: any) => void)[] = Array(l);
+
+  let prevValue = self._value;
+
+  let currentNode: ScopeCallbackMap | InternalState = self;
 
   for (let i = 0; i < l; i++) {
-    const k = path![i];
+    const key = path![i];
 
-    currentNode = currentNode._children && currentNode._children.get(k);
+    currentNode = currentNode._children!.get(key)!;
 
-    if (currentNode) {
-      if (currentNode._callbacks) {
-        nodesQueue.push(currentNode as State);
+    if (currentNode._callbacks) {
+      nodesQueue.push(currentNode as InternalState);
 
-        pushArr[i] = pushToValuesArr;
-      } else {
-        pushArr[i] = noop;
-      }
+      pushArr[i] = pushToValuesArr;
     } else {
-      for (; i < l; i++) {
-        prevValue = prevValue ? prevValue[path![i]] : undefined;
-
-        pushArr[i] = noop;
-      }
-
-      break;
+      pushArr[i] = noop;
     }
 
-    prevValue = prevValue ? prevValue[k] : undefined;
+    prevValue = prevValue ? prevValue[key] : undefined;
   }
 
   if (processStateChanges(prevValue, nextValue, currentNode)) {
-    if (path) {
-      nextValue = deepSet(self._value, nextValue, path, 0, l - 1, pushArr);
+    if (l) {
+      nextValue = deepSet(self._value, nextValue, path!, 0, l - 1, pushArr);
 
       for (let i = nodesQueue.length; i--; ) {
         addToBatch(nodesQueue[i], valuesArr[i]);

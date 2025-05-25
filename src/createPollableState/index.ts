@@ -4,6 +4,7 @@ import type {
   LoadableState,
   PollableState,
 } from '../types';
+import { ROOT } from '../utils/constants';
 import createLoader from '../utils/createLoader';
 import getAsyncState from '../utils/getAsyncState';
 import { handlePolling, PollingControl } from '../utils/handlePolling';
@@ -17,8 +18,8 @@ const createPollableState = ((
   tickStart?: () => void,
   tickEnd?: () => void,
   parent?: any
-) =>
-  getAsyncState(
+) => ({
+  [ROOT]: getAsyncState(
     set,
     options,
     stateInitializer,
@@ -28,7 +29,8 @@ const createPollableState = ((
     tickStart,
     tickEnd,
     parent
-  )) as {
+  ),
+})) as {
   /** Creates a {@link LoadableState loadable state} with polling capabilities. */
   <T, E = any>(
     options: PollableStateOptions<T, E>,

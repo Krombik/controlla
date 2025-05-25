@@ -1,5 +1,9 @@
 import noop from 'lodash.noop';
-import type { AsyncState, State, StateInitializer } from '../types';
+import type {
+  InternalAsyncState,
+  InternalState,
+  StateInitializer,
+} from '../types';
 import { postBatchCallbacksPush, scheduleBatch } from './batching';
 
 const finalizationRegistry: Pick<
@@ -26,8 +30,8 @@ const _WeakRef =
         }
       } as typeof WeakRef);
 
-const handleState = <S extends State | AsyncState>(
-  state: Omit<S, symbol>,
+const handleState = <S extends InternalState | InternalAsyncState>(
+  state: S,
   value: unknown | (() => unknown) | undefined,
   stateInitializer: StateInitializer | undefined,
   keys: any[] | undefined
@@ -89,7 +93,7 @@ const handleState = <S extends State | AsyncState>(
 
             scheduleBatch();
 
-            state.set(newValue);
+            state._set(newValue);
           }
         })
       );

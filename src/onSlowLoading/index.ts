@@ -1,4 +1,5 @@
 import type { AsyncState } from '../types';
+import { ROOT } from '../utils/constants';
 
 /**
  * Registers a callback to be invoked when the given {@link state} triggers a slow loading timeout.
@@ -26,7 +27,7 @@ import type { AsyncState } from '../types';
  * ```
  */
 const onSlowLoading = (state: AsyncState, cb: () => void) => {
-  const slowLoading = state._root._slowLoading;
+  const slowLoading = state[ROOT][ROOT]._slowLoading;
 
   if (!slowLoading) {
     throw new Error('slow loading timeout was not provided');

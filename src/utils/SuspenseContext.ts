@@ -1,6 +1,9 @@
 import { createContext } from 'react';
-import type { AsyncState } from '../types';
+import type { InternalAsyncState } from '../types';
 
-const SuspenseContext = createContext<Map<AsyncState, () => void> | null>(null);
+const SuspenseContext = createContext<Map<
+  InternalAsyncState,
+  () => void
+> | null>(null);
 
 export default SuspenseContext;

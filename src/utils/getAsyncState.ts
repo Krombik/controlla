@@ -1,18 +1,14 @@
 import noop from 'lodash.noop';
 import type {
   ValueChangeCallbacks,
-  AnyAsyncState,
-  AsyncState,
-  ErrorState,
-  LoadableState,
   LoadableStateOptions,
   Mutable,
   PaginatedStorage,
   StateInitializer,
+  InternalAsyncState,
 } from '../types';
 import alwaysTrue from './alwaysTrue';
 import { addToBatch } from './batching';
-import executeSetters from './executeSetters';
 import handleState from './handleState';
 import { get } from './state/common';
 import createSimpleState from './createSimpleState';
@@ -22,10 +18,12 @@ import {
   createLoadableSubscribe,
   createSubscribeWithError,
 } from './createAsyncSubscribe';
-import { RESOLVED_PROMISE } from './constants';
+import { ROOT } from './constants';
+import { handleSlowLoading, handleUnload } from './asyncStateUtils';
+import load from '../load';
 
 const handleReloadOn = (
-  reloadData: NonNullable<AsyncState['_reloadIfStale']>,
+  reloadData: NonNullable<InternalAsyncState['_reloadIfStale']>,
   utils: { _isLoadable: boolean }
 ) => {
   clearTimeout(reloadData._timeoutId);
@@ -35,29 +33,8 @@ const handleReloadOn = (
   }, reloadData._timeout);
 };
 
-const handleUnload = (data: AsyncState) => {
-  if (data._unload) {
-    data._unload = data._unload();
-  }
-};
-
-const handleSlowLoading = (
-  slowLoading: AsyncState['_slowLoading'],
-  isLoaded: boolean
-) => {
-  if (slowLoading) {
-    clearTimeout(slowLoading._timeoutId);
-
-    slowLoading._timeoutId = isLoaded
-      ? undefined
-      : setTimeout(() => {
-          executeSetters(slowLoading._callbacks);
-        }, slowLoading._timeout);
-  }
-};
-
 function set(
-  this: LoadableState,
+  this: InternalAsyncState,
   value: any,
   path?: readonly string[],
   isError?: boolean
@@ -86,7 +63,7 @@ function set(
     }
   }
 
-  self.isLoaded.set(isLoaded);
+  self._isLoadedState[ROOT]._set(isLoaded);
 
   if (isLoaded) {
     self._isLoadable = false;
@@ -105,11 +82,11 @@ function set(
   }
 
   if (!isError) {
-    self.error.set(undefined);
+    self._errorState[ROOT]._set(undefined);
 
     if (!isSet) {
       if (self._counter) {
-        self.load(true)();
+        load(self, true)();
       } else {
         self._isLoadable = true;
       }
@@ -123,114 +100,10 @@ function set(
   handleSlowLoading(self._slowLoading, isLoaded);
 }
 
-const loaderCleanupSet = new Set<LoadableState>();
-
-let isLoadCleanupPending = true;
-
-const batchedUnload = (state: LoadableState) => {
-  loaderCleanupSet.add(state);
-
-  if (isLoadCleanupPending) {
-    isLoadCleanupPending = false;
-
-    RESOLVED_PROMISE.then(() => {
-      const it = loaderCleanupSet.values();
-
-      for (let i = loaderCleanupSet.size; i--; ) {
-        const state: LoadableState = it.next().value;
-
-        if (!state._counter) {
-          handleUnload(state);
-
-          if (!state.isLoaded._value) {
-            state._isLoadable = true;
-          }
-
-          if (state._reloadOnFocus) {
-            document.removeEventListener(
-              'visibilitychange',
-              state._reloadOnFocus._focusListener!
-            );
-          }
-        }
-      }
-
-      loaderCleanupSet.clear();
-
-      isLoadCleanupPending = true;
-    });
-  }
-};
-
-function load(this: LoadableState, reload?: boolean) {
-  let cleanup = () => {
-    cleanup = noop;
-
-    if (!--self._counter) {
-      batchedUnload(self);
-    }
-  };
-
-  const self = this;
-
-  const { _reloadOnFocus } = self;
-
-  if (reload && !self._isFetchInProgress) {
-    handleUnload(self);
-
-    self._isLoadable = true;
-  }
-
-  if (self._isLoadable) {
-    self._isLoadable = false;
-
-    self.isLoaded.set(false);
-
-    handleSlowLoading(self._slowLoading, false);
-
-    if (_reloadOnFocus && _reloadOnFocus._timeoutId != null) {
-      clearInterval(_reloadOnFocus._timeoutId);
-
-      _reloadOnFocus._timeoutId = undefined;
-    }
-
-    if (self._reloadIfStale && self._reloadIfStale._timeoutId != null) {
-      clearInterval(self._reloadIfStale._timeoutId);
-
-      self._reloadIfStale._timeoutId = undefined;
-    }
-
-    const keys = self._keys;
-
-    const unload = keys ? self._load!(...keys) : self._load!();
-
-    if (unload) {
-      self._unload = unload;
-    }
-  }
-
-  if (_reloadOnFocus && !_reloadOnFocus._focusListener) {
-    const listener = () => {
-      if (!document.hidden && _reloadOnFocus._isLoadable) {
-        _reloadOnFocus._isLoadable = false;
-
-        self.load(true)();
-      }
-    };
-
-    _reloadOnFocus._focusListener = listener;
-
-    document.addEventListener('visibilitychange', listener);
-  }
-
-  self._counter++;
-
-  return () => {
-    cleanup();
-  };
-}
-
-function setError(this: ErrorState<any>, value: any) {
+function setError(
+  this: InternalAsyncState['_errorState'][typeof ROOT],
+  value: any
+) {
   const self = this;
 
   if (self._value !== value) {
@@ -241,7 +114,7 @@ function setError(this: ErrorState<any>, value: any) {
     if (value !== undefined) {
       const parent = self._parent;
 
-      parent.set(undefined, undefined, true);
+      parent._set(undefined, undefined, true);
 
       if (parent._promise) {
         parent._promise._reject(value);
@@ -253,7 +126,7 @@ function setError(this: ErrorState<any>, value: any) {
 }
 
 const getAsyncState = (
-  _commonSet: LoadableState['_commonSet'],
+  _commonSet: InternalAsyncState['_commonSet'],
   options: Omit<LoadableStateOptions, 'load'>,
   stateInitializer: StateInitializer | undefined,
   _keys: any[] | undefined,
@@ -262,25 +135,16 @@ const getAsyncState = (
   _tickStart?: () => void,
   _tickEnd?: () => void,
   _parent?: PaginatedStorage<any>
-): AnyAsyncState => {
+): InternalAsyncState => {
   const { isLoaded, reloadIfStale, reloadOnFocus, loadingTimeout } = options;
 
   const errorCallbacks: ValueChangeCallbacks = new Set();
 
-  const errorState = {
-    _onValueChange: createSubscribe(errorCallbacks),
-    get,
-    set: setError,
-    _parent: undefined!,
-    _value: undefined,
-    _callbacks: errorCallbacks,
-  } as Partial<ErrorState<any>> as ErrorState<any>;
-
   const stateCallbacks: ValueChangeCallbacks = new Set();
 
-  const state = handleState<LoadableState<any, any, any>>(
+  const state = handleState<InternalAsyncState>(
     {
-      _root: undefined!,
+      [ROOT]: undefined!,
       _isFetchInProgress: false,
       _isLoadable: true,
       _counter: 0,
@@ -311,17 +175,16 @@ const getAsyncState = (
       _tickEnd: _tickEnd || noop,
       _tickStart: _tickStart || noop,
       _parent,
-      get,
+      _get: get,
       _callbacks: stateCallbacks,
       _children: undefined,
-      set,
+      _set: set,
       _commonSet,
       _onValueChange: createSubscribe(stateCallbacks),
-      load: _load! && load,
       _load,
-      error: errorState,
-      isLoaded: createSimpleState(false),
-      control: undefined!,
+      _errorState: undefined!,
+      _isLoadedState: createSimpleState(false),
+      _loadingProcess: undefined!,
       _subscribeWithError: alwaysNoop,
       _subscribeWithLoad: _load && alwaysNoop,
       _valueToggler: 0,
@@ -343,14 +206,24 @@ const getAsyncState = (
 
   const value = state._value;
 
-  (state as Mutable<typeof state>)._root = state;
+  (state as Mutable<typeof state>)[ROOT] = state;
 
-  (errorState as Mutable<typeof errorState>)._parent = state;
+  (state as Mutable<typeof state>)._errorState = {
+    [ROOT]: {
+      _onValueChange: createSubscribe(errorCallbacks),
+      _get: get,
+      _set: setError,
+      _parent: state,
+      _value: undefined,
+      _callbacks: errorCallbacks,
+      _valueToggler: 0,
+    },
+  } as InternalAsyncState['_errorState'];
 
   if (value !== undefined) {
     const _isLoaded = isLoaded ? isLoaded(value, undefined, 0) : true;
 
-    state.isLoaded._value = _isLoaded;
+    state._isLoadedState[ROOT]._value = _isLoaded;
 
     if (_isLoaded && !options.revalidate) {
       state._isLoadable = false;
@@ -358,7 +231,10 @@ const getAsyncState = (
   }
 
   if (Control) {
-    (state as Mutable<typeof state>).control = new Control(options, state);
+    (state as Mutable<typeof state>)._loadingProcess = new Control(
+      options,
+      state as any
+    );
   }
 
   return state;

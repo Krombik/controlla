@@ -1,21 +1,19 @@
 import { useSyncExternalStore } from 'react';
-import type {
-  AnyAsyncState,
-  AsyncState,
-  Falsy,
-  StateBase as State,
-} from '../types';
+import type { AnyAsyncState, AsyncState, Falsy, ReadonlyState } from '../types';
 import noop from 'lodash.noop';
 import alwaysNoop from '../utils/alwaysNoop';
+import { ROOT } from '../utils/constants';
 
 const useValue = ((state: AnyAsyncState | Falsy) => {
   if (state) {
+    const utils = state[ROOT];
+
     useSyncExternalStore(
-      state._subscribeWithLoad || state._onValueChange,
-      () => state._valueToggler
+      utils._subscribeWithLoad || utils._onValueChange,
+      () => utils._valueToggler
     );
 
-    return state.get();
+    return utils._get();
   }
 
   useSyncExternalStore(alwaysNoop, noop);
@@ -25,9 +23,9 @@ const useValue = ((state: AnyAsyncState | Falsy) => {
    * It ensures that the component re-renders whenever the {@link state} value changes.
    * If the provided {@link state} is falsy, the hook returns `undefined` and performs no operations.
    */
-  <S extends State | Falsy>(
+  <S extends ReadonlyState | Falsy>(
     state: S
-  ): S extends State<infer K>
+  ): S extends ReadonlyState<infer K>
     ? K | (S extends AsyncState ? undefined : never)
     : never;
 };

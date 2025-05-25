@@ -1,14 +1,14 @@
 import type { FC } from 'react';
-import type { AsyncState, StateBase as State } from '../types';
+import type { AsyncState, ReadonlyState } from '../types';
 import useMappedValue from '../useMappedValue';
 
-type Props<S extends State, V> = {
+type Props<S extends ReadonlyState, V> = {
   state: S;
   /** Function that maps the {@link Props.state state’s} value. */
   mapper(
     ...args: S extends AsyncState<infer T, infer E>
       ? [value: T | undefined, isLoaded: boolean, error: E | undefined]
-      : S extends State<infer T>
+      : S extends ReadonlyState<infer T>
         ? [value: T]
         : never
   ): V;
@@ -35,7 +35,7 @@ const MappedController: {
    * />
    * ```
    */
-  <S extends State, V>(props: Props<S, V>): ReturnType<FC>;
+  <S extends ReadonlyState, V>(props: Props<S, V>): ReturnType<FC>;
 } = (props: Props<any, any>) =>
   props.render(useMappedValue(props.state, props.mapper));
 

@@ -5,6 +5,7 @@ import type {
   LoadableStateOptions,
   StateInitializer,
 } from '../types';
+import { ROOT } from '../utils/constants';
 
 import getAsyncState from '../utils/getAsyncState';
 
@@ -14,15 +15,16 @@ const createAsyncState = ((
   options: LoadableStateOptions<any, any, any>,
   stateInitializer?: StateInitializer,
   keys?: any[]
-) =>
-  getAsyncState(
+) => ({
+  [ROOT]: getAsyncState(
     set,
     options || {},
     stateInitializer,
     keys,
     options && options.load,
     options && options.Control
-  )) as {
+  ),
+})) as {
   /**
    * Creates a {@link LoadableState loadable state} with basic loading capabilities.
    *

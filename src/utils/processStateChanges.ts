@@ -1,4 +1,4 @@
-import type { ScopeCallbackMap, State } from '../types';
+import type { InternalState, ScopeCallbackMap } from '../types';
 import alwaysFalse from './alwaysFalse';
 import { addToBatch } from './batching';
 
@@ -32,7 +32,7 @@ const handleMandatoryCheck = (
       equalList = false;
 
       if (state._callbacks) {
-        addToBatch(state as State, newValue);
+        addToBatch(state as InternalState, newValue);
       }
     } else if (equalList) {
       equalList.add(key);
@@ -63,7 +63,7 @@ const handlePrevNil = (
       }
 
       if (state._callbacks) {
-        addToBatch(state as State, next);
+        addToBatch(state as InternalState, next);
       }
     }
   }
@@ -90,7 +90,7 @@ const handleNextNil = (
       }
 
       if (state._callbacks) {
-        addToBatch(state as State, undefined);
+        addToBatch(state as InternalState, undefined);
       }
     }
   }
@@ -99,7 +99,7 @@ const handleNextNil = (
 const processStateChanges = (
   prevValue: any,
   nextValue: any,
-  state: State | ScopeCallbackMap | undefined | false | null
+  state: InternalState | ScopeCallbackMap | undefined | false | null
 ) => {
   if (prevValue === nextValue) {
     return false;

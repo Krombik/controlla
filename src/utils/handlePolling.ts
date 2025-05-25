@@ -3,9 +3,11 @@ import type {
   PollableStateOptions,
   PollableMethods,
   AsyncState,
+  InternalAsyncState,
 } from '../types';
 import becomingOnline from './becomingOnline';
 import type createLoader from './createLoader';
+import { ROOT } from './constants';
 
 export class PollingControl implements PollableMethods {
   readonly _interval: number | ((value: any) => number);
@@ -15,7 +17,7 @@ export class PollingControl implements PollableMethods {
   _sleepPromise: Promise<void> | void | false = undefined;
   _resume: () => void = noop;
   reset: () => void = noop;
-  readonly _root: AsyncState;
+  readonly _root: InternalAsyncState;
 
   constructor(options: PollableStateOptions, state: AsyncState) {
     const { hiddenInterval } = options;
@@ -26,7 +28,7 @@ export class PollingControl implements PollableMethods {
 
     this._sleep = hiddenInterval == null ? commonSleep : smartSleep;
 
-    this._root = state;
+    this._root = state[ROOT];
   }
 
   _handleInterval(interval: number | ((value: any) => number)) {
@@ -129,28 +131,28 @@ function smartSleep(this: PollingControl) {
 export const handlePolling: Parameters<
   typeof createLoader<PollingControl>
 >[0] = async (cancelPromise, load, self) => {
-  const control = self.control;
+  const loadingProcess: PollingControl = self._loadingProcess;
 
   do {
     do {
       if (
         !(await Promise.any([
           Promise.all([
-            control._sleepPromise,
-            control._pausePromise,
+            loadingProcess._sleepPromise,
+            loadingProcess._pausePromise,
             becomingOnline(),
           ]),
           cancelPromise,
         ]))
       ) {
-        control._sleepPromise = false;
+        loadingProcess._sleepPromise = false;
 
         return;
       }
-    } while (control._pausePromise || !navigator.onLine);
+    } while (loadingProcess._pausePromise || !navigator.onLine);
   } while (
     await load().then((res) => {
-      control._sleepPromise = res && control._sleep();
+      loadingProcess._sleepPromise = res && loadingProcess._sleep();
 
       return res;
     })
