@@ -1,9 +1,5 @@
 import noop from 'lodash.noop';
-import type {
-  InternalAsyncState,
-  LoadableState,
-  ValueChangeCallbacks,
-} from '../types';
+import type { InternalAsyncState, ValueChangeCallbacks } from '../types';
 import { postBatchCallbacksPush } from './batching';
 import load from '../load';
 
