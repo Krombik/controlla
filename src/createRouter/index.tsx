@@ -12,10 +12,15 @@ type SimpleOptions = {
   startsWith?: boolean;
 };
 
-const parseArray = (value: string | undefined) =>
-  value ? value.split('/') : [];
+const parseArray = (value: string) => value.split('/');
 
-const stringifyArray = (value: string[]) => value.join('/');
+const stringifyArray = (value: string[], key: string) => {
+  if (!value.length) {
+    throw new Error(`${key} is empty`);
+  }
+
+  return value.join('/');
+};
 
 function getParams(this: Router<any>) {
   const self = this;
@@ -340,10 +345,30 @@ type PathCreator<
     >;
   };
 
+const nonUndefinedIdentity = (value: any, key: string) => {
+  if (value === undefined) {
+    throw new Error(`${key} is required`);
+  }
+
+  return value;
+};
+
+const handleTransformer = (
+  fn: ((value: any) => any) | undefined,
+  optional: boolean | undefined
+): typeof nonUndefinedIdentity =>
+  fn
+    ? optional
+      ? (value) => (value !== undefined ? fn(value) : value)
+      : (value, key) => fn(nonUndefinedIdentity(value, key))
+    : optional
+      ? identity
+      : nonUndefinedIdentity;
+
 const createPath = (): PathCreator => {
   let regexStr = '';
 
-  let withAny = false;
+  let anyIndex = 0;
 
   const path: string[] = [];
 
@@ -351,54 +376,68 @@ const createPath = (): PathCreator => {
 
   const queryParams: string[] = [];
 
-  const parsers = new Map<string, (value: string | undefined) => any>();
+  const parsers = new Map<
+    string,
+    (value: string | undefined, key: string) => any
+  >();
 
-  const stringifies = new Map<string, (value: any) => string | undefined>();
+  const stringifies = new Map<
+    string,
+    (value: any, key: string) => string | undefined
+  >();
 
   return {
     _complete() {
-      let getPath: ((params: Record<string, any>) => string) | undefined;
+      let getPath: (params: Record<string, any>) => string;
 
       const l = path.length;
 
+      const pathParamsCount = pathParams.length;
+
+      const queryParamsCount = queryParams.length;
+
       const getStringify = stringifies.get.bind(stringifies) as (
         key: string
-      ) => (value: any) => string | undefined;
+      ) => (value: any, key: string) => string | undefined;
 
-      if (!withAny) {
-        if (!l || (l == 1 && path[0][0] == '/')) {
-          const str = l ? path[0] : '';
+      const getParse = parsers.get.bind(parsers) as (
+        key: string
+      ) => (value: string | undefined, key: string) => any;
 
-          getPath = () => str;
-        } else {
-          getPath = (params) => {
-            let str = '';
+      if (!l || (l == 1 && path[0][0] == '/')) {
+        const str = l ? path[0] : '';
 
-            for (let i = 0; i < l; i++) {
-              const item = path[i];
+        getPath = () => str;
+      } else {
+        getPath = (params) => {
+          let str = '';
 
-              if (item[0] == '/') {
-                str += item;
-              } else {
-                const value = getStringify(item)(params[item]);
+          for (let i = 0; i < l; i++) {
+            const item = path[i];
 
-                if (value !== undefined) {
-                  str += '/' + value;
-                }
+            if (item[0] == '/') {
+              str += item;
+            } else {
+              const value = getStringify(item)(params[item], item);
+
+              if (value !== undefined) {
+                str += '/' + value;
               }
             }
+          }
 
-            return str;
-          };
-        }
+          return str;
+        };
       }
 
       return {
         _getPath: getPath,
-        _addSearchParams: withQueryParams
+        _addSearchParams: queryParamsCount
           ? (searchParams, params) => {
-              for (const name in queryStringifies) {
-                const value = queryStringifies[name](params[name]);
+              for (let i = 0; i < queryParamsCount; i++) {
+                const name = queryParams[i];
+
+                const value = getStringify(name)(params[name], name);
 
                 if (value !== undefined) {
                   searchParams.set(name, value);
@@ -406,19 +445,25 @@ const createPath = (): PathCreator => {
               }
             }
           : noop,
-        _extractPathParams(params, pathParams) {
-          for (const key in pathParsers) {
-            params[key] = pathParsers[key](pathParams[key]);
-          }
-        },
-        _extractQueryParams(params, searchParams) {
-          for (const key in queryParsers) {
-            params[key] = queryParsers[key](searchParams.get(key) || undefined);
-          }
-        },
+        _extractPathParams: pathParamsCount
+          ? (parent, params) => {
+              for (let i = 0; i < pathParamsCount; i++) {
+                const key = pathParams[i];
+
+                parent[key] = getParse(key)(params[key], key);
+              }
+            }
+          : noop,
+        _extractQueryParams: queryParamsCount
+          ? (parent, params) => {
+              for (let i = 0; i < queryParamsCount; i++) {
+                const key = queryParams[i];
+
+                parent[key] = getParse(key)(params.get(key) || undefined, key);
+              }
+            }
+          : noop,
         _regexStr: regexStr,
-        _withPathParams: withPathParams,
-        _withQueryParams: withQueryParams,
       };
     },
     literal(text, optional) {
@@ -441,16 +486,18 @@ const createPath = (): PathCreator => {
     any(optional) {
       const pattern = '/([^/]+)';
 
-      withAny = true;
+      const key = '' + anyIndex++;
 
       regexStr += optional ? `(?:${pattern})?` : pattern;
+
+      path.push(key);
+
+      stringifies.set(key, optional ? identity : nonUndefinedIdentity);
 
       return this;
     },
     param(name, options) {
       const pattern = `/(?<${name}>[^/]+)`;
-
-      const stringify = options && options.stringify;
 
       const parse = options && options.parse;
 
@@ -462,18 +509,14 @@ const createPath = (): PathCreator => {
         name,
         parse
           ? optional
-            ? (value) => (value ? parse(value) : undefined)
+            ? (value) => (value !== undefined ? parse(value) : value)
             : parse
           : identity
       );
 
       stringifies.set(
         name,
-        stringify
-          ? optional
-            ? (item) => (item !== undefined ? stringify(item) : item)
-            : stringify
-          : identity
+        handleTransformer(options && options.stringify, optional)
       );
 
       path.push(name);
@@ -485,18 +528,15 @@ const createPath = (): PathCreator => {
     array(name, converter) {
       const stringify = converter && converter.stringify;
 
-      const parse = converter && converter.parse;
-
       regexStr += `(?:/(?<${name}>(?:[^/]+(?:/[^/]+)*)))?`;
 
-      parsers.set(
-        name,
-        parse ? (value) => (value ? parse(value.split('/')) : []) : parseArray
-      );
+      parsers.set(name, (converter && converter.parse) || (parseArray as any));
 
       stringifies.set(
         name,
-        stringify ? (value) => stringify(value).join('/') : stringifyArray
+        stringify
+          ? (value, name) => stringifyArray(stringify(value), name)
+          : stringifyArray
       );
 
       path.push(name);
@@ -519,7 +559,7 @@ const createPath = (): PathCreator => {
 
       parsers.set(name, identity);
 
-      stringifies.set(name, identity);
+      stringifies.set(name, optional ? identity : nonUndefinedIdentity);
 
       path.push(name);
 
@@ -528,28 +568,13 @@ const createPath = (): PathCreator => {
       return this;
     },
     query(name, options) {
-      const stringify = options && options.stringify;
-
-      const parse = options && options.parse;
-
       const optional = options && options.optional;
 
-      parsers.set(
-        name,
-        parse
-          ? optional
-            ? (value) => (value ? parse(value) : undefined)
-            : parse
-          : identity
-      );
+      parsers.set(name, handleTransformer(options && options.parse, optional));
 
       stringifies.set(
         name,
-        stringify
-          ? optional
-            ? (item) => (item !== undefined ? stringify(item) : item)
-            : stringify
-          : identity
+        handleTransformer(options && options.stringify, optional)
       );
 
       queryParams.push(name);
