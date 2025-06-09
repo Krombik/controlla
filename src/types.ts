@@ -85,9 +85,9 @@ declare const LOADABLE_MARKER: unique symbol;
 
 declare const LADING_PROCESS_MARKER: unique symbol;
 
-declare class _Base<T> {}
+declare class _Base {}
 
-export type ReadonlyState<T = any> = _Base<T> & {
+export type ReadonlyState<T = any> = _Base & {
   /** @internal */
   readonly [ROOT]: InternalState;
   [STATE_MARKER]: T;
@@ -136,14 +136,16 @@ type ScopeMarker<T = any> = {
 
 type ProcessScope<
   Value,
-  S extends State,
+  S extends ReadonlyState,
   M = Exclude<Value, Nil>,
   N = Extract<Value, Nil>,
 > = (S extends LoadableState<any, infer E, infer C>
   ? LoadableState<Value, E, C>
   : S extends AsyncState<any, infer E>
     ? AsyncState<Value, E>
-    : State<Value>) &
+    : S extends State
+      ? State<Value>
+      : ReadonlyState<Value>) &
   (0 extends 1 & Value
     ? { readonly [key in string | number]: ProcessScope<any, S, any, any> }
     : M extends Primitive
@@ -158,6 +160,9 @@ type ProcessScope<
   ScopeMarker<Value>;
 
 declare class Scope {}
+
+export type ReadonlyStateScope<Value = any> = Scope &
+  ProcessScope<Value, ReadonlyState>;
 
 export type StateScope<Value = any> = Scope & ProcessScope<Value, State>;
 
