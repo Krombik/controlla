@@ -1,9 +1,9 @@
 import noop from 'lodash.noop';
 import type {
-  PollableStateOptions,
+  PollableControlOptions,
   PollableMethods,
-  AsyncState,
-  InternalAsyncState,
+  AsyncControl,
+  InternalAsyncControl,
 } from '../types';
 import becomingOnline from './becomingOnline';
 import type createLoader from './createLoader';
@@ -17,9 +17,9 @@ export class PollingControl implements PollableMethods {
   _sleepPromise: Promise<void> | void | false = undefined;
   _resume: () => void = noop;
   reset: () => void = noop;
-  readonly _root: InternalAsyncState;
+  readonly _root: InternalAsyncControl;
 
-  constructor(options: PollableStateOptions, state: AsyncState) {
+  constructor(options: PollableControlOptions, control: AsyncControl) {
     const { hiddenInterval } = options;
 
     this._interval = options.interval;
@@ -28,7 +28,7 @@ export class PollingControl implements PollableMethods {
 
     this._sleep = hiddenInterval == null ? commonSleep : smartSleep;
 
-    this._root = state[ROOT];
+    this._root = control[ROOT];
   }
 
   _handleInterval(interval: number | ((value: any) => number)) {

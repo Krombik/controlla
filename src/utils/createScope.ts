@@ -1,6 +1,6 @@
 import type {
-  InternalAsyncState,
-  InternalState,
+  InternalAsyncControl,
+  InternalControl,
   Mutable,
   ValueChangeCallbacks,
 } from '../types';
@@ -12,7 +12,7 @@ import {
 } from './createAsyncSubscribe';
 import createSubscribe from './createSubscribe';
 
-function get(this: InternalState) {
+function get(this: InternalControl) {
   const path = this._path!;
 
   const l = path.length;
@@ -28,101 +28,101 @@ function get(this: InternalState) {
   return value;
 }
 
-const childHandler: ProxyHandler<InternalState | InternalAsyncState> = {
-  get(state, prop: string | typeof ROOT) {
+const childHandler: ProxyHandler<InternalControl | InternalAsyncControl> = {
+  get(control, prop: string | typeof ROOT) {
     if (prop == ROOT) {
-      if (state._callbacks) {
-        return state;
+      if (control._callbacks) {
+        return control;
       }
 
-      const root = state[ROOT]!;
+      const root = control[ROOT]!;
 
       const callbacks: ValueChangeCallbacks = new Set();
 
-      state._get = get;
+      control._get = get;
 
-      state._onValueChange = createSubscribe(callbacks);
+      control._subscribe = createSubscribe(callbacks);
 
-      (state as Mutable<typeof state>)._callbacks = callbacks;
+      (control as Mutable<typeof control>)._callbacks = callbacks;
 
-      state._valueToggler = 0;
+      control._valueToggler = 0;
 
       if ('_load' in root) {
-        (state as InternalAsyncState)._subscribeWithError =
+        (control as InternalAsyncControl)._subscribeWithError =
           createSubscribeWithError(
             callbacks,
-            root._errorState[ROOT]._callbacks,
+            root._errorControl[ROOT]._callbacks,
             root
           );
 
         if (root._load) {
-          (state as InternalAsyncState)._subscribeWithLoad =
+          (control as InternalAsyncControl)._subscribeWithLoad =
             createLoadableSubscribe(callbacks, root);
         }
       }
 
-      return state;
+      return control;
     }
 
-    if (!state._storage) {
-      state._children = new Map();
+    if (!control._storage) {
+      control._children = new Map();
 
-      state._storage = new Map();
-    } else if (state._storage.has(prop)) {
-      return state._storage.get(prop);
+      control._storage = new Map();
+    } else if (control._storage.has(prop)) {
+      return control._storage.get(prop);
     }
 
-    const nextState = {
-      [ROOT]: state[ROOT]!,
-      _path: concat(state._path!, prop),
+    const nextControl = {
+      [ROOT]: control[ROOT]!,
+      _path: concat(control._path!, prop),
       _callbacks: undefined,
       _children: undefined,
       _storage: undefined,
-    } as Partial<InternalState> as InternalState;
+    } as Partial<InternalControl> as InternalControl;
 
-    const next = new Proxy(nextState, childHandler);
+    const next = new Proxy(nextControl, childHandler);
 
-    state._children!.set(prop, nextState);
+    control._children!.set(prop, nextControl);
 
-    state._storage.set(prop, next);
+    control._storage.set(prop, next);
 
     return next;
   },
 };
 
-const rootHandler: ProxyHandler<InternalState | InternalAsyncState> = {
-  get(state, prop: string | typeof ROOT) {
+const rootHandler: ProxyHandler<InternalControl | InternalAsyncControl> = {
+  get(control, prop: string | typeof ROOT) {
     if (prop == ROOT) {
-      return state;
+      return control;
     }
 
-    if (!state._storage) {
-      state._children = new Map();
+    if (!control._storage) {
+      control._children = new Map();
 
-      state._storage = new Map();
-    } else if (state._storage.has(prop)) {
-      return state._storage.get(prop);
+      control._storage = new Map();
+    } else if (control._storage.has(prop)) {
+      return control._storage.get(prop);
     }
 
-    const nextState = {
-      [ROOT]: state,
+    const nextControl = {
+      [ROOT]: control,
       _path: [prop],
       _callbacks: undefined,
       _children: undefined,
       _storage: undefined,
-    } as Partial<InternalState> as InternalState;
+    } as Partial<InternalControl> as InternalControl;
 
-    const next = new Proxy(nextState, childHandler);
+    const next = new Proxy(nextControl, childHandler);
 
-    state._children!.set(prop, nextState);
+    control._children!.set(prop, nextControl);
 
-    state._storage.set(prop, next);
+    control._storage.set(prop, next);
 
     return next;
   },
 };
 
-const createScope = (state: InternalState | InternalAsyncState): any =>
-  new Proxy(state, rootHandler);
+const createScope = (control: InternalControl | InternalAsyncControl): any =>
+  new Proxy(control, rootHandler);
 
 export default createScope;

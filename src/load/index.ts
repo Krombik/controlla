@@ -1,9 +1,9 @@
 import noop from 'lodash.noop';
-import type { InternalAsyncState, LoadableState } from '../types';
+import type { InternalAsyncControl, LoadableControl } from '../types';
 import { RESOLVED_PROMISE, ROOT } from '../utils/constants';
-import { handleSlowLoading, handleUnload } from '../utils/asyncStateUtils';
+import { handleSlowLoading, handleUnload } from '../utils/asyncControlUtils';
 
-const loaderCleanupSet = new Set<InternalAsyncState>();
+const loaderCleanupSet = new Set<InternalAsyncControl>();
 
 let isLoadCleanupPending = true;
 
@@ -15,18 +15,18 @@ const startBatch = () => {
       const it = loaderCleanupSet.values();
 
       for (let i = loaderCleanupSet.size; i--; ) {
-        const state: InternalAsyncState = it.next().value;
+        const control: InternalAsyncControl = it.next().value;
 
-        handleUnload(state);
+        handleUnload(control);
 
-        if (!state._isLoadedState[ROOT]._value) {
-          state._isLoadable = true;
+        if (!control._isLoadedControl[ROOT]._value) {
+          control._isLoadable = true;
         }
 
-        if (state._reloadOnFocus) {
+        if (control._reloadOnFocus) {
           document.removeEventListener(
             'visibilitychange',
-            state._reloadOnFocus._focusListener!
+            control._reloadOnFocus._focusListener!
           );
         }
       }
@@ -39,11 +39,14 @@ const startBatch = () => {
 };
 
 const load: {
-  (state: LoadableState, reload?: boolean): () => void;
+  (control: LoadableControl<any, any, any>, reload?: boolean): () => void;
   /** @internal */
-  (state: InternalAsyncState, reload?: boolean): () => void;
-} = (state: LoadableState | InternalAsyncState, reload?: boolean) => {
-  const self = state[ROOT][ROOT];
+  (control: InternalAsyncControl, reload?: boolean): () => void;
+} = (
+  control: LoadableControl<any, any, any> | InternalAsyncControl,
+  reload?: boolean
+) => {
+  const self = control[ROOT][ROOT];
 
   const { _reloadOnFocus } = self;
 
@@ -66,7 +69,7 @@ const load: {
   if (self._isLoadable) {
     self._isLoadable = false;
 
-    self._isLoadedState[ROOT]._set(false);
+    self._isLoadedControl[ROOT]._set(false);
 
     handleSlowLoading(self._slowLoading, false);
 

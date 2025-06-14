@@ -1,29 +1,29 @@
 import type { ContextType } from 'react';
-import type { InternalAsyncState } from '../types';
+import type { InternalAsyncControl } from '../types';
 import type ErrorBoundaryContext from './ErrorBoundaryContext';
 import type SuspenseContext from './SuspenseContext';
-import type { SkeletonState } from '../SKELETON_STATE';
+import type { SkeletonControl } from '../SKELETON_CONTROL';
 import getPromise from '../getPromise';
 import load from '../load';
 
 const handleSuspense = (
-  state: InternalAsyncState | SkeletonState,
+  control: InternalAsyncControl | SkeletonControl,
   errorBoundaryCtx: ContextType<typeof ErrorBoundaryContext>,
   suspenseCtx: ContextType<typeof SuspenseContext>
 ) => {
-  if ('_fakeSuspense' in state) {
-    return state._fakeSuspense(suspenseCtx, errorBoundaryCtx);
+  if ('_fakeSuspense' in control) {
+    return control._fakeSuspense(suspenseCtx, errorBoundaryCtx);
   }
 
-  if (state._load) {
+  if (control._load) {
     if (!suspenseCtx) {
       throw new Error('No Suspense Wrapper');
     }
 
-    if (!suspenseCtx.has(state)) {
-      const unload = load(state);
+    if (!suspenseCtx.has(control)) {
+      const unload = load(control);
 
-      suspenseCtx.set(state, unload);
+      suspenseCtx.set(control, unload);
 
       if (errorBoundaryCtx) {
         errorBoundaryCtx.add(unload);
@@ -31,7 +31,7 @@ const handleSuspense = (
     }
   }
 
-  return getPromise(state as any);
+  return getPromise(control as any);
 };
 
 export default handleSuspense;

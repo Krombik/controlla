@@ -1,10 +1,10 @@
-import type { AsyncState, ReadonlyState } from '../types';
+import type { ReadonlyAsyncControl, ReadonlyControl } from '../types';
 import { ROOT } from '../utils/constants';
 
-const getValue = <S extends ReadonlyState>(
-  state: S
-): S extends ReadonlyState<infer K>
-  ? K | (S extends AsyncState ? undefined : never)
-  : never => state[ROOT]._get();
+const getValue = <S extends ReadonlyControl>(
+  control: S
+): S extends ReadonlyControl<infer K>
+  ? K | (S extends ReadonlyAsyncControl ? undefined : never)
+  : never => control[ROOT]._get();
 
 export default getValue;

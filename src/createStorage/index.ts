@@ -1,71 +1,73 @@
 import toKey, { type PrimitiveOrNested } from 'keyweaver';
 import type {
-  AsyncState,
-  LoadableState,
-  State,
+  AsyncControl,
+  LoadableControl,
+  Control,
   Storage,
-  AsyncStateOptions,
-  RequestableStateOptions,
-  PollableStateOptions,
-  LoadableStateOptions,
+  AsyncControlOptions,
+  RequestableControlOptions,
+  PollableControlOptions,
+  LoadableControlOptions,
   WithInitModule,
-  PaginatedStorage,
-  PollableStateScope,
-  PollableState,
-  LoadableStateScope,
-  AsyncStateScope,
-  StateScope,
+  // PaginatedStorage,
+  PollableControlScope,
+  PollableControl,
+  LoadableControlScope,
+  AsyncControlScope,
+  ControlScope,
   PollableMethods,
   StorageRecord,
 } from '../types';
-import type createState from '../createState';
-import type createAsyncState from '../createAsyncState';
-import type createStateScope from '../createStateScope';
-import type createAsyncStateScope from '../createAsyncStateScope';
-import type createRequestableState from '../createRequestableState';
-import type createRequestableStateScope from '../createRequestableStateScope';
-import type createPollableState from '../createPollableState';
-import type createPollableStateScope from '../createPollableStateScope';
-import type createPaginatedStorage from '../createPaginatedStorage';
-import type {
-  PaginatedPollableNestedStateArgs,
-  PaginatedPollableStateArgs,
-  PaginatedRequestableNestedStateArgs,
-  PaginatedRequestableStateArgs,
-} from '../createPaginatedStorage';
+import type createControl from '../createControl';
+import type createAsyncControl from '../createAsyncControl';
+import type createControlScope from '../createControlScope';
+import type createAsyncControlScope from '../createAsyncControlScope';
+import type createRequestableControl from '../createRequestableControl';
+import type createRequestableControlScope from '../createRequestableControlScope';
+import type createPollableControl from '../createPollableControl';
+import type createPollableControlScope from '../createPollableControlScope';
+// import type createPaginatedStorage from '../createPaginatedStorage';
+// import type {
+//   PaginatedPollableNestedStateArgs,
+//   PaginatedPollableStateArgs,
+//   PaginatedRequestableNestedStateArgs,
+//   PaginatedRequestableStateArgs,
+// } from '../createPaginatedStorage';
 
-type StateCreator = typeof createState | typeof createStateScope;
+type ControlCreator = typeof createControl | typeof createControlScope;
 
-type GetStateArgs<
-  CreateState extends StateCreator,
+type GetControlArgs<
+  CreateControl extends ControlCreator,
   T,
   Keys extends PrimitiveOrNested[],
   ParentKeys extends PrimitiveOrNested[] = [],
 > = WithInitModule<
   T,
   [
-    createState: CreateState,
+    createControl: CreateControl,
     defaultValue?: T | ((keys: [...ParentKeys, ...Keys]) => T),
   ]
 >;
 
-type AsyncStateCreator = typeof createAsyncState | typeof createAsyncStateScope;
+type AsyncControlCreator =
+  | typeof createAsyncControl
+  | typeof createAsyncControlScope;
 
-type AsyncGetStateArgs<
-  CreateState extends AsyncStateCreator,
+type AsyncGetControlArgs<
+  CreateControl extends AsyncControlCreator,
   T,
   Keys extends PrimitiveOrNested[],
   ParentKeys extends PrimitiveOrNested[] = [],
 > = WithInitModule<
   T | undefined,
   [
-    createState: CreateState,
-    options?: AsyncStateOptions<T, [...ParentKeys, ...Keys]>,
+    createControl: CreateControl,
+    options?: AsyncControlOptions<T, [...ParentKeys, ...Keys]>,
   ]
 >;
 
-type LoadableStateArgs<
-  CreateState extends AsyncStateCreator,
+type LoadableControlArgs<
+  CreateControl extends AsyncControlCreator,
   T,
   E,
   Control,
@@ -74,17 +76,17 @@ type LoadableStateArgs<
 > = WithInitModule<
   T | undefined,
   [
-    createState: CreateState,
-    options: LoadableStateOptions<T, E, Control, [...ParentKeys, ...Keys]>,
+    createControl: CreateControl,
+    options: LoadableControlOptions<T, E, Control, [...ParentKeys, ...Keys]>,
   ]
 >;
 
-type RequestableStateCreator =
-  | typeof createRequestableState
-  | typeof createRequestableStateScope;
+type RequestableControlCreator =
+  | typeof createRequestableControl
+  | typeof createRequestableControlScope;
 
-type RequestableStateArgs<
-  CreateState extends RequestableStateCreator,
+type RequestableControlArgs<
+  CreateControl extends RequestableControlCreator,
   T,
   E,
   Keys extends PrimitiveOrNested[],
@@ -92,17 +94,17 @@ type RequestableStateArgs<
 > = WithInitModule<
   T | undefined,
   [
-    createState: CreateState,
-    options: RequestableStateOptions<T, E, [...ParentKeys, ...Keys]>,
+    createControl: CreateControl,
+    options: RequestableControlOptions<T, E, [...ParentKeys, ...Keys]>,
   ]
 >;
 
-type PollableStateCreator =
-  | typeof createPollableState
-  | typeof createPollableStateScope;
+type PollableControlCreator =
+  | typeof createPollableControl
+  | typeof createPollableControlScope;
 
-type PollableStateArgs<
-  CreateState extends PollableStateCreator,
+type PollableControlArgs<
+  CreateControl extends PollableControlCreator,
   T,
   E,
   Keys extends PrimitiveOrNested[],
@@ -110,23 +112,23 @@ type PollableStateArgs<
 > = WithInitModule<
   T | undefined,
   [
-    createState: CreateState,
-    options: PollableStateOptions<T, E, [...ParentKeys, ...Keys]>,
+    createControl: CreateControl,
+    options: PollableControlOptions<T, E, [...ParentKeys, ...Keys]>,
   ]
 >;
 
-type StateCreationArguments<
-  T extends State,
+type ControlCreationArguments<
+  T extends Control,
   Keys extends PrimitiveOrNested[],
   ParentKeys extends PrimitiveOrNested[],
 > = T extends
-  | LoadableState<infer V, infer E, infer C>
-  | LoadableStateScope<infer V, infer E, infer C>
+  | LoadableControl<infer V, infer E, infer C>
+  | LoadableControlScope<infer V, infer E, infer C>
   ? C extends PollableMethods
-    ? PollableStateArgs<
-        T extends LoadableState
-          ? typeof createPollableState
-          : typeof createPollableStateScope,
+    ? PollableControlArgs<
+        T extends LoadableControl
+          ? typeof createPollableControl
+          : typeof createPollableControlScope,
         V,
         E,
         Keys,
@@ -134,164 +136,166 @@ type StateCreationArguments<
       >
     : [C] extends [never]
       ?
-          | RequestableStateArgs<
-              T extends LoadableState
-                ? typeof createRequestableState
-                : typeof createRequestableStateScope,
+          | RequestableControlArgs<
+              T extends LoadableControl
+                ? typeof createRequestableControl
+                : typeof createRequestableControlScope,
               V,
               E,
               Keys,
               ParentKeys
             >
-          | LoadableStateArgs<
-              T extends LoadableState
-                ? typeof createAsyncState
-                : typeof createAsyncStateScope,
+          | LoadableControlArgs<
+              T extends LoadableControl
+                ? typeof createAsyncControl
+                : typeof createAsyncControlScope,
               V,
               E,
               never,
               Keys,
               ParentKeys
             >
-      : LoadableStateArgs<
-          T extends LoadableState
-            ? typeof createAsyncState
-            : typeof createAsyncStateScope,
+      : LoadableControlArgs<
+          T extends LoadableControl
+            ? typeof createAsyncControl
+            : typeof createAsyncControlScope,
           V,
           E,
           C,
           Keys,
           ParentKeys
         >
-  : T extends AsyncState<infer V>
-    ? AsyncGetStateArgs<
-        T extends AsyncStateScope
-          ? typeof createAsyncStateScope
-          : typeof createAsyncState,
+  : T extends AsyncControl<infer V>
+    ? AsyncGetControlArgs<
+        T extends AsyncControlScope
+          ? typeof createAsyncControlScope
+          : typeof createAsyncControl,
         V,
         Keys,
         ParentKeys
       >
-    : T extends State<infer V>
-      ? GetStateArgs<
-          T extends StateScope ? typeof createStateScope : typeof createState,
+    : T extends Control<infer V>
+      ? GetControlArgs<
+          T extends ControlScope
+            ? typeof createControlScope
+            : typeof createControl,
           V,
           Keys,
           ParentKeys
         >
       : never;
 
-type PaginatedStorageArgs<
-  T extends PaginatedStorage<any>,
-  Keys extends PrimitiveOrNested[],
-  ParentKeys extends PrimitiveOrNested[],
-> =
-  T extends PaginatedStorage<infer S>
-    ? WithCreatePaginatedStorage<
-        S extends PollableStateScope<infer V, infer E>
-          ? PaginatedPollableNestedStateArgs<V, E, [...ParentKeys, Keys]>
-          : S extends PollableState<infer V, infer E>
-            ? PaginatedPollableStateArgs<V, E, [...ParentKeys, Keys]>
-            : S extends LoadableStateScope<infer V, infer E>
-              ? PaginatedRequestableNestedStateArgs<V, E, [...ParentKeys, Keys]>
-              : S extends LoadableState<infer V, infer E>
-                ? PaginatedRequestableStateArgs<V, E, [...ParentKeys, Keys]>
-                : never
-      >
-    : never;
+// type PaginatedStorageArgs<
+//   T extends PaginatedStorage<any>,
+//   Keys extends PrimitiveOrNested[],
+//   ParentKeys extends PrimitiveOrNested[],
+// > =
+//   T extends PaginatedStorage<infer S>
+//     ? WithCreatePaginatedStorage<
+//         S extends PollableStateScope<infer V, infer E>
+//           ? PaginatedPollableNestedStateArgs<V, E, [...ParentKeys, Keys]>
+//           : S extends PollableState<infer V, infer E>
+//             ? PaginatedPollableStateArgs<V, E, [...ParentKeys, Keys]>
+//             : S extends LoadableStateScope<infer V, infer E>
+//               ? PaginatedRequestableNestedStateArgs<V, E, [...ParentKeys, Keys]>
+//               : S extends LoadableState<infer V, infer E>
+//                 ? PaginatedRequestableStateArgs<V, E, [...ParentKeys, Keys]>
+//                 : never
+//       >
+//     : never;
 
 type StorageRecordArgs<
   T extends StorageRecord,
   Keys extends PrimitiveOrNested[],
   ParentKeys extends PrimitiveOrNested[] = [],
 > = {
-  [key in keyof T]: T[key] extends State
-    ? StateCreationArguments<T[key], Keys, ParentKeys>
+  [key in keyof T]: T[key] extends Control
+    ? ControlCreationArguments<T[key], Keys, ParentKeys>
     : T[key] extends Storage<infer S, infer K>
       ? S extends StorageRecord
-        ? WithCreateStateStorage<
+        ? WithCreateControlStorage<
             [StorageRecordArgs<S, K, [...ParentKeys, ...Keys]>]
           >
-        : S extends State
-          ? WithCreateStateStorage<
-              StateCreationArguments<S, K, [...ParentKeys, ...Keys]>
+        : S extends Control
+          ? WithCreateControlStorage<
+              ControlCreationArguments<S, K, [...ParentKeys, ...Keys]>
             >
-          : S extends PaginatedStorage<any>
-            ? WithCreateStateStorage<
-                PaginatedStorageArgs<S, K, [...ParentKeys, ...Keys]>
-              >
-            : never
+          : // : S extends PaginatedStorage<any>
+            //   ? WithCreateStateStorage<
+            //       PaginatedStorageArgs<S, K, [...ParentKeys, ...Keys]>
+            //     >
+            never
       : never;
 };
 
-type WithCreatePaginatedStorage<T extends any[]> = [
-  typeof createPaginatedStorage,
-  ...T,
-];
+// type WithCreatePaginatedStorage<T extends any[]> = [
+//   typeof createPaginatedStorage,
+//   ...T,
+// ];
 
-type WithCreateStateStorage<T extends any[]> = [CreateStorage, ...T];
+type WithCreateControlStorage<T extends any[]> = [CreateStorage, ...T];
 
 interface CreateStorage {
   <T, Keys extends PrimitiveOrNested[], E = any, Control = never>(
-    ...args: LoadableStateArgs<
-      typeof createAsyncStateScope,
+    ...args: LoadableControlArgs<
+      typeof createAsyncControlScope,
       T,
       E,
       Control,
       Keys
     >
-  ): Storage<LoadableStateScope<T, E, Control>, Keys>;
+  ): Storage<LoadableControlScope<T, E, Control>, Keys>;
   <T, Keys extends PrimitiveOrNested[], E = any, Control = never>(
-    ...args: LoadableStateArgs<typeof createAsyncState, T, E, Control, Keys>
-  ): Storage<LoadableState<T, E, Control>, Keys>;
+    ...args: LoadableControlArgs<typeof createAsyncControl, T, E, Control, Keys>
+  ): Storage<LoadableControl<T, E, Control>, Keys>;
 
   <T, Keys extends PrimitiveOrNested[], E = any>(
-    ...args: PollableStateArgs<typeof createPollableStateScope, T, E, Keys>
-  ): Storage<PollableStateScope<T, E>, Keys>;
+    ...args: PollableControlArgs<typeof createPollableControlScope, T, E, Keys>
+  ): Storage<PollableControlScope<T, E>, Keys>;
   <T, Keys extends PrimitiveOrNested[], E = any>(
-    ...args: PollableStateArgs<typeof createPollableState, T, E, Keys>
-  ): Storage<PollableState<T, E>, Keys>;
+    ...args: PollableControlArgs<typeof createPollableControl, T, E, Keys>
+  ): Storage<PollableControl<T, E>, Keys>;
 
   <T, Keys extends PrimitiveOrNested[], E = any>(
-    ...args: AsyncGetStateArgs<typeof createAsyncStateScope, T, Keys>
-  ): Storage<AsyncStateScope<T, E>, Keys>;
+    ...args: AsyncGetControlArgs<typeof createAsyncControlScope, T, Keys>
+  ): Storage<AsyncControlScope<T, E>, Keys>;
   <T, Keys extends PrimitiveOrNested[], E = any>(
-    ...args: AsyncGetStateArgs<typeof createAsyncState, T, Keys>
-  ): Storage<AsyncState<T, E>, Keys>;
+    ...args: AsyncGetControlArgs<typeof createAsyncControl, T, Keys>
+  ): Storage<AsyncControl<T, E>, Keys>;
 
   <T, Keys extends PrimitiveOrNested[], E = any>(
-    ...args: RequestableStateArgs<
-      typeof createRequestableStateScope,
+    ...args: RequestableControlArgs<
+      typeof createRequestableControlScope,
       T,
       E,
       Keys
     >
-  ): Storage<LoadableStateScope<T, E>, Keys>;
+  ): Storage<LoadableControlScope<T, E>, Keys>;
   <T, Keys extends PrimitiveOrNested[], E = any>(
-    ...args: RequestableStateArgs<typeof createRequestableState, T, E, Keys>
-  ): Storage<LoadableState<T, E>, Keys>;
+    ...args: RequestableControlArgs<typeof createRequestableControl, T, E, Keys>
+  ): Storage<LoadableControl<T, E>, Keys>;
 
   <T, Keys extends PrimitiveOrNested[]>(
-    ...args: GetStateArgs<typeof createStateScope, T, Keys>
-  ): Storage<StateScope<T>, Keys>;
+    ...args: GetControlArgs<typeof createControlScope, T, Keys>
+  ): Storage<ControlScope<T>, Keys>;
   <T, Keys extends PrimitiveOrNested[]>(
-    ...args: GetStateArgs<typeof createState, T, Keys>
-  ): Storage<StateScope<T>, Keys>;
+    ...args: GetControlArgs<typeof createControl, T, Keys>
+  ): Storage<ControlScope<T>, Keys>;
 
   <T extends StorageRecord, Keys extends PrimitiveOrNested[]>(
     obj: StorageRecordArgs<T, Keys>
   ): Storage<T, Keys>;
 
-  <T, Keys extends PrimitiveOrNested[], E = any>(
-    ...args: WithCreatePaginatedStorage<
-      PaginatedRequestableStateArgs<T, E, Keys>
-    >
-  ): Storage<PaginatedStorage<LoadableState<T, E>>, Keys>;
-  <T, Keys extends PrimitiveOrNested[], E = any>(
-    ...args: WithCreatePaginatedStorage<
-      PaginatedRequestableNestedStateArgs<T, E, Keys>
-    >
-  ): Storage<PaginatedStorage<LoadableStateScope<T, E>>, Keys>;
+  // <T, Keys extends PrimitiveOrNested[], E = any>(
+  //   ...args: WithCreatePaginatedStorage<
+  //     PaginatedRequestableStateArgs<T, E, Keys>
+  //   >
+  // ): Storage<PaginatedStorage<LoadableState<T, E>>, Keys>;
+  // <T, Keys extends PrimitiveOrNested[], E = any>(
+  //   ...args: WithCreatePaginatedStorage<
+  //     PaginatedRequestableNestedStateArgs<T, E, Keys>
+  //   >
+  // ): Storage<PaginatedStorage<LoadableStateScope<T, E>>, Keys>;
 }
 
 function _delete(this: Storage<any, any>, ...keys: PrimitiveOrNested[]) {

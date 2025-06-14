@@ -1,5 +1,5 @@
 import toKey from 'keyweaver';
-import type { StateInitializer } from '../types';
+import type { ControlInitializer } from '../types';
 import alwaysTrue from '../utils/alwaysTrue';
 
 type SafeStorage = {
@@ -81,9 +81,9 @@ export const safeSessionStorage =
   isStorageAvailable('session') && (sessionStorage satisfies SafeStorage);
 
 /**
- * A utility for persisting state using a specified storage mechanism such as
+ * A utility for persisting control using a specified storage mechanism such as
  * {@link localStorage} or {@link sessionStorage}. It provides a customizable way to store,
- * retrieve, and observe state changes of provided persistent {@link Options.storage storage}
+ * retrieve, and observe control changes of provided persistent {@link Options.storage storage}
  */
 const getPersistInitializer = <T>({
   name,
@@ -91,7 +91,7 @@ const getPersistInitializer = <T>({
   converter = JSON,
   isValid = alwaysTrue,
   sharable,
-}: Options<T>): StateInitializer<T> | undefined =>
+}: Options<T>): ControlInitializer<T> | undefined =>
   storage &&
   ((keys) => {
     const key = keys ? toKey([name, keys]) : name;
@@ -121,7 +121,7 @@ const getPersistInitializer = <T>({
       },
       observe:
         sharable && storage.listen
-          ? (setState) =>
+          ? (setControl) =>
               storage.listen!(key, (value) => {
                 let parsedValue: T;
 
@@ -134,7 +134,7 @@ const getPersistInitializer = <T>({
                 }
 
                 if (isValid(parsedValue!)) {
-                  setState(parsedValue!);
+                  setControl(parsedValue!);
                 }
               })
           : undefined,

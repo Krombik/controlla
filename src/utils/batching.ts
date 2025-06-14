@@ -1,4 +1,4 @@
-import type { InternalState } from '../types';
+import type { InternalControl } from '../types';
 import { RESOLVED_PROMISE } from './constants';
 import executeSetters from './executeSetters';
 
@@ -6,7 +6,7 @@ const beforeBatchCallbacks: Array<() => void> = [];
 
 const postBatchCallbacks: Array<() => void> = [];
 
-let batchMap = new Map<InternalState, any>();
+let batchMap = new Map<InternalControl, any>();
 
 let batchInPending = true;
 
@@ -30,12 +30,12 @@ export const scheduleBatch = () => {
       const next = it.next.bind(it);
 
       for (let i = currMap.size; i--; ) {
-        const state: InternalState = next().value;
+        const control: InternalControl = next().value;
 
-        state._valueToggler = (state._valueToggler ^ 1) as 0 | 1;
+        control._valueToggler = (control._valueToggler ^ 1) as 0 | 1;
 
-        if (state._callbacks.size) {
-          executeSetters(state._callbacks, currMap.get(state));
+        if (control._callbacks.size) {
+          executeSetters(control._callbacks, currMap.get(control));
         }
       }
 
@@ -54,8 +54,8 @@ export const scheduleBatch = () => {
   }
 };
 
-export const addToBatch = (state: InternalState, value: any) => {
-  batchMap.set(state, value);
+export const addToBatch = (control: InternalControl, value: any) => {
+  batchMap.set(control, value);
 
   scheduleBatch();
 };

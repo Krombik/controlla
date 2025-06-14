@@ -1,28 +1,28 @@
-import { useSyncExternalStore, type FC } from 'react';
-import type { AsyncState, ReadonlyState } from '../types';
+import { type ReactNode, useSyncExternalStore } from 'react';
+import type { ReadonlyAsyncControl, ReadonlyControl } from '../types';
 import useValue from '../useValue';
 import { ROOT } from '../utils/constants';
 
-type Props<S extends ReadonlyState> = {
-  state: S;
-  /** Function that renders the state’s value. */
+type Props<S extends ReadonlyControl> = {
+  control: S;
+  /** Function that renders the control’s value. */
   render(
-    ...args: S extends AsyncState<infer V, infer E>
+    ...args: S extends ReadonlyAsyncControl<infer V, infer E>
       ? [value: V | undefined, isLoaded: boolean, error: E | undefined]
-      : S extends ReadonlyState<infer V>
+      : S extends ReadonlyControl<infer V>
         ? [value: V]
         : never
-  ): ReturnType<FC>;
+  ): ReactNode;
 };
 
-const Controller = (({ render, state }: Props<AsyncState>) => {
-  const utils = state[ROOT];
+const Controller = (({ render, control }: Props<ReadonlyAsyncControl>) => {
+  const utils = control[ROOT];
 
   const l = render.length;
 
   if (l < 2) {
     useSyncExternalStore(
-      utils._subscribeWithLoad || utils._onValueChange,
+      utils._subscribeWithLoad || utils._subscribe,
       () => utils._valueToggler
     );
 
@@ -31,44 +31,44 @@ const Controller = (({ render, state }: Props<AsyncState>) => {
 
   const root = utils[ROOT];
 
-  const isLoadedState = root._isLoadedState[ROOT];
+  const isLoadedControl = root._isLoadedControl[ROOT];
 
   useSyncExternalStore(
-    isLoadedState._onValueChange,
-    () => isLoadedState._valueToggler
+    isLoadedControl._subscribe,
+    () => isLoadedControl._valueToggler
   );
 
   if (l < 3) {
     useSyncExternalStore(
-      utils._subscribeWithLoad || utils._onValueChange,
+      utils._subscribeWithLoad || utils._subscribe,
       () => utils._valueToggler
     );
 
-    return (render as Function)(utils._get(), isLoadedState._value);
+    return (render as Function)(utils._get(), isLoadedControl._value);
   }
 
-  const errorState = root._errorState[ROOT];
+  const errorControl = root._errorControl[ROOT];
 
   useSyncExternalStore(
     utils._subscribeWithError,
-    () => (errorState._valueToggler << 1) | utils._valueToggler
+    () => (errorControl._valueToggler << 1) | utils._valueToggler
   );
 
-  return render(utils._get(), isLoadedState._value, errorState._value);
+  return render(utils._get(), isLoadedControl._value, errorControl._value);
 }) as {
   /**
-   * A controller component that renders the value from the given {@link Props.state state}.
+   * A controller component that renders the value from the given {@link Props.control control}.
    * This component wraps the {@link useValue} hook and provides a flexible way
-   * to render state values along with their loading and error statuses when applicable.
+   * to render control values along with their loading and error statuses when applicable.
    * @example
    * ```jsx
    * <Controller
-   *   state={state}
+   *   control={control}
    *   render={(value) => <div>{value}</div>}
    * />
    *
    * <Controller
-   *   state={asyncState}
+   *   control={asyncControl}
    *   render={(value, isLoaded, error) => (
    *     <div>
    *       {isLoaded ? (
@@ -81,7 +81,7 @@ const Controller = (({ render, state }: Props<AsyncState>) => {
    * />
    * ```
    */
-  <S extends ReadonlyState>(props: Props<S>): ReturnType<FC>;
+  <S extends ReadonlyControl>(props: Props<S>): ReactNode;
 };
 
 export default Controller;

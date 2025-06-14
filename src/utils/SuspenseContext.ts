@@ -1,8 +1,8 @@
 import { createContext } from 'react';
-import type { InternalAsyncState } from '../types';
+import type { InternalAsyncControl } from '../types';
 
 const SuspenseContext = createContext<Map<
-  InternalAsyncState,
+  InternalAsyncControl,
   () => void
 > | null>(null);
 

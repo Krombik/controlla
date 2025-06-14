@@ -1,25 +1,34 @@
 import {
-  FC,
   useSyncExternalStore,
+  type FC,
   type PropsWithChildren,
   type ComponentType,
   type MouseEvent as ReactMouseEvent,
 } from 'react';
 import type {
-  InternalState,
+  AsyncControl,
+  AsyncControlScope,
+  InternalAsyncControl,
+  InternalControl,
   Mutable,
-  ReadonlyState,
-  ReadonlyStateScope,
+  ReadonlyAsyncControlScope,
+  ReadonlyControl,
+  ReadonlyControlScope,
 } from '../types';
-import createStateScope from '../createStateScope';
+import createControlScope from '../createControlScope';
 import noop from 'lodash.noop';
-import createSimpleState from '../utils/createSimpleState';
+import createSimpleControl from '../utils/createSimpleControl';
 import identity from 'lodash.identity';
-import alwaysFalse from '../utils/alwaysFalse';
-import { ROOT } from '../utils/constants';
+import { ROOT, ROUTE_METHODS, ROUTE_PARAMS } from '../utils/constants';
 import { jsx } from 'react/jsx-runtime';
 import concat from '../utils/concat';
 import alwaysNoop from '../utils/alwaysNoop';
+import alwaysTrue from '../utils/alwaysTrue';
+import { postBatchCallbacksPush, scheduleBatch } from '../utils/batching';
+import createScope from '../utils/createScope';
+import getAsyncControl from '../utils/getAsyncControl';
+import { set } from '../utils/control/scope';
+import load from '../load';
 
 const parseArray = (value: string) => value.split('/');
 
@@ -31,10 +40,178 @@ const stringifyArray = (value: string[], key: string) => {
   return value.join('/');
 };
 
+const getHref = (routes: RouteData[], updatedParams?: RouteParams[]) => {
+  let path = '';
+
+  let search = '';
+
+  let routeIndex = 0;
+
+  const handleRoute = (route: RouteData) => {
+    if (route._params && !route._isMatched._value) {
+      throw new Error('route not mounted');
+    }
+
+    path += route._currentPath;
+
+    if (route._currentSearch) {
+      if (search) {
+        search += '&' + route._currentSearch;
+      } else {
+        search = '?' + route._currentSearch;
+      }
+    }
+  };
+
+  if (updatedParams) {
+    const updatedParamsLastRoute =
+      updatedParams[updatedParams.length - 1]._route;
+
+    const updatedParamsLastRouteIndex = updatedParamsLastRoute._selfIndex;
+
+    if (
+      updatedParamsLastRouteIndex != routes.length - 1 &&
+      updatedParamsLastRoute != routes[updatedParamsLastRouteIndex]
+    ) {
+      throw new Error('route not mounted');
+    }
+
+    for (let i = 0; i < updatedParams.length; i++) {
+      let stringifiedParams: Record<string, string>;
+
+      let params: Record<string, any>;
+
+      const data = updatedParams[i];
+
+      const route = data._route;
+
+      const _params = data._params;
+
+      const max = route._selfIndex;
+
+      for (; routeIndex < max; routeIndex++) {
+        handleRoute(routes[routeIndex]);
+      }
+
+      if (_params) {
+        params =
+          typeof _params == 'object' ? _params : _params(route._params!._value);
+
+        stringifiedParams = route._stringifyParams(params);
+      } else {
+        const _stringifiedParams = data._stringifiedParams!;
+
+        const source = route._source && route._source._value;
+
+        stringifiedParams =
+          typeof _stringifiedParams == 'object'
+            ? _stringifiedParams
+            : _stringifiedParams(route._stringifiedParams!);
+
+        params = {};
+
+        route._extractPathParams(params, stringifiedParams, source);
+
+        route._extractQueryParams(params, stringifiedParams, source);
+      }
+
+      path = route._getPathStringified(path, stringifiedParams);
+
+      search = route._getSearchStringified(search, stringifiedParams);
+
+      route._params!._set(params);
+
+      routeIndex++;
+    }
+  }
+
+  for (; routeIndex < routes.length; routeIndex++) {
+    handleRoute(routes[routeIndex]);
+  }
+
+  return path + search;
+};
+
+// const useHref = (routes: RouteData[], updatedParams?: RouteParams[]) => {
+//   let path = '';
+
+//   let search = '';
+
+//   let routeIndex = 0;
+
+//   const handleRoute = (route: RouteData) => {
+//     if (route._params && !route._isMatched._value) {
+//       throw new Error('route not mounted');
+//     }
+
+//     const p = route._stringifiedParams;
+
+//     path = route._getPathStringified(path, p!);
+
+//     search = route._getSearchStringified(search, p!);
+//   };
+
+//   if (updatedParams) {
+//     const updatedParamsLastRoute =
+//       updatedParams[updatedParams.length - 1]._route;
+
+//     const updatedParamsLastRouteIndex = updatedParamsLastRoute._selfIndex;
+
+//     if (
+//       updatedParamsLastRouteIndex != routes.length - 1 &&
+//       updatedParamsLastRoute != routes[updatedParamsLastRouteIndex]
+//     ) {
+//       throw new Error('route not mounted');
+//     }
+
+//     for (let i = 0; i < updatedParams.length; i++) {
+//       const data = updatedParams[i];
+
+//       const route = data._route;
+
+//       const params = data._params;
+
+//       const max = route._selfIndex;
+
+//       for (; routeIndex < max; routeIndex++) {
+//         handleRoute(routes[routeIndex]);
+//       }
+
+//       if (params) {
+//         const p =
+//           typeof params == 'object' ? params : params(route._params!._value);
+
+//         path = route._getPath(path, p);
+
+//         search = route._getSearch(search, p);
+//       } else {
+//         const stringifiedParams = data._stringifiedParams!;
+
+//         const p =
+//           typeof stringifiedParams == 'object'
+//             ? stringifiedParams
+//             : stringifiedParams(route._stringifiedParams!);
+
+//         path = route._getPathStringified(path, p);
+
+//         search = route._getSearchStringified(search, p);
+//       }
+
+//       routeIndex++;
+//     }
+//   }
+
+//   for (; routeIndex < routes.length; routeIndex++) {
+//     handleRoute(routes[routeIndex]);
+//   }
+
+//   return path + search;
+// };
+
 const handleHref = (
   routes: RouteData[],
-  params: RouteParams[] | undefined,
-  maxStates?: number
+  params?: RouteParams[],
+  maxControls?: number
 ) => {
   let path = '';
 
@@ -54,10 +231,23 @@ const handleHref = (
 
       p = params._value;
 
-      if (maxStates) {
-        useSyncExternalStore(params._onValueChange, () => params._valueToggler);
+      if (maxControls) {
+        if ('_subscribeWithError' in params) {
+          const errorControl = params[ROOT]._errorControl[ROOT];
 
-        maxStates--;
+          if (errorControl._value !== undefined) {
+            throw errorControl._value;
+          }
+
+          useSyncExternalStore(
+            params._subscribeWithError,
+            () => (errorControl._valueToggler << 1) | params._valueToggler
+          );
+        } else {
+          useSyncExternalStore(params._subscribe, () => params._valueToggler);
+        }
+
+        maxControls--;
       }
     }
 
@@ -78,7 +268,7 @@ const handleHref = (
 
       const route = d._route;
 
-      const p = d._params;
+      // const p = d._params;
 
       const max = route._selfIndex;
 
@@ -86,14 +276,14 @@ const handleHref = (
         handleRoute(routes[routeIndex]);
       }
 
-      path = route._getPath(path, p);
+      // path = route._getPath(path, p);
 
-      search = route._getSearch(search, p);
+      // search = route._getSearch(search, p);
 
-      if (maxStates && route._params) {
+      if (maxControls && route._params) {
         useSyncExternalStore(alwaysNoop, noop);
 
-        maxStates--;
+        maxControls--;
       }
 
       routeIndex++;
@@ -104,69 +294,13 @@ const handleHref = (
     handleRoute(routes[routeIndex]);
   }
 
-  if (maxStates) {
-    while (maxStates--) {
+  if (maxControls) {
+    while (maxControls--) {
       useSyncExternalStore(alwaysNoop, noop);
     }
   }
 
   return path + search;
-};
-
-const navigate = (
-  routes: RouteData[],
-  componentList: ComponentType[],
-  setStateArr: Array<(Component: ComponentType) => void>,
-  event: ReactMouseEvent<HTMLAnchorElement, any> | null,
-  params: RouteParams[] | undefined,
-  replace: boolean | undefined,
-  onClick:
-    | ((event: ReactMouseEvent<HTMLAnchorElement, any>) => void)
-    | undefined
-) => {
-  let href: string;
-
-  if (event) {
-    if (onClick) {
-      onClick(event);
-    }
-
-    const el = event.currentTarget;
-
-    const { target } = el;
-
-    if (
-      (target && target != '_self') ||
-      event.button ||
-      event.metaKey ||
-      event.altKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.defaultPrevented
-    ) {
-      return;
-    }
-
-    event.preventDefault();
-
-    href = el.href;
-  } else {
-    href = handleHref(routes, params);
-  }
-
-  if (params) {
-    for (let i = 0; i < params.length; i++) {
-      const d = params[i];
-
-      d._route._params!._set(d._params);
-    }
-  }
-
-  for (let i = 0; i < componentList.length; i++) {
-    setStateArr[i](componentList[i]);
-  }
-
-  history[replace ? 'replaceState' : 'pushState'](null, '', href);
 };
 
 const nonUndefinedIdentity = (value: any, key: string) => {
@@ -177,49 +311,46 @@ const nonUndefinedIdentity = (value: any, key: string) => {
   return value;
 };
 
-const handleTransformer = (
-  fn: ((value: any) => any) | undefined,
-  optional: boolean | undefined
-): typeof nonUndefinedIdentity =>
-  fn
-    ? optional
-      ? (value) => (value !== undefined ? fn(value) : value)
-      : (value, key) => fn(nonUndefinedIdentity(value, key))
-    : optional
-      ? identity
-      : nonUndefinedIdentity;
+const handleStringify = (
+  stringify: ((value: any) => string) | undefined,
+  optional: boolean | undefined,
+  defaultValue: undefined | unknown | (() => unknown)
+): typeof nonUndefinedIdentity => {
+  if (optional) {
+    const getDefaultValue =
+      defaultValue !== undefined &&
+      (typeof defaultValue != 'function' ? () => defaultValue : defaultValue);
 
-const ROUTE_METHODS = Symbol();
+    return stringify
+      ? getDefaultValue
+        ? (value) =>
+            value !== undefined ? stringify(value) : getDefaultValue()
+        : (value) => (value !== undefined ? stringify(value) : value)
+      : getDefaultValue
+        ? (value) => (value !== undefined ? value : getDefaultValue())
+        : identity;
+  }
 
-const ROUTE_PARAMS = Symbol();
+  return stringify
+    ? (value, key) => stringify(nonUndefinedIdentity(value, key))
+    : nonUndefinedIdentity;
+};
 
-const createRouter: {
-  <Routes extends Record<string, () => RouteBase<boolean>>>(
-    options: ToOptions & { Wrapper?: ComponentType<PropsWithChildren> },
-    getRoutes: (createRoute: () => PathCreator) => Routes
-  ): { readonly Router: FC; readonly router: Routes };
-  <Routes extends Record<string, () => RouteBase<boolean>>>(
-    getRoutes: (createRoute: () => PathCreator) => Routes
-  ): { readonly Router: FC; readonly router: Routes };
-} = (
-  arg1:
-    | ((
-        createRoute: () => PathCreator
-      ) => Record<string, () => RouteBase<boolean>>)
-    | (ToOptions & { Wrapper?: ComponentType<PropsWithChildren> }),
-  arg2?: (
-    createRoute: () => PathCreator
-  ) => Record<string, () => RouteBase<boolean>>
-) => {
+const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
+  options: ToOptions & {
+    NotFound: ComponentType;
+    getRoutes(createRoute: () => PathCreator): Routes;
+  }
+): { readonly Router: FC; readonly router: Routes } => {
   let nestingIndex = 0;
 
   let maxParamsPerRoute = 0;
 
   let currentRouteIndex = -1;
 
-  const { Wrapper } = (arg2! ? arg1 : {}) as ToOptions & {
-    Wrapper?: ComponentType<PropsWithChildren>;
-  };
+  let paramsWasReplaced = false;
+
+  const { NotFound } = options;
 
   const pathQueue: string[] = [];
 
@@ -231,14 +362,121 @@ const createRouter: {
 
   const routerComponentsList: ComponentType[][] = [];
 
-  const router = (
-    (arg2 || arg1) as (
-      createRoute: () => PathCreator
-    ) => Record<string, () => RouteBase<boolean>>
-  )(() => {
-    let regexStr = '';
+  const handleMatching = (nextRoute: RouteData[]) => {
+    if (currentRouteIndex > 0) {
+      const currentRoute = routesQueue[currentRouteIndex];
 
-    let anyIndex = 0;
+      if (currentRoute != nextRoute) {
+        const nextL = nextRoute.length - 1;
+
+        let start = currentRoute.length - 1;
+
+        if (start != nextL) {
+          let end, target, value;
+
+          if (start > nextL) {
+            end = nextL;
+
+            target = currentRoute;
+
+            value = false;
+          } else {
+            end = start;
+
+            start = nextL;
+
+            target = nextRoute;
+
+            value = true;
+          }
+
+          for (; start > end; start--) {
+            target[start]._isMatched._set(value);
+          }
+        }
+
+        for (; start >= 0; start--) {
+          const curr = currentRoute[start];
+
+          const next = nextRoute[start];
+
+          if (curr == next) {
+            return;
+          }
+
+          curr._isMatched._set(false);
+
+          next._isMatched._set(true);
+        }
+      }
+    } else {
+      for (let i = nextRoute.length; i--; ) {
+        nextRoute[i]._isMatched._set(true);
+      }
+    }
+  };
+
+  const navigate = (
+    routes: RouteData[],
+    componentList: ComponentType[],
+    event: ReactMouseEvent<HTMLAnchorElement, any> | null,
+    params: RouteParams[] | undefined,
+    replace: boolean | undefined,
+    onClick:
+      | ((event: ReactMouseEvent<HTMLAnchorElement, any>) => void)
+      | undefined
+  ) => {
+    let href: string;
+
+    if (event) {
+      if (onClick) {
+        onClick(event);
+      }
+
+      const el = event.currentTarget;
+
+      const { target } = el;
+
+      if (
+        (target && target != '_self') ||
+        event.button ||
+        event.metaKey ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.defaultPrevented
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+
+      href = el.href;
+    } else {
+      href = handleHref(routes, params);
+    }
+
+    handleMatching(routes);
+
+    if (params) {
+      for (let i = 0; i < params.length; i++) {
+        const d = params[i];
+
+        d._route._params!._set(d._params);
+      }
+    }
+
+    for (let i = 0; i < componentList.length; i++) {
+      setControlArr[i](componentList[i]);
+    }
+
+    history[replace ? 'replaceState' : 'pushState'](null, '', href);
+  };
+
+  const router = options.getRoutes(() => {
+    let asyncSourceControl: InternalAsyncControl | undefined;
+
+    let regexStr = '';
 
     const path: string[] = [];
 
@@ -248,7 +486,7 @@ const createRouter: {
 
     const parsers = new Map<
       string,
-      (value: string | undefined, key: string) => any
+      (value: string | undefined, source: any, key: string) => any
     >();
 
     const stringifies = new Map<
@@ -270,24 +508,24 @@ const createRouter: {
 
     return {
       to(
-        arg1:
-          | ComponentType
-          | Record<string, () => RouteBase<boolean>>
-          | (ToOptions & { Wrapper?: ComponentType<PropsWithChildren> }),
-        arg2?: ComponentType | Record<string, () => RouteBase<boolean>>
+        options: ToOptions &
+          (
+            | {
+                Wrapper?: ComponentType<PropsWithChildren>;
+                routes: Record<string, () => RouteBase<boolean>>;
+              }
+            | { Component: ComponentType }
+          )
       ) {
         let getPath: (
           prevSearch: string,
           params: Record<string, any>
         ) => string;
 
-        const routesOrComponent = (arg2 || arg1) as
-          | ComponentType
-          | Record<string, () => RouteBase<boolean>>;
-
-        const options = (arg2 ? arg1 : {}) as ToOptions & {
-          Wrapper?: ComponentType<PropsWithChildren>;
-        };
+        let getPathStringified: (
+          prevSearch: string,
+          stringifiedParams: Record<string, string>
+        ) => string;
 
         const l = path.length;
 
@@ -295,63 +533,111 @@ const createRouter: {
 
         const queryParamsCount = queryParams.length;
 
-        const getStringify = stringifies.get.bind(stringifies) as (
-          key: string
-        ) => (value: any, key: string) => string | undefined;
+        const getStringify = stringifies.get.bind(stringifies);
 
-        const getParse = parsers.get.bind(parsers) as (
-          key: string
-        ) => (value: string | undefined, key: string) => any;
+        const getParse = parsers.get.bind(parsers);
 
-        const isMatchedState = createSimpleState(false);
+        const isMatchedControl = createSimpleControl(false);
 
-        const isMatchedRoot = isMatchedState[ROOT];
+        const isMatchedRoot = isMatchedControl[ROOT];
 
-        const paramsState =
-          pathParamsCount || queryParamsCount ? createStateScope() : null;
-
-        if (!l) {
-          getPath = identity;
-        } else if (l == 1 && path[0][0] == '/') {
-          const str = path[0];
-
-          getPath = (path) => path + str;
-        } else {
-          getPath = (path, params) => {
-            for (let i = 0; i < l; i++) {
-              const item = path[i];
-
-              if (item[0] == '/') {
-                path += item;
-              } else {
-                const param = params[item];
-
-                const value = getStringify(item)(
-                  param !== '' ? param : undefined,
-                  item
-                );
-
-                if (value !== undefined) {
-                  path += '/' + value;
-                }
-              }
-            }
-
-            return path;
-          };
-        }
+        const paramsControl =
+          pathParamsCount || queryParamsCount
+            ? asyncSourceControl
+              ? (createScope(
+                  getAsyncControl(
+                    set,
+                    {},
+                    asyncSourceControl._load &&
+                      (() => load(asyncSourceControl!))
+                  )
+                ) as AsyncControlScope<unknown>)
+              : createControlScope()
+            : null;
 
         const routeData: RouteData = {
+          _pathParamsCount: pathParamsCount,
+          _currentPath: pathParamsCount || !l ? '' : path[0],
+          _currentSearch: '',
           _selfIndex: currentNestingIndex,
-          _getPath: getPath,
+          _getPath: pathParamsCount
+            ? (params) => {
+                let str = '';
+
+                for (let i = 0; i < l; i++) {
+                  const item = path[i];
+
+                  if (item[0] == '/') {
+                    str += item;
+                  } else {
+                    const param = params[item];
+
+                    const value = getStringify(item)!(
+                      param !== '' ? param : undefined,
+                      item
+                    );
+
+                    if (value !== undefined) {
+                      str += '/' + value;
+                    }
+                  }
+                }
+
+                return str;
+              }
+            : (noop as never),
+          _getPathStringified: pathParamsCount
+            ? (stringifiedParams) => {
+                let str = '';
+
+                for (let i = 0; i < l; i++) {
+                  const item = path[i];
+
+                  if (item[0] == '/') {
+                    str += item;
+                  } else {
+                    const value = stringifiedParams[item];
+
+                    if (value) {
+                      str += '/' + value;
+                    }
+                  }
+                }
+
+                return str;
+              }
+            : (noop as never),
+          _getSearchStringified: queryParamsCount
+            ? (stringifiedParams) => {
+                let search = '';
+
+                for (let i = 0; i < queryParamsCount; i++) {
+                  const name = queryParams[i];
+
+                  const value = stringifiedParams[name];
+
+                  if (value) {
+                    if (search) {
+                      search += `&${name}=${encodeURIComponent(value)}`;
+                    } else {
+                      search = `${name}=${encodeURIComponent(value)}`;
+                    }
+                  }
+                }
+
+                return search;
+              }
+            : (noop as never),
           _getSearch: queryParamsCount
-            ? (search, params) => {
+            ? (params) => {
+                let search = '';
+
                 for (let i = 0; i < queryParamsCount; i++) {
                   const name = queryParams[i];
 
                   const param = params[name];
 
-                  const value = getStringify(name)(
+                  const value = getStringify(name)!(
                     param !== '' ? param : undefined,
                     name
                   );
@@ -360,31 +646,29 @@ const createRouter: {
                     if (search) {
                       search += `&${name}=${encodeURIComponent(value)}`;
                     } else {
-                      search = `?${name}=${encodeURIComponent(value)}`;
+                      search = `${name}=${encodeURIComponent(value)}`;
                     }
                   }
                 }
 
                 return search;
               }
-            : identity,
+            : (noop as never),
           _extractPathParams: pathParamsCount
-            ? (parent, execArray) => {
-                const params = execArray.groups!;
-
+            ? (target, params, source) => {
                 for (let i = 0; i < pathParamsCount; i++) {
                   const key = pathParams[i];
 
-                  parent[key] = getParse(key)(params[key], key);
+                  target[key] = getParse(key)!(params[key], source, key);
                 }
               }
             : noop,
           _extractQueryParams: queryParamsCount
-            ? (parent, params) => {
+            ? (target, params, source) => {
                 for (let i = 0; i < queryParamsCount; i++) {
                   const key = queryParams[i];
 
-                  parent[key] = getParse(key)(params.get(key), key);
+                  target[key] = getParse(key)!(params[key], source, key);
                 }
               }
             : noop,
@@ -397,62 +681,57 @@ const createRouter: {
                 for (let i = 0; i < deprecatedKeys!.length; i++) {
                   const key = deprecatedKeys![i];
 
-                  if (searchParams.has(key)) {
-                    const value = searchParams.get(key);
+                  const value = searchParams[key];
 
-                    if (value) {
-                      replaced = true;
+                  if (value) {
+                    replaced = true;
 
-                      obj[key] = value;
-                    }
-
-                    searchParams.delete(key);
+                    obj[key] = value;
                   }
                 }
 
                 if (replaced) {
+                  paramsWasReplaced = true;
+
                   try {
                     const params = deprecatedMapper!(obj);
 
                     for (const key in params) {
-                      const param = params[key];
+                      if (!(key in searchParams)) {
+                        const param = params[key];
 
-                      try {
-                        const value = getStringify(key)(param, key);
+                        try {
+                          const value = getStringify(key)!(param, key);
 
-                        if (value !== undefined && value !== '') {
-                          searchParams.set(key, value);
-                        }
-                      } catch {}
+                          if (value) {
+                            searchParams[key] = value;
+                          }
+                        } catch {}
+                      }
                     }
                   } catch {}
                 }
-
-                return replaced;
               }
-            : alwaysFalse,
+            : noop,
           _isMatched: isMatchedRoot,
-          _params: paramsState && paramsState[ROOT],
+          _params: paramsControl && paramsControl[ROOT],
+          _source: asyncSourceControl,
         };
 
-        let route: Route<any, any, any>;
+        let route: (
+          this: RouteBase<boolean>,
+          params?: null | ProcessParams<Record<string, any>>,
+          stringifiedPrams?: ProcessParams<Record<string, string>>
+        ) => RouteBase<boolean>;
 
-        if (typeof routesOrComponent == 'function') {
+        if ('Component' in options) {
           const routes = new Array<RouteData>(nestingIndex);
 
           const componentList: ComponentType[] = [];
 
           const methods: RouteMethods = {
             _navigate(event, params, replace, onClick) {
-              navigate(
-                routes,
-                componentList,
-                setStateArr,
-                event,
-                params,
-                replace,
-                onClick
-              );
+              navigate(routes, componentList, event, params, replace, onClick);
             },
             _useHref: (params) => handleHref(routes, params, maxParamsPerRoute),
           };
@@ -467,46 +746,57 @@ const createRouter: {
 
           routesQueue.push(routes);
 
-          componentsQueue.push([routesOrComponent]);
+          componentsQueue.push([options.Component]);
 
           routerComponentsList.push(componentList);
 
-          route = (
-            paramsState
-              ? function (this: RouteBase<boolean>, params) {
-                  return arguments.length
+          route = paramsControl
+            ? function (params, stringifiedPrams) {
+                return (
+                  params !== undefined
                     ? {
                         [ROUTE_METHODS]: methods,
                         [ROUTE_PARAMS]:
                           ROUTE_PARAMS in this
-                            ? concat(this[ROUTE_PARAMS]!, params)
-                            : [params],
+                            ? concat(this[ROUTE_PARAMS]!, {
+                                _params: params,
+                                _stringifiedParams: stringifiedPrams,
+                                _route: routeData,
+                              })
+                            : [
+                                {
+                                  _params: params,
+                                  _stringifiedParams: stringifiedPrams,
+                                  _route: routeData,
+                                },
+                              ],
                       }
                     : ROUTE_PARAMS in this
                       ? {
                           [ROUTE_METHODS]: methods,
                           [ROUTE_PARAMS]: this[ROUTE_PARAMS],
                         }
-                      : res;
-                }
-              : function (this: RouteBase<boolean>) {
-                  return ROUTE_PARAMS in this
+                      : res
+                ) as RouteBase<boolean>;
+              }
+            : function () {
+                return (
+                  ROUTE_PARAMS in this
                     ? {
                         [ROUTE_METHODS]: methods,
                         [ROUTE_PARAMS]: this[ROUTE_PARAMS]!,
                       }
-                    : res;
-                }
-          ) as Route<any, any>;
+                    : res
+                ) as RouteBase<boolean>;
+              };
         } else {
-          const { Wrapper } = options;
+          const { Wrapper, routes } = options;
 
           const methods: RouteMethods = {
             _navigate(event, params, replace, onClick) {
               navigate(
                 routesQueue[currentRouteIndex],
                 routerComponentsList[currentRouteIndex],
-                setStateArr,
                 event,
                 params,
                 replace,
@@ -541,53 +831,64 @@ const createRouter: {
             }
           }
 
-          route = (
-            paramsState
-              ? function (this: RouteBase<boolean>, params) {
-                  return arguments.length
+          route = paramsControl
+            ? function (params, stringifiedPrams) {
+                return (
+                  params !== undefined
                     ? {
-                        ...routesOrComponent,
+                        ...routes,
                         [ROUTE_METHODS]: methods,
                         [ROUTE_PARAMS]:
                           ROUTE_PARAMS in this
-                            ? concat(this[ROUTE_PARAMS]!, params)
-                            : [params],
+                            ? concat(this[ROUTE_PARAMS]!, {
+                                _params: params,
+                                _stringifiedParams: stringifiedPrams,
+                                _route: routeData,
+                              })
+                            : [
+                                {
+                                  _params: params,
+                                  _stringifiedParams: stringifiedPrams,
+                                  _route: routeData,
+                                },
+                              ],
                       }
                     : ROUTE_PARAMS in this
                       ? {
-                          ...routesOrComponent,
+                          ...routes,
                           [ROUTE_PARAMS]: this[ROUTE_PARAMS],
                         }
-                      : routesOrComponent;
-                }
-              : function (this: RouteBase<boolean>) {
-                  return ROUTE_PARAMS in this
+                      : routes
+                ) as RouteBase<boolean>;
+              }
+            : function (this: RouteBase<boolean>) {
+                return (
+                  ROUTE_PARAMS in this
                     ? {
-                        ...routesOrComponent,
+                        ...routes,
                         [ROUTE_PARAMS]: this[ROUTE_PARAMS]!,
                       }
-                    : routesOrComponent;
-                }
-          ) as Route<any, any>;
+                    : routes
+                ) as RouteBase<boolean>;
+              };
         }
 
-        if (paramsState) {
-          Object.defineProperty(route, 'params', {
-            get() {
-              if (isMatchedRoot._value) {
-                return paramsState;
-              }
-
-              throw new Error('route not mounted');
-            },
-          });
+        if (paramsControl) {
+          (route as unknown as Mutable<Route<any, any>>).params =
+            paramsControl as any;
         }
 
-        (route as Mutable<typeof route>).isMatched = isMatchedState;
+        (route as unknown as Mutable<Route<any, any>>).isMatched =
+          isMatchedControl;
 
         nestingIndex--;
 
         return route;
+      },
+      async(source) {
+        asyncSourceControl = source[ROOT][ROOT];
+
+        return this as any;
       },
       segment(text: string) {
         text = '/' + text;
@@ -604,40 +905,107 @@ const createRouter: {
 
         return this;
       },
-      any(optional) {
-        const pattern = '/([^/]+)';
-
-        const key = '' + anyIndex++;
-
-        regexStr += optional ? `(?:${pattern})?` : pattern;
-
-        path.push(key);
-
-        stringifies.set(key, optional ? identity : nonUndefinedIdentity);
-
-        return this;
-      },
-      param(name, options) {
+      param(
+        name,
+        {
+          parse,
+          stringify,
+          isValid = alwaysTrue,
+          optional,
+          fallbackValue,
+          defaultValue,
+        }: ParamOptions<unknown, unknown, boolean, [any]> = {}
+      ) {
         const pattern = `/(?<${name}>[^/]+)`;
 
-        const parse = options && options.parse;
+        const getFallbackValue: (
+          incorrectValue: string | undefined,
+          source: any,
+          error?: any
+        ) => any =
+          typeof fallbackValue != 'function'
+            ? optional || fallbackValue !== undefined
+              ? () => {
+                  paramsWasReplaced = true;
 
-        const optional = options && options.optional;
+                  return fallbackValue;
+                }
+              : (_, __, error) => {
+                  throw error || new Error(`${name} is not valid`);
+                }
+            : (arg, source) => {
+                paramsWasReplaced = true;
+
+                return fallbackValue(arg, source);
+              };
+
+        const getDefaultValue =
+          defaultValue !== undefined &&
+          (typeof defaultValue != 'function'
+            ? () => {
+                paramsWasReplaced = true;
+
+                return defaultValue;
+              }
+            : (source: any) => {
+                paramsWasReplaced = true;
+
+                return defaultValue(source);
+              });
+
+        if (parse) {
+          const safeParse: typeof parse = (value, source) => {
+            let parsed;
+
+            try {
+              parsed = parse(value, source);
+            } catch (error) {
+              return getFallbackValue(value, source, error);
+            }
+
+            return isValid(parsed, source)
+              ? parsed
+              : getFallbackValue(value, source);
+          };
+
+          parsers.set(
+            name,
+            optional
+              ? getDefaultValue
+                ? (value, source) =>
+                    value ? safeParse(value, source) : getDefaultValue(source)
+                : (value, source) => value && safeParse(value, source)
+              : safeParse
+          );
+        } else if (isValid == alwaysTrue) {
+          parsers.set(
+            name,
+            optional && getDefaultValue
+              ? (value, source) => value || getDefaultValue(source)
+              : identity
+          );
+        } else {
+          parsers.set(
+            name,
+            optional && getDefaultValue
+              ? (value, source) =>
+                  value
+                    ? isValid(value as any, source)
+                      ? value
+                      : getFallbackValue(value, source)
+                    : getDefaultValue(source)
+              : (value, source) =>
+                  !value || isValid(value as any, source)
+                    ? value
+                    : getFallbackValue(value, source)
+          );
+        }
 
         regexStr += optional ? `(?:${pattern})?` : pattern;
-
-        parsers.set(
-          name,
-          parse
-            ? optional
-              ? (value) => (value !== undefined ? parse(value) : value)
-              : parse
-            : identity
-        );
 
         stringifies.set(
           name,
-          handleTransformer(options && options.stringify, optional)
+          handleStringify(stringify, optional, defaultValue)
         );
 
         path.push(name);
@@ -679,11 +1047,37 @@ const createRouter: {
           .map((v) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
           .join('|')}))`;
 
+        const set = new Set(variants);
+
+        const isCorrectVariant = set.has.bind(set);
+
         regexStr += optional ? `(?:${pattern})?` : pattern;
 
-        parsers.set(name, identity);
+        parsers.set(
+          name,
+          optional && defaultValue ? (value) => value || defaultValue : identity
+        );
 
-        stringifies.set(name, optional ? identity : nonUndefinedIdentity);
+        stringifies.set(
+          name,
+          optional
+            ? (value, key) => {
+                value ||= defaultValue;
+
+                if (value === undefined || isCorrectVariant(value)) {
+                  return value;
+                }
+
+                throw new Error(`${key} has incorrect "${value}" variant`);
+              }
+            : (value, key) => {
+                if (isCorrectVariant(nonUndefinedIdentity(value, key))) {
+                  return value;
+                }
+
+                throw new Error(`${key} has incorrect "${value}" variant`);
+              }
+        );
 
         path.push(name);
 
@@ -691,17 +1085,118 @@ const createRouter: {
 
         return this;
       },
-      query(name, options) {
-        const optional = options && options.optional;
+      query(
+        name,
+        {
+          parse,
+          stringify,
+          isValid = alwaysTrue,
+          optional,
+          fallbackValue,
+          defaultValue,
+        }: ParamOptions<unknown, unknown, boolean, [any]> = {}
+      ) {
+        const getFallbackValue: (
+          incorrectValue: string | undefined,
+          source: any,
+          error?: any
+        ) => any =
+          typeof fallbackValue != 'function'
+            ? optional || fallbackValue !== undefined
+              ? () => {
+                  paramsWasReplaced = true;
 
-        parsers.set(
-          name,
-          handleTransformer(options && options.parse, optional)
-        );
+                  return fallbackValue;
+                }
+              : (_, __, error) => {
+                  throw error || new Error(`${name} is not valid`);
+                }
+            : (arg, source) => {
+                paramsWasReplaced = true;
+
+                return fallbackValue(arg, source);
+              };
+
+        const getDefaultValue =
+          defaultValue !== undefined &&
+          (typeof defaultValue != 'function'
+            ? () => {
+                paramsWasReplaced = true;
+
+                return defaultValue;
+              }
+            : (source: any) => {
+                paramsWasReplaced = true;
+
+                return defaultValue(source);
+              });
+
+        if (parse) {
+          const safeParse = (
+            value: string | undefined,
+            source: any,
+            key: string
+          ) => {
+            let parsed;
+
+            try {
+              parsed = parse(nonUndefinedIdentity(value, key), source);
+            } catch (error) {
+              return getFallbackValue(value, source, error);
+            }
+
+            return isValid(parsed, source)
+              ? parsed
+              : getFallbackValue(value, source);
+          };
+
+          parsers.set(
+            name,
+            optional
+              ? getDefaultValue
+                ? (value, source, key) =>
+                    value
+                      ? safeParse(value, source, key)
+                      : getDefaultValue(source)
+                : (value, source, key) => value && safeParse(value, source, key)
+              : safeParse
+          );
+        } else if (isValid == alwaysTrue) {
+          parsers.set(
+            name,
+            optional
+              ? getDefaultValue
+                ? (value, source) => value || getDefaultValue(source)
+                : identity
+              : (value, source) => value || getFallbackValue(value, source)
+          );
+        } else {
+          parsers.set(
+            name,
+            optional
+              ? getDefaultValue
+                ? (value, source) =>
+                    value
+                      ? isValid(value as any, source)
+                        ? value
+                        : getFallbackValue(value, source)
+                      : getDefaultValue(source)
+                : (value, source) =>
+                    value
+                      ? isValid(value as any, source)
+                        ? value
+                        : getFallbackValue(value, source)
+                      : value
+              : (value, source) =>
+                  value && isValid(value as any, source)
+                    ? value
+                    : getFallbackValue(value, source)
+          );
+        }
 
         stringifies.set(
           name,
-          handleTransformer(options && options.stringify, optional)
+          handleStringify(stringify, optional, defaultValue)
         );
 
         queryParams.push(name);
@@ -724,7 +1219,7 @@ const createRouter: {
     (path: string, search: string) => boolean
   >(l);
 
-  const setStateArr: Array<(component: ComponentType) => void> = [];
+  const setControlArr: Array<(component: ComponentType) => void> = [];
 
   const EMPTY_PROPS = {};
 
@@ -734,16 +1229,22 @@ const createRouter: {
     let CurrentComponent: ComponentType = noop as any;
 
     const subscribe = (_onValueChange: () => void) => {
-      onValueChange = _onValueChange;
+      onValueChange = () => {
+        postBatchCallbacksPush(() => {
+          _onValueChange();
+        });
+
+        scheduleBatch();
+      };
 
       return () => {
-        onValueChange = noop;
+        _onValueChange = onValueChange = noop;
       };
     };
 
     const getComponent = () => CurrentComponent;
 
-    setStateArr.push((component) => {
+    setControlArr.push((component) => {
       CurrentComponent = component;
 
       onValueChange();
@@ -780,7 +1281,7 @@ const createRouter: {
   }
 
   for (let i = 0; i < l; i++) {
-    const regex = new RegExp(`^${pathQueue[i]}$`);
+    const regex = new RegExp(`^${pathQueue[i] || '/'}$`);
 
     const routes = routesQueue[i];
 
@@ -788,11 +1289,19 @@ const createRouter: {
 
     let paramsCount = 0;
 
+    let withPathParams = false;
+
     components.push(componentsQueue[i][0]);
 
     for (let i = 0; i < routes.length; i++) {
-      if (routes[i]._params) {
+      const route = routes[i];
+
+      if (route._params) {
         paramsCount++;
+
+        if (route._extractPathParams != noop) {
+          withPathParams = true;
+        }
       }
     }
 
@@ -802,44 +1311,124 @@ const createRouter: {
 
     const withParams = !!paramsCount;
 
-    const testRegex = regex[withParams ? 'exec' : 'test'].bind(regex);
+    const testRegex = regex[withPathParams ? 'exec' : 'test'].bind(regex);
 
     const findCurrentRoute = (path: string, search: string) => {
       const isMatched = testRegex(path);
 
       if (isMatched) {
-        currentRouteIndex = i;
-
         if (withParams) {
-          const searchParams = new Map<string, string>();
+          const searchParams: Record<string, string> = {};
 
-          const arr = search.split('&');
+          if (search) {
+            const arr = search.slice(1).split('&');
 
-          for (let i = 0; i < arr.length; i++) {
-            const t = arr[i].split('=');
+            for (let i = 0; i < arr.length; i++) {
+              const t = arr[i].split('=');
 
-            searchParams.set(t[0], t[1]);
+              const value = t[1];
+
+              if (value) {
+                searchParams[t[0]] = decodeURIComponent(value);
+              }
+            }
           }
 
           for (let i = 0; i < routes.length; i++) {
             const route = routes[i];
 
-            const paramsState = route._params;
+            const paramsControl = route._params;
 
-            if (paramsState) {
-              const params = {};
+            if (paramsControl) {
+              const source = route._source;
 
-              route._extractPathParams(params, isMatched as RegExpExecArray);
+              if (!source || source[ROOT]._isLoadedControl[ROOT]._value) {
+                const prevReplace = paramsWasReplaced;
 
-              route._extractQueryParams(params, searchParams);
+                const value = source && source._get();
 
-              paramsState._set(params);
+                const params = {};
+
+                route._replaceDeprecatedQueryParams(searchParams);
+
+                try {
+                  route._extractPathParams(
+                    params,
+                    isMatched as RegExpExecArray,
+                    value
+                  );
+
+                  route._extractQueryParams(params, searchParams, value);
+                } catch (err) {
+                  if (source) {
+                    paramsWasReplaced = prevReplace;
+
+                    (paramsControl as InternalAsyncControl)._errorControl[
+                      ROOT
+                    ]._set(err);
+
+                    continue;
+                  }
+
+                  paramsWasReplaced = false;
+
+                  return false;
+                }
+
+                paramsControl._set(params);
+              } else {
+                const unlisten = source[ROOT]._subscribeWithError(() => {
+                  unlisten();
+
+                  const value = source._get();
+
+                  const params = {};
+
+                  route._replaceDeprecatedQueryParams(searchParams);
+
+                  try {
+                    route._extractPathParams(
+                      params,
+                      isMatched as RegExpExecArray,
+                      value
+                    );
+
+                    route._extractQueryParams(params, searchParams, value);
+                  } catch (err) {
+                    paramsWasReplaced = false;
+
+                    (paramsControl as InternalAsyncControl)._errorControl[
+                      ROOT
+                    ]._set(err);
+
+                    return;
+                  }
+
+                  if (paramsWasReplaced) {
+                    paramsWasReplaced = false;
+
+                    history.replaceState(null, '', handleHref(routes));
+                  }
+
+                  paramsControl._set(params);
+                });
+              }
             }
+          }
+
+          if (paramsWasReplaced) {
+            paramsWasReplaced = false;
+
+            history.replaceState(null, '', handleHref(routes));
           }
         }
 
+        handleMatching(routes);
+
+        currentRouteIndex = i;
+
         for (let i = 0; i < components.length; i++) {
-          setStateArr[i](components[i]);
+          setControlArr[i](components[i]);
         }
       }
 
@@ -853,6 +1442,10 @@ const createRouter: {
     }
   }
 
+  if (currentRouteIndex < 0) {
+    setControlArr[0](NotFound);
+  }
+
   window.addEventListener('popstate', () => {
     const { pathname, search } = location;
 
@@ -861,13 +1454,23 @@ const createRouter: {
         return;
       }
     }
+
+    if (currentRouteIndex > -1) {
+      const routes = routesQueue[currentRouteIndex];
+
+      for (let i = routes.length; i--; ) {
+        routes[i]._isMatched._set(false);
+      }
+
+      currentRouteIndex = -1;
+
+      setControlArr[0](NotFound);
+    }
   });
 
   return {
     router,
-    Router: Wrapper
-      ? () => jsx(Wrapper, { children: jsx(Router, EMPTY_PROPS) })
-      : Router,
+    Router,
   };
 };
 
@@ -875,35 +1478,52 @@ export default createRouter;
 
 declare const ROUTE_MARKER: unique symbol;
 
-type ParamOptions<Value, DefaultValue, O> = {
+type ParamOptions<Value, DefaultValue, O, Source extends [any?] | [] = []> = {
   stringify?(value: Value): string;
-  parse?(value: string): Value;
+  parse?(value: string, ...args: Source): Value;
   optional?: O;
-  isValid?(value: Value): boolean;
-  defaultValue?: DefaultValue;
-  fallbackValue?: Value;
+  isValid?(value: Value, ...args: Source): boolean;
+  defaultValue?: DefaultValue | ((...args: Source) => DefaultValue);
+  fallbackValue?:
+    | Value
+    | ((
+        incorrectValue: string | (O extends true ? never : undefined),
+        ...args: Source
+      ) => Value);
 };
 
 type RouteData = {
-  _getPath(prevPath: string, params: Record<string, any>): string;
-  _getSearch(prevSearch: string, params: Record<string, any>): string;
+  _getPath(params: Record<string, any>): string;
+  _getSearch(params: Record<string, any>): string;
+  _getPathStringified(stringifiedParams: Record<string, string>): string;
+  _getSearchStringified(stringifiedParams: Record<string, string>): string;
   _extractPathParams(
-    params: Record<string, any>,
-    pathParams: RegExpExecArray
+    target: Record<string, any>,
+    pathParams: Record<string, any>,
+    source: any
   ): void;
   _extractQueryParams(
-    params: Record<string, any>,
-    searchParams: Map<string, string>
+    target: Record<string, any>,
+    searchParams: Record<string, string>,
+    source: any
   ): void;
-  _replaceDeprecatedQueryParams(searchParams: Map<string, string>): boolean;
+  _replaceDeprecatedQueryParams(searchParams: Record<string, string>): void;
   readonly _selfIndex: number;
-  readonly _params: InternalState | null;
-  readonly _isMatched: InternalState;
+  readonly _params: InternalControl | InternalAsyncControl | null;
+  readonly _source: InternalAsyncControl | undefined;
+  readonly _isMatched: InternalControl;
+  readonly _pathParamsCount: number;
+  _currentPath: string;
+  _currentSearch: string;
 };
 
 type RouteParams = {
   readonly _route: RouteData;
-  readonly _params: any;
+  readonly _params: ProcessParams<Record<string, any>> | null | undefined;
+  readonly _stringifiedParams:
+    | ProcessParams<Record<string, string>>
+    | null
+    | undefined;
 };
 
 type RouteMethods = {
@@ -916,7 +1536,7 @@ type RouteMethods = {
   ): void;
 };
 
-type RouteBase<Navigable extends boolean> = {
+export type RouteBase<Navigable extends boolean> = {
   /** @internal */
   readonly [ROUTE_METHODS]: RouteMethods;
   /** @internal */
@@ -924,105 +1544,122 @@ type RouteBase<Navigable extends boolean> = {
   [ROUTE_MARKER]: Navigable;
 };
 
+type ProcessParams<O> = O | ((prev: O) => O);
+
 type Route<
   Children extends Record<string, () => RouteBase<boolean>> = {},
-  P = {},
-  Q = {},
-  OptionalParams extends keyof P | keyof Q = never,
+  Params = {},
+  OptionalParams extends string = never,
+  Async extends boolean = false,
 > = {
-  (): {} extends Children ? RouteBase<true> : Children & RouteBase<false>;
-  readonly isMatched: ReadonlyState<boolean>;
-} & ([keyof P | keyof Q] extends [never]
+  (): [keyof Children] extends [never]
+    ? RouteBase<true>
+    : Children & RouteBase<false>;
+  readonly isMatched: ReadonlyControl<boolean>;
+} & ([keyof Params] extends [never]
   ? {}
   : {
-      readonly params: ReadonlyStateScope<P & Q>;
-      (
-        params: {
-          [key in keyof Q]:
-            | Q[key]
-            | (key extends OptionalParams ? undefined : never);
-        } & {
-          [key in keyof P]:
-            | P[key]
-            | (key extends OptionalParams ? undefined : never);
-        }
-      ): Children & RouteBase<true>;
-      (
-        url: string,
-        ...args: [keyof Q] extends [never]
-          ? []
-          : [
-              params: {
-                [key in keyof Q]:
-                  | Q[key]
-                  | (key extends OptionalParams ? undefined : never);
-              },
-            ]
-      ): Children & RouteBase<true>;
-    });
+      readonly params: Async extends false
+        ? ReadonlyControlScope<Params>
+        : ReadonlyAsyncControlScope<Params>;
+    }) &
+  ([keyof Params] extends [never]
+    ? {}
+    : {
+        (
+          params: ProcessParams<
+            {
+              [key in Exclude<keyof Params, OptionalParams>]: Params[key];
+            } & {
+              [key in Extract<keyof Params, OptionalParams>]?: Params[key];
+            }
+          >
+        ): Children & RouteBase<true>;
+        (
+          params: null,
+          stringifiedParams: {
+            [key in Exclude<
+              keyof Params,
+              OptionalParams
+            >]: Params[key] extends string ? Params[key] : string;
+          } & {
+            [key in Extract<keyof Params, OptionalParams>]?: NonNullable<
+              Params[key]
+            > extends string
+              ? Params[key]
+              : string;
+          }
+        ): Children & RouteBase<true>;
+      });
 
 type ToOptions = {
-  preload?(): Array<() => void>;
-  title?: any;
+  load?(): (() => void) | Array<() => void> | void;
 };
 
 declare class PathBase<
-  P = {},
-  Q = {},
-  OptionalParams extends keyof P | keyof Q = never,
+  Params = {},
+  OptionalParams extends string = never,
+  AsyncSource extends [any?] | [] = [],
 > {
-  to(Component: ComponentType): Route<{}, P, Q, OptionalParams>;
   to(
-    options: ToOptions,
-    Component: ComponentType
-  ): Route<{}, P, Q, OptionalParams>;
+    options: { Component: ComponentType; routes?: undefined } & ToOptions
+  ): Route<
+    {},
+    Params,
+    OptionalParams,
+    [AsyncSource[number]] extends [never] ? false : true
+  >;
   to<Routes extends Record<string, () => RouteBase<boolean>>>(
-    routes: Routes
-  ): Route<Routes, P, Q, OptionalParams>;
-  to<Routes extends Record<string, () => RouteBase<boolean>>>(
-    options: ToOptions & { Wrapper?: ComponentType<PropsWithChildren> },
-    routes: Routes
-  ): Route<Routes, P, Q, OptionalParams>;
+    options: {
+      routes: Routes;
+      Component?: undefined;
+      Wrapper?: ComponentType<PropsWithChildren>;
+    } & ToOptions
+  ): Route<
+    Routes,
+    Params,
+    OptionalParams,
+    [AsyncSource[number]] extends [never] ? false : true
+  >;
 }
 
 type PathAfterArray<
-  P = {},
-  Q = {},
-  OptionalParams extends keyof P | keyof Q = never,
-> = PathBase<P, Q, OptionalParams> &
-  PathAfterQuery<P, Q, OptionalParams> & {
+  Params = {},
+  OptionalParams extends string = never,
+  AsyncSource extends [any?] | [] = [],
+> = PathBase<Params, OptionalParams, AsyncSource> &
+  PathAfterQuery<Params, OptionalParams, AsyncSource> & {
     segment<T extends string>(
       text: T extends `${string}/${string}` ? never : T
-    ): PathCreator<P, Q, OptionalParams>;
+    ): PathCreator<Params, OptionalParams, AsyncSource>;
     oneOf<N extends string, const T extends string[]>(
-      name: N extends keyof P | keyof Q ? never : N,
+      name: N extends keyof Params ? never : N,
       variants: T,
       optional?: false
     ): PathCreator<
-      P & {
+      Params & {
         [key in N]: T[number];
       },
-      Q,
-      OptionalParams
+      OptionalParams,
+      AsyncSource
     >;
   };
 
 type PathAfterQuery<
-  P = {},
-  Q = {},
-  OptionalParams extends keyof P | keyof Q = never,
-> = PathBase<P, Q, OptionalParams> & {
+  Params = {},
+  OptionalParams extends string = never,
+  AsyncSource extends [any?] | [] = [],
+> = PathBase<Params, OptionalParams, AsyncSource> & {
   query<
     N extends string,
     O extends boolean = false,
     DefaultValue extends Value | (() => Value) = never,
     Value = string,
   >(
-    name: N extends keyof P | keyof Q ? never : N,
-    options?: ParamOptions<Value, DefaultValue, O> & { queryName?: string }
+    name: N extends keyof Params ? never : N,
+    options?: ParamOptions<Value, DefaultValue, O, AsyncSource>
   ): PathAfterQuery<
-    P,
-    Q & {
+    Params & {
       [key in N]:
         | Value
         | (O extends false
@@ -1031,39 +1668,46 @@ type PathAfterQuery<
               ? undefined
               : never);
     },
-    OptionalParams | (O extends true ? N : never)
+    OptionalParams | (O extends true ? N : never),
+    AsyncSource
   > &
-    PathAfterDeprecatedQuery<P, Q, OptionalParams>;
+    PathAfterDeprecatedQuery<Params, OptionalParams, AsyncSource>;
 };
 
 type PathAfterDeprecatedQuery<
-  P = {},
-  Q = {},
-  OptionalParams extends keyof P | keyof Q = never,
-> = PathBase<P, Q, OptionalParams> & {
+  Params = {},
+  OptionalParams extends string = never,
+  AsyncSource extends [any?] | [] = [],
+> = PathBase<Params, OptionalParams, AsyncSource> & {
   deprecatedQuery<const S extends string[]>(
     keys: S,
-    mapper: (deprecatedValues: Partial<Record<S[number], string>>) => Partial<Q>
-  ): PathBase<P, Q, OptionalParams>;
+    mapper: (
+      deprecatedValues: Partial<Record<S[number], string>>
+    ) => Partial<Params>
+  ): PathBase<Params, OptionalParams, AsyncSource>;
+};
+
+type AsyncRoute = {
+  async<T>(source: AsyncControl<T>): PathCreator<{}, never, [source?: T]>;
 };
 
 type PathCreator<
-  P = {},
-  Q = {},
-  OptionalParams extends keyof P | keyof Q = never,
-> = PathAfterArray<P, Q, OptionalParams> &
-  PathAfterQuery<P, Q, OptionalParams> & {
-    any(optional?: boolean): PathCreator<P, Q, OptionalParams>;
+  Params = {},
+  OptionalParams extends string = never,
+  AsyncSource extends [any?] | [] = [],
+> = AsyncRoute &
+  PathAfterArray<Params, OptionalParams, AsyncSource> &
+  PathAfterQuery<Params, OptionalParams, AsyncSource> & {
     param<
       N extends string,
       O extends boolean = false,
-      DefaultValue extends Value | (() => Value) = never,
+      DefaultValue extends Value = never,
       Value = string,
     >(
-      name: N extends keyof P | keyof Q ? never : N,
-      options?: ParamOptions<Value, DefaultValue, O>
+      name: N extends keyof Params ? never : N,
+      options?: ParamOptions<Value, DefaultValue, O, AsyncSource>
     ): PathCreator<
-      P & {
+      Params & {
         [key in N]:
           | Value
           | (O extends false
@@ -1072,38 +1716,38 @@ type PathCreator<
                 ? undefined
                 : never);
       },
-      Q,
-      OptionalParams | (O extends true ? N : never)
+      OptionalParams | (O extends true ? N : never),
+      AsyncSource
     >;
     array<N extends string, Value = string[]>(
-      name: N extends keyof P | keyof Q ? never : N,
+      name: N extends keyof Params ? never : N,
       converter?: {
         stringify?(value: Value): string[];
         parse?(values: string[]): Value;
       }
     ): PathAfterArray<
-      P & {
+      Params & {
         [key in N]: Value;
       },
-      Q,
-      OptionalParams
+      OptionalParams,
+      AsyncSource
     >;
     oneOf<
       N extends string,
       const T extends string[],
-      DefaultValue extends T[number] | (() => T[number]) = never,
+      DefaultValue extends T[number] = never,
     >(
-      name: N extends keyof P | keyof Q ? never : N,
+      name: N extends keyof Params ? never : N,
       variants: T,
       optional: true,
-      defaultValue?: DefaultValue
+      defaultValue?: DefaultValue | (() => DefaultValue)
     ): PathCreator<
-      P & {
+      Params & {
         [key in N]:
           | T[number]
           | ([DefaultValue] extends [never] ? undefined : never);
       },
-      Q,
-      OptionalParams | N
+      OptionalParams | N,
+      AsyncSource
     >;
   };

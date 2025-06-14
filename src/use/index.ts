@@ -1,5 +1,5 @@
 import { useContext, useSyncExternalStore } from 'react';
-import type { AsyncState, Falsy } from '../types';
+import type { Falsy, ReadonlyAsyncControl } from '../types';
 import ErrorBoundaryContext from '../utils/ErrorBoundaryContext';
 import SuspenseContext from '../utils/SuspenseContext';
 import handleSuspense from '../utils/handleSuspense';
@@ -9,21 +9,21 @@ import { ROOT } from '../utils/constants';
 
 const use: {
   /**
-   * Hook to retrieve the current value of the loaded {@link state}.
-   * If the {@link state} isn't loaded, the component using this hook suspends.
-   * Ensure the component is wrapped in a <Suspense> component to handle the loading state.
+   * Hook to retrieve the current value of the loaded {@link control}.
+   * If the {@link control} isn't loaded, the component using this hook suspends.
+   * Ensure the component is wrapped in a <Suspense> component to handle the loading control.
    * If loading fails and {@link safeReturn} is not enabled, an error is thrown.
    *
    * @example
    * ```jsx
    * const DataComponent = () => {
-   *   const data = use(asyncState); // Suspends if not loaded
+   *   const data = use(asyncControl); // Suspends if not loaded
    *
    *   return <div>Data: {JSON.stringify(data)}</div>;
    * };
    *
    * const SafeComponent = () => {
-   *   const [data, error] = use(asyncState, true); // Safely returns a tuple
+   *   const [data, error] = use(asyncControl, true); // Safely returns a tuple
    *
    *   if (error) {
    *     return <div>Error: {error.message}</div>;
@@ -44,23 +44,23 @@ const use: {
    * );
    * ```
    */
-  <S extends AsyncState | Falsy, SafeReturn extends boolean = false>(
-    state: S,
+  <S extends ReadonlyAsyncControl | Falsy, SafeReturn extends boolean = false>(
+    control: S,
     safeReturn?: SafeReturn
-  ): S extends AsyncState<infer T, infer E>
+  ): S extends ReadonlyAsyncControl<infer T, infer E>
     ? SafeReturn extends false
       ? T
       : Readonly<[value: T, error: undefined] | [value: undefined, error: E]>
     : undefined;
-} = (state, safeReturn) => {
-  if (state) {
-    const utils = state[ROOT];
+} = (control, safeReturn) => {
+  if (control) {
+    const utils = control[ROOT];
 
     const root = utils[ROOT];
 
-    const errorState = root._errorState[ROOT];
+    const errorControl = root._errorControl[ROOT];
 
-    const err = errorState._value;
+    const err = errorControl._value;
 
     const isError = err !== undefined;
 
@@ -73,8 +73,8 @@ const use: {
 
       useSyncExternalStore(utils._subscribeWithError, () =>
         withValueWatching
-          ? (errorState._valueToggler << 1) | utils._valueToggler
-          : (((errorState._value === undefined) as any) << 1) |
+          ? (errorControl._valueToggler << 1) | utils._valueToggler
+          : (((errorControl._value === undefined) as any) << 1) |
             ((root._value !== undefined) as any)
       );
 
