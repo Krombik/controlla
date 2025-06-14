@@ -9,7 +9,7 @@ const concat = <T>(arr: Array<T> | ReadonlyArray<T>, item: T) => {
 
   path[l] = item;
 
-  return path as ReadonlyArray<T>;
+  return path as Array<T>;
 };
 
 export default concat;

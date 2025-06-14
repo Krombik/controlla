@@ -1,20 +1,20 @@
-import type { AsyncState } from '../types';
+import type { ReadonlyAsyncControl } from '../types';
 import { ROOT } from '../utils/constants';
 
 /**
- * @returns a promise that resolves with the current value of the given {@link state}.
- * If the state is not yet loaded, the promise waits until a value is available.
+ * @returns a promise that resolves with the current value of the given {@link control}.
+ * If the control is not yet loaded, the promise waits until a value is available.
  * @example
  * ```js
- * getPromise(asyncState).then((value) => {
+ * getPromise(asyncControl).then((value) => {
  *   console.log('Loaded value:', value);
  * }).catch((error) => {
  *   console.error('Failed to load:', error);
  * });
  * ```
  */
-const getPromise = <T>(state: AsyncState<T>): Promise<T> => {
-  const utils = state[ROOT];
+const getPromise = <T>(control: ReadonlyAsyncControl<T>): Promise<T> => {
+  const utils = control[ROOT];
 
   const root = utils[ROOT];
 
@@ -24,11 +24,11 @@ const getPromise = <T>(state: AsyncState<T>): Promise<T> => {
 
   if (data) {
     promise = data._promise;
-  } else if (root._isLoadedState[ROOT]._value) {
+  } else if (root._isLoadedControl[ROOT]._value) {
     promise =
       root._value !== undefined
         ? Promise.resolve(root._value)
-        : Promise.reject(root._errorState[ROOT]._value);
+        : Promise.reject(root._errorControl[ROOT]._value);
   } else {
     let _resolve!: (value: any) => void, _reject!: (error: any) => void;
 

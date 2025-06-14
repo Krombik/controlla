@@ -1,11 +1,13 @@
 import load from '../load';
-import type { AnyAsyncState, LoadableState } from '../types';
+import type { AnyAsyncControl, LoadableControl } from '../types';
 
 const handleUnlisteners = (
   valueUnlistener: () => void,
-  state: AnyAsyncState
+  control: AnyAsyncControl
 ) => {
-  const loadUnlistener: undefined | (() => void) = load(state as LoadableState);
+  const loadUnlistener: undefined | (() => void) = load(
+    control as LoadableControl
+  );
 
   return loadUnlistener
     ? () => {

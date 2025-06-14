@@ -1,24 +1,24 @@
-import type { AsyncState } from '../types';
+import type { ReadonlyAsyncControl } from '../types';
 import { ROOT } from '../utils/constants';
 
 /**
- * Registers a callback to be invoked when the given {@link state} triggers a slow loading timeout.
- * Throws an error if the state does not have a slow loading timeout configured.
+ * Registers a callback to be invoked when the given {@link control} triggers a slow loading timeout.
+ * Throws an error if the control does not have a slow loading timeout configured.
  *
- * @param state - The asynchronous state to monitor.
+ * @param control - The asynchronous control to monitor.
  * @param cb - The callback function to invoke when the loading is considered slow.
  * @returns A function to remove the registered callback.
  *
- * @throws {Error} - If the state does not have a slow loading timeout configured.
+ * @throws {Error} - If the control does not have a slow loading timeout configured.
  *
  * @example
  * ```js
- * const asyncState = createAsyncState({
+ * const asyncControl = createAsyncControl({
  *   ...options,
  *   loadingTimeout: 3000, // Configure the slow loading timeout
  * });
  *
- * const unsubscribe = onSlowLoading(asyncState, () => {
+ * const unsubscribe = onSlowLoading(asyncControl, () => {
  *   console.warn('Loading is taking longer than expected.');
  * });
  *
@@ -26,8 +26,8 @@ import { ROOT } from '../utils/constants';
  * unsubscribe();
  * ```
  */
-const onSlowLoading = (state: AsyncState, cb: () => void) => {
-  const slowLoading = state[ROOT][ROOT]._slowLoading;
+const onSlowLoading = (control: ReadonlyAsyncControl, cb: () => void) => {
+  const slowLoading = control[ROOT][ROOT]._slowLoading;
 
   if (!slowLoading) {
     throw new Error('slow loading timeout was not provided');

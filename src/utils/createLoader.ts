@@ -1,8 +1,8 @@
 import type {
-  InternalAsyncState,
-  LoadableState,
-  LoadableStateOptions,
-  RequestableStateOptions,
+  InternalAsyncControl,
+  LoadableControl,
+  LoadableControlOptions,
+  RequestableControlOptions,
 } from '../types';
 import becomingOnline from './becomingOnline';
 import { RESOLVED_PROMISE, ROOT } from './constants';
@@ -11,12 +11,12 @@ const createLoader = <U extends Record<string, any> = never>(
   handleLoad: (
     cancelPromise: Promise<void>,
     fetch: () => Promise<true | void>,
-    self: InternalAsyncState
+    self: InternalAsyncControl
   ) => void | Promise<void>,
-  { fetch, shouldRetryOnError }: RequestableStateOptions<any, any, any[]>
+  { fetch, shouldRetryOnError }: RequestableControlOptions<any, any, any[]>
 ) =>
-  function (this: LoadableState<any, any, U>, ...args: any[]) {
-    const self = this as Partial<InternalAsyncState> as InternalAsyncState;
+  function (this: LoadableControl<any, any, U>, ...args: any[]) {
+    const self = this as Partial<InternalAsyncControl> as InternalAsyncControl;
 
     let attempt = 0;
 
@@ -62,7 +62,7 @@ const createLoader = <U extends Record<string, any> = never>(
                   }
                 }
 
-                self._errorState[ROOT]._set(err);
+                self._errorControl[ROOT]._set(err);
               }
             }
           )
@@ -91,6 +91,6 @@ const createLoader = <U extends Record<string, any> = never>(
     );
 
     return cancel;
-  } as LoadableStateOptions<any, any>['load'];
+  } as LoadableControlOptions<any, any>['load'];
 
 export default createLoader;

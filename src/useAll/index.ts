@@ -2,9 +2,9 @@ import { useContext, useSyncExternalStore } from 'react';
 import type {
   Falsy,
   ExtractValues,
-  AsyncState,
   ExtractErrors,
-  InternalAsyncState,
+  InternalAsyncControl,
+  ReadonlyAsyncControl,
 } from '../types';
 import noop from 'lodash.noop';
 import ErrorBoundaryContext from '../utils/ErrorBoundaryContext';
@@ -14,15 +14,15 @@ import alwaysNoop from '../utils/alwaysNoop';
 import { ROOT } from '../utils/constants';
 
 /**
- * A hook to retrieve the current values and errors from multiple {@link states}.
- * If any of {@link states} isn't loaded, the component using this hook suspends.
- * Ensure the component is wrapped in a <Suspense> component to handle the loading state.
- * If any of {@link states} fails and {@link safeReturn} is not enabled, an error is thrown.
+ * A hook to retrieve the current values and errors from multiple {@link controls}.
+ * If any of {@link controls} isn't loaded, the component using this hook suspends.
+ * Ensure the component is wrapped in a <Suspense> component to handle the loading control.
+ * If any of {@link controls} fails and {@link safeReturn} is not enabled, an error is thrown.
  *
  * @example
  * ```jsx
  * const DataComponent = () => {
- *   const [data1, data2] = useAll([asyncState1, asyncState2]);
+ *   const [data1, data2] = useAll([asyncControl1, asyncControl2]);
  *
  *   return (
  *     <div>
@@ -33,7 +33,7 @@ import { ROOT } from '../utils/constants';
  * };
  *
  * const SafeComponent = () => {
- *   const [[data1, data2], errors] = useAll([asyncState1, asyncState2], true);
+ *   const [[data1, data2], errors] = useAll([asyncControl1, asyncControl2], true);
  *
  *   if (errors.some((error) => error)) {
  *     return <div>Error occurred</div>;
@@ -60,10 +60,10 @@ import { ROOT } from '../utils/constants';
  * ```
  */
 const useAll = <
-  const S extends Array<AsyncState | Falsy>,
+  const S extends Array<ReadonlyAsyncControl | Falsy>,
   SafeReturn extends boolean = false,
 >(
-  states: S,
+  controls: S,
   safeReturn?: SafeReturn
 ): SafeReturn extends false
   ? ExtractValues<S>
@@ -76,23 +76,23 @@ const useAll = <
         ]
       | [values: ExtractValues<S, true>, errors: ExtractErrors<S>]
     > => {
-  const l = states.length;
+  const l = controls.length;
 
   const values = Array(l);
 
   const errors = Array(l);
 
   for (let i = 0; i < l; i++) {
-    const state = states[i];
+    const control = controls[i];
 
-    if (state) {
-      const utils = state[ROOT];
+    if (control) {
+      const utils = control[ROOT];
 
       const root = utils[ROOT];
 
-      const errorState = root._errorState[ROOT];
+      const errorControl = root._errorControl[ROOT];
 
-      const err = errorState._value;
+      const err = errorControl._value;
 
       const isError = err !== undefined;
 
@@ -105,8 +105,8 @@ const useAll = <
 
         useSyncExternalStore(utils._subscribeWithError, () =>
           withValueWatching
-            ? (errorState._valueToggler << 1) | utils._valueToggler
-            : (((errorState._value === undefined) as any) << 1) |
+            ? (errorControl._valueToggler << 1) | utils._valueToggler
+            : (((errorControl._value === undefined) as any) << 1) |
               ((root._value !== undefined) as any)
         );
 
@@ -116,19 +116,19 @@ const useAll = <
 
         errors[i] = err;
       } else {
-        const unloadedStates: InternalAsyncState[] = [root];
+        const unloadedControls: InternalAsyncControl[] = [root];
 
         while (++i < l) {
-          const state = states[i];
+          const control = controls[i];
 
-          if (state) {
-            const root = state[ROOT][ROOT];
+          if (control) {
+            const root = control[ROOT][ROOT];
 
-            const err = root._errorState[ROOT]._value;
+            const err = root._errorControl[ROOT]._value;
 
             if (err === undefined) {
               if (root._value === undefined) {
-                unloadedStates.push(root);
+                unloadedControls.push(root);
               }
             } else if (!safeReturn) {
               throw err;
@@ -137,7 +137,7 @@ const useAll = <
         }
 
         throw new Promise<void>((res) => {
-          const l = unloadedStates.length;
+          const l = unloadedControls.length;
 
           let inProgressCount = l;
 
@@ -155,7 +155,7 @@ const useAll = <
 
           for (let i = 0; i < l; i++) {
             handleSuspense(
-              unloadedStates[i],
+              unloadedControls[i],
               errorBoundaryCtx,
               suspenseCtx
             ).then(onResolve, rej);
@@ -167,7 +167,7 @@ const useAll = <
     }
   }
 
-  return safeReturn ? [values, errors] : (values as any);
+  return (safeReturn ? [values, errors] : values) as any;
 };
 
 export default useAll;

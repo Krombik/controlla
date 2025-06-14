@@ -1,32 +1,32 @@
-import type { FC, PropsWithChildren, SuspenseProps } from 'react';
-import type { AsyncState } from '../types';
+import type { FC, PropsWithChildren, ReactNode, SuspenseProps } from 'react';
+import type { ReadonlyAsyncControl } from '../types';
 import use from '../use';
 import Suspense from '../Suspense';
 import awaitOnly from '../awaitOnly';
 import { jsx } from 'react/jsx-runtime';
 
-type Props<S extends AsyncState> = PropsWithChildren & {
-  state: S;
-  /** A function or element to render if the {@link Props.state state} fails. */
+type Props<S extends ReadonlyAsyncControl> = PropsWithChildren & {
+  control: S;
+  /** A function or element to render if the {@link Props.control control} fails. */
   renderIfError?:
     | ((
-        error: S extends AsyncState<any, infer E> ? E : never
-      ) => ReturnType<FC>)
-    | ReturnType<FC>;
+        error: S extends ReadonlyAsyncControl<any, infer E> ? E : never
+      ) => ReactNode)
+    | ReactNode;
 } & Pick<SuspenseProps, 'fallback'>;
 
-const Controller: FC<Props<AsyncState>> = ({
-  state,
+const Controller: FC<Props<ReadonlyAsyncControl>> = ({
+  control,
   renderIfError,
   children,
 }) => {
   if (renderIfError === undefined) {
-    use(awaitOnly(state));
+    use(awaitOnly(control));
 
     return children;
   }
 
-  const err = use(awaitOnly(state), true)[1];
+  const err = use(awaitOnly(control), true)[1];
 
   return err === undefined
     ? children
@@ -36,14 +36,14 @@ const Controller: FC<Props<AsyncState>> = ({
 };
 
 /**
- * A controller component for rendering a {@link Props.state state} using `awaitOnly` to avoid unnecessary re-renders.
- * It utilizes the {@link use} hook to monitor the {@link Props.state state’s} resolution or failure.
- * This component integrates with the {@link Suspense} component, deferring rendering until the {@link Props.state state} is resolved or an error occurs.
+ * A controller component for rendering a {@link Props.control control} using `awaitOnly` to avoid unnecessary re-renders.
+ * It utilizes the {@link use} hook to monitor the {@link Props.control control’s} resolution or failure.
+ * This component integrates with the {@link Suspense} component, deferring rendering until the {@link Props.control control} is resolved or an error occurs.
  *
  * @example
  * ```jsx
  *   <SuspenseOnlyController
- *     state={asyncState}
+ *     control={asyncControl}
  *     fallback={<div>Loading...</div>}
  *     renderIfError={(error) => <div>Error: {error.message}</div>}
  *   >
@@ -51,8 +51,8 @@ const Controller: FC<Props<AsyncState>> = ({
  *   </SuspenseOnlyController>
  * ```
  */
-const SuspenseOnlyController = <S extends AsyncState>(props: Props<S>) => (
-  <Suspense fallback={props.fallback}>{jsx(Controller, props)}</Suspense>
-);
+const SuspenseOnlyController = <S extends ReadonlyAsyncControl>(
+  props: Props<S>
+) => <Suspense fallback={props.fallback}>{jsx(Controller, props)}</Suspense>;
 
 export default SuspenseOnlyController;

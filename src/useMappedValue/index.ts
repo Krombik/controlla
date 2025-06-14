@@ -1,29 +1,33 @@
 import { useCallback, useSyncExternalStore } from 'react';
-import type { AnyAsyncState, AsyncState, ReadonlyState } from '../types';
+import type {
+  AnyAsyncControl,
+  ReadonlyAsyncControl,
+  ReadonlyControl,
+} from '../types';
 import { ROOT } from '../utils/constants';
 import { postBatchCallbacksPush } from '../utils/batching';
 import noop from 'lodash.noop';
 
 const useMappedValue = ((
-  state: AnyAsyncState,
+  control: AnyAsyncControl,
   mapper: (value: any, isLoaded?: boolean, error?: any) => any
 ) => {
-  const utils = state[ROOT];
+  const utils = control[ROOT];
 
   const l = mapper.length;
 
   if (l < 2) {
     return useSyncExternalStore(
-      utils._subscribeWithLoad || utils._onValueChange,
+      utils._subscribeWithLoad || utils._subscribe,
       () => mapper(utils._get())
     );
   }
 
   const root = utils[ROOT];
 
-  const isLoadedState = root._isLoadedState[ROOT];
+  const isLoadedControl = root._isLoadedControl[ROOT];
 
-  const errorState = l > 2 && root._errorState[ROOT];
+  const errorControl = l > 2 && root._errorControl[ROOT];
 
   return useSyncExternalStore(
     useCallback(
@@ -42,13 +46,13 @@ const useMappedValue = ((
           }
         };
 
-        const unlistenValue = (
-          utils._subscribeWithLoad || utils._onValueChange
-        )(fn);
+        const unlistenValue = (utils._subscribeWithLoad || utils._subscribe)(
+          fn
+        );
 
-        const unlistenIsLoaded = isLoadedState._onValueChange(fn);
+        const unlistenIsLoaded = isLoadedControl._subscribe(fn);
 
-        const unlistenError = errorState ? errorState._onValueChange(fn) : noop;
+        const unlistenError = errorControl ? errorControl._subscribe(fn) : noop;
 
         return () => {
           unlistenValue();
@@ -65,26 +69,24 @@ const useMappedValue = ((
     () =>
       mapper(
         utils._get(),
-        isLoadedState._value,
-        errorState && errorState._value
+        isLoadedControl._value,
+        errorControl && errorControl._value
       )
   );
 }) as {
   /**
-   * Hook to {@link mapper map} and retrieve a value from a {@link state}.
+   * Hook to {@link mapper map} and retrieve a value from a {@link control}.
    * @param mapper - Function that maps the value.
-   * @param isEqual - Optional comparison function to determine equality of the mapped values.
    */
   <T, V, E = any>(
-    state: AsyncState<T, E>,
+    control: ReadonlyAsyncControl<T, E>,
     mapper: (value: T | undefined, isLoaded: boolean, error: E | undefined) => V
   ): V;
   /**
-   * Hook to {@link mapper map} and retrieve a value from a {@link state}.
+   * Hook to {@link mapper map} and retrieve a value from a {@link control}.
    * @param mapper - Function that maps the value.
-   * @param isEqual - Optional comparison function to determine equality of the mapped values.
    */
-  <T, V>(state: ReadonlyState<T>, mapper: (value: T) => V): V;
+  <T, V>(control: ReadonlyControl<T>, mapper: (value: T) => V): V;
 };
 
 export default useMappedValue;
