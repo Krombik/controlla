@@ -9,6 +9,7 @@ export type LinkProps = {
     href: string,
     onClick: (e: MouseEvent<HTMLAnchorElement, any>) => void
   ): ReactNode;
+  ignoreBlock?: boolean;
 };
 
 const Link: FC<LinkProps> = ({
@@ -18,10 +19,13 @@ const Link: FC<LinkProps> = ({
   },
   render,
   onClick,
+  ignoreBlock,
 }) =>
   render(
     _useHref(params),
-    params || onClick ? (e) => _navigate(e, params, false, onClick) : _navigate
+    params || onClick || ignoreBlock
+      ? (e) => _navigate(e, params, false, ignoreBlock, onClick)
+      : _navigate
   );
 
 export default Link;
