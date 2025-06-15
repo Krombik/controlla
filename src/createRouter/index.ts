@@ -45,7 +45,7 @@ type HistoryState = { idx?: number };
 
 let popStateListener: undefined | ((e: PopStateEvent) => void);
 
-let unloads: Array<() => void> = [];
+let unloads: Array<() => void> = EMPTY_ARR;
 
 const getEmptyString = () => EMPTY_STRING;
 
@@ -282,7 +282,7 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
     unloads[i]();
   }
 
-  unloads.length = 0;
+  unloads = EMPTY_ARR;
 
   let isRouterAvailable = true;
 
@@ -405,6 +405,8 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
               for (let i = 0; i < unloads.length; i++) {
                 unloads[i]();
               }
+
+              currRoute._unloads = EMPTY_ARR;
             }
           }
         }
@@ -1456,7 +1458,17 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
         const routes = routesQueue[currentRouteIndex];
 
         for (let i = routes.length; i--; ) {
-          routes[i]._isMatched._set(false);
+          const route = routes[i];
+
+          const unloads = route._unloads;
+
+          route._isMatched._set(false);
+
+          for (let i = 0; i < unloads.length; i++) {
+            unloads[i]();
+          }
+
+          route._unloads = EMPTY_ARR;
         }
 
         currentRouteIndex = -1;
