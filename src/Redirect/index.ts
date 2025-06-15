@@ -9,7 +9,7 @@ export type RedirectProps = {
 
 const Redirect: FC<RedirectProps> = (props) => {
   useEffect(() => {
-    navigate(props.to, !props.push);
+    navigate(props.to, !props.push, true);
   }, []);
 
   return null;
