@@ -7,6 +7,9 @@ export { default as createRequestableControl } from './createRequestableControl'
 export { default as createPollableControlScope } from './createPollableControlScope';
 export { default as createPollableControl } from './createPollableControl';
 
+export { default as useControl } from './useControl';
+export { default as useControlScope } from './useControlScope';
+
 // export { default as createPaginatedStorage } from './createPaginatedStorage';
 export { default as createStorage } from './createStorage';
 
@@ -45,10 +48,13 @@ export { default as SuspenseController } from './SuspenseController';
 export { default as SuspenseOnlyController } from './SuspenseOnlyController';
 export { default as SuspenseOnlyAllController } from './SuspenseOnlyAllController';
 
-// export { default as createRouter } from './createRouter';
-// export { default as navigate } from './navigate';
-// export { default as Link } from './Link';
-// export { default as Redirect } from './Redirect';
+export { default as createRouter } from './createRouter';
+export { default as Router } from './Router';
+export { default as navigate } from './navigate';
+export { default as Link } from './Link';
+export { default as Redirect } from './Redirect';
+export { default as unblockRouter } from './unblockRouter';
+export { default as blockRouter } from './blockRouter';
 
 export { default as SKELETON_CONTROL } from './SKELETON_CONTROL';
 
@@ -72,5 +78,5 @@ export type {
   PollableControlOptions,
   RequestableControlOptions,
   Storage,
-  PaginatedStorage,
+  // PaginatedStorage,
 } from './types';

@@ -27,6 +27,9 @@ import {
   ROUTE_PARAMS,
   ROUTER,
   EMPTY_OBJECT,
+  UNBLOCK_ROUTER,
+  EMPTY_STRING,
+  EMPTY_ARR,
 } from '../utils/constants';
 import { jsx } from 'react/jsx-runtime';
 import concat from '../utils/concat';
@@ -38,7 +41,11 @@ import getAsyncControl from '../utils/getAsyncControl';
 import { set } from '../utils/control/scope';
 import load from '../load';
 
-const EMPTY_STRING = '';
+type HistoryState = { idx?: number };
+
+let popStateListener: undefined | ((e: PopStateEvent) => void);
+
+let unloads: Array<() => void> = [];
 
 const getEmptyString = () => EMPTY_STRING;
 
@@ -77,7 +84,7 @@ const handleHref = (
   routes: RouteData[],
   updatedParams: RouteParams[] | undefined,
   maxControls: number,
-  mutable?: true
+  locationControl?: InternalControl
 ) => {
   let path = '';
 
@@ -110,7 +117,7 @@ const handleHref = (
   };
 
   if (updatedParams) {
-    const updateQueue = mutable && ([] as ParamsUpdatedData[]);
+    const updateQueue = locationControl && ([] as ParamsUpdatedData[]);
 
     const updatedParamsLastRoute =
       updatedParams[updatedParams.length - 1]._route;
@@ -203,7 +210,11 @@ const handleHref = (
     }
   }
 
-  return path + search;
+  if (locationControl) {
+    locationControl._set({ pathname: path || '/', search });
+  }
+
+  return (path || '/') + search;
 };
 
 const handleParamUpdates = (queue: ParamsUpdatedData[]) => {
@@ -224,6 +235,12 @@ const nonUndefinedIdentity = (value: any, key: string) => {
   }
 
   return value;
+};
+
+const beforeUnloadListener = (e: BeforeUnloadEvent) => {
+  e.preventDefault();
+
+  e.returnValue = true;
 };
 
 const handleStringify = (
@@ -257,6 +274,16 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
     getRoutes(createRoute: () => PathCreator): Routes;
   }
 ): Routes & Router => {
+  if (popStateListener) {
+    window.removeEventListener('popstate', popStateListener);
+  }
+
+  for (let i = 0; i < unloads.length; i++) {
+    unloads[i]();
+  }
+
+  unloads.length = 0;
+
   let isRouterAvailable = true;
 
   let getBlockedRouterMessage = getEmptyString;
@@ -269,7 +296,7 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
 
   let paramsWasReplaced = false;
 
-  const { NotFound } = options;
+  const { NotFound, load: _load } = options;
 
   const pathQueue: string[] = [];
 
@@ -349,58 +376,46 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
   };
 
   const handleMatching = (
-    nextRoute: RouteData[],
+    nextRoutes: RouteData[],
     componentList: ComponentType[]
   ) => {
     if (currentRouteIndex > 0) {
-      const currentRoute = routesQueue[currentRouteIndex];
+      const currentRoutes = routesQueue[currentRouteIndex];
 
-      if (currentRoute != nextRoute) {
-        const nextL = nextRoute.length - 1;
+      if (currentRoutes != nextRoutes) {
+        const maxLength = Math.max(nextRoutes.length, currentRoutes.length);
 
-        let start = currentRoute.length - 1;
+        for (let i = 0; i < maxLength; i++) {
+          const currRoute = currentRoutes[i];
 
-        if (start != nextL) {
-          let end, target, value;
+          const nextRoute = nextRoutes[i];
 
-          if (start > nextL) {
-            end = nextL;
+          if (currRoute != nextRoute) {
+            if (nextRoute) {
+              nextRoute._load();
 
-            target = currentRoute;
+              nextRoute._isMatched._set(true);
+            }
 
-            value = false;
-          } else {
-            end = start;
+            if (currRoute) {
+              const unloads = currRoute._unloads;
 
-            start = nextL;
+              currRoute._isMatched._set(false);
 
-            target = nextRoute;
-
-            value = true;
+              for (let i = 0; i < unloads.length; i++) {
+                unloads[i]();
+              }
+            }
           }
-
-          for (; start > end; start--) {
-            target[start]._isMatched._set(value);
-          }
-        }
-
-        for (; start >= 0; start--) {
-          const curr = currentRoute[start];
-
-          const next = nextRoute[start];
-
-          if (curr == next) {
-            return;
-          }
-
-          curr._isMatched._set(false);
-
-          next._isMatched._set(true);
         }
       }
     } else {
-      for (let i = nextRoute.length; i--; ) {
-        nextRoute[i]._isMatched._set(true);
+      for (let i = 0; i < nextRoutes.length; i++) {
+        const route = nextRoutes[i];
+
+        route._load();
+
+        route._isMatched._set(true);
       }
     }
 
@@ -410,6 +425,7 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
   };
 
   const navigate = (
+    index: number,
     routes: RouteData[],
     componentList: ComponentType[],
     event: ReactMouseEvent<HTMLAnchorElement, any> | null,
@@ -449,12 +465,25 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
       ignoreBlock ||
       window.confirm(getBlockedRouterMessage())
     ) {
+      const state = history.state;
+
+      const href = handleHref(routes, params, 0, locationControl);
+
       handleMatching(routes, componentList);
 
+      currentRouteIndex = index;
+
       history[replace ? 'replaceState' : 'pushState'](
-        null,
+        replace
+          ? state
+          : state && typeof state == 'object'
+            ? {
+                ...state,
+                idx: ++currentHistoryIndex,
+              }
+            : { idx: ++currentHistoryIndex },
         '',
-        handleHref(routes, params, 0, true)
+        href
       );
     }
   };
@@ -503,6 +532,8 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
             | { Component: ComponentType }
           )
       ) {
+        const { load: _load } = options;
+
         const l = path.length;
 
         const pathParamsCount = pathParams.length;
@@ -532,6 +563,18 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
             : null;
 
         const routeData: RouteData = {
+          _load: _load
+            ? function (this: RouteData) {
+                const res = _load();
+
+                this._unloads = res
+                  ? typeof res == 'object'
+                    ? res
+                    : [res]
+                  : EMPTY_ARR;
+              }
+            : noop,
+          _unloads: EMPTY_ARR,
           _pathParamsCount: pathParamsCount,
           _currentPath: pathParamsCount || !l ? '' : path[0],
           _currentSearch: '',
@@ -699,9 +742,12 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
 
           const componentList: ComponentType[] = [];
 
+          const routeIndex = pathQueue.length;
+
           const methods: RouteMethods = {
             _navigate(event, params, replace, ignoreBlock, onClick) {
               navigate(
+                routeIndex,
                 routes,
                 componentList,
                 event,
@@ -773,6 +819,7 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
           const methods: RouteMethods = {
             _navigate(event, params, replace, ignoreBlock, onClick) {
               navigate(
+                currentRouteIndex,
                 routesQueue[currentRouteIndex],
                 routerComponentsList[currentRouteIndex],
                 event,
@@ -1046,6 +1093,8 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
 
   const { pathname, search } = location;
 
+  const locationControl = createSimpleControl()[ROOT];
+
   const handleRouter = () => {
     let onValueChange: () => void = noop;
 
@@ -1077,6 +1126,14 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
       jsx(useSyncExternalStore(subscribe, getComponent), EMPTY_OBJECT);
   };
 
+  if (_load) {
+    const res = _load();
+
+    if (res) {
+      unloads = typeof res == 'object' ? res : [res];
+    }
+  }
+
   router[ROUTER] = handleRouter();
 
   router[BLOCK_ROUTER] = (message) => {
@@ -1085,22 +1142,20 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
     getBlockedRouterMessage =
       typeof message == 'string' ? () => message : message;
 
-    const listener = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
+    window.addEventListener('beforeunload', beforeUnloadListener);
 
-      e.returnValue = true;
-    };
-
-    window.addEventListener('beforeunload', listener);
-
-    return () => {
-      isRouterAvailable = true;
-
-      getBlockedRouterMessage = getEmptyString;
-
-      window.removeEventListener('beforeunload', listener);
-    };
+    return router[UNBLOCK_ROUTER];
   };
+
+  router[UNBLOCK_ROUTER] = () => {
+    isRouterAvailable = true;
+
+    getBlockedRouterMessage = getEmptyString;
+
+    window.removeEventListener('beforeunload', beforeUnloadListener);
+  };
+
+  router[ROOT] = locationControl;
 
   for (let i = nestingLevels.size; i > 1; i--) {
     const map = new Map<ComponentType, FC>();
@@ -1288,13 +1343,13 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
                       paramsWasReplaced = false;
 
                       history.replaceState(
-                        null,
+                        history.state,
                         '',
                         handleHref(
                           routes,
                           [{ _params: params, _route: route }],
                           0,
-                          true
+                          locationControl
                         )
                       );
                     } else {
@@ -1308,18 +1363,20 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
 
           handleParamUpdates(currentParamsQueue);
 
-          handleMatching(routes, components);
-
           if (updatedParamsQueue.length) {
             history.replaceState(
-              null,
+              history.state,
               '',
-              handleHref(routes, updatedParamsQueue, 0, true)
+              handleHref(routes, updatedParamsQueue, 0, locationControl)
             );
+          } else {
+            locationControl._set({ pathname, search });
           }
         } else {
-          handleMatching(routes, components);
+          locationControl._set({ pathname, search });
         }
+
+        handleMatching(routes, components);
 
         currentRouteIndex = i;
       }
@@ -1338,27 +1395,78 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
     setControlArr[0](NotFound);
   }
 
-  window.addEventListener('popstate', () => {
-    const { pathname, search } = location;
+  let delta = 0;
 
-    for (let i = 0; i < l; i++) {
-      if (findCurrentRouteArr[i](pathname, search)) {
+  let isRouterBlockPopupAllowed = true;
+
+  let currentHistoryIndex = 0;
+
+  const state = history.state as HistoryState | null;
+
+  if (!state || state.idx == null) {
+    history.replaceState(
+      state && typeof state == 'object' ? { ...state, idx: 0 } : { idx: 0 },
+      ''
+    );
+  } else {
+    currentHistoryIndex = state.idx;
+  }
+
+  popStateListener = (e) => {
+    const state = e.state as HistoryState | null;
+
+    const nextHistoryIndex = state && state.idx;
+
+    if (delta) {
+      if (window.confirm(getBlockedRouterMessage())) {
+        isRouterBlockPopupAllowed = false;
+
+        history.go(-delta);
+      }
+
+      delta = 0;
+    } else if (nextHistoryIndex != currentHistoryIndex) {
+      if (
+        isRouterBlockPopupAllowed &&
+        !isRouterAvailable &&
+        nextHistoryIndex != null
+      ) {
+        delta = currentHistoryIndex - nextHistoryIndex;
+
+        history.go(delta);
+
         return;
       }
-    }
 
-    if (currentRouteIndex > -1) {
-      const routes = routesQueue[currentRouteIndex];
-
-      for (let i = routes.length; i--; ) {
-        routes[i]._isMatched._set(false);
+      if (nextHistoryIndex != null) {
+        currentHistoryIndex = nextHistoryIndex;
       }
 
-      currentRouteIndex = -1;
+      isRouterBlockPopupAllowed = true;
 
-      setControlArr[0](NotFound);
+      const { pathname, search } = location;
+
+      for (let i = 0; i < l; i++) {
+        if (findCurrentRouteArr[i](pathname, search)) {
+          return;
+        }
+      }
+
+      if (currentRouteIndex > -1) {
+        const routes = routesQueue[currentRouteIndex];
+
+        for (let i = routes.length; i--; ) {
+          routes[i]._isMatched._set(false);
+        }
+
+        currentRouteIndex = -1;
+
+        setControlArr[0](NotFound);
+      }
     }
-  });
+  };
+
+  window.addEventListener('popstate', popStateListener);
 
   return router;
 };
@@ -1368,7 +1476,8 @@ export default createRouter;
 export type Router = {
   [ROUTER](): ReactElement;
   [BLOCK_ROUTER](message: string | (() => string)): () => void;
-};
+  [UNBLOCK_ROUTER](): void;
+} & ReadonlyControl<{ readonly pathname: string; readonly search: string }>;
 
 declare const ROUTE_MARKER: unique symbol;
 
@@ -1394,6 +1503,11 @@ type ParamOptions<Value, DefaultValue, O, Source extends [any?] | [] = []> = {
 };
 
 type RouteData = {
+  readonly _selfIndex: number;
+  readonly _params: InternalControl | InternalAsyncControl | null;
+  readonly _source: InternalAsyncControl | undefined;
+  readonly _isMatched: InternalControl;
+  readonly _pathParamsCount: number;
   _getPath(
     params: Record<string, any>,
     stringifiedParams: Record<string, string>
@@ -1418,11 +1532,8 @@ type RouteData = {
     stringifiedParams: Record<string, string>,
     source: any
   ): void;
-  readonly _selfIndex: number;
-  readonly _params: InternalControl | InternalAsyncControl | null;
-  readonly _source: InternalAsyncControl | undefined;
-  readonly _isMatched: InternalControl;
-  readonly _pathParamsCount: number;
+  _load(): void;
+  _unloads: Array<() => void>;
   _currentPath: string;
   _currentSearch: string;
 };
