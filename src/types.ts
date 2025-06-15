@@ -92,7 +92,7 @@ declare class _Base {}
 
 export type ReadonlyControl<Value = any> = _Base & {
   /** @internal */
-  readonly [ROOT]: InternalControl;
+  [ROOT]: InternalControl;
   [CONTROL_MARKER]: Value;
 };
 
