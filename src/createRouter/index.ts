@@ -271,9 +271,9 @@ const handleStringify = (
 const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
   options: ToOptions & {
     NotFound: ComponentType;
-    getRoutes(createRoute: () => PathCreator): Routes;
+    getRoutes(createRoute: () => PathCreator & AsyncRoute): Routes;
   }
-): Routes & Router => {
+): UnionToIntersection<Routes> & Router => {
   if (popStateListener) {
     window.removeEventListener('popstate', popStateListener);
   }
@@ -760,6 +760,7 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
               );
             },
             _useHref: (params) => handleHref(routes, params, maxParamsPerRoute),
+            _isMatched: isMatchedRoot,
           };
 
           const res = {
@@ -837,6 +838,7 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
                 params,
                 maxParamsPerRoute
               ),
+            _isMatched: isMatchedRoot,
           };
 
           for (let i = currentPathQueueIndex; i < pathQueue.length; i++) {
@@ -912,7 +914,7 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
 
         nestingIndex--;
 
-        return route;
+        return route as any;
       },
       async(source) {
         asyncSourceControl = source[ROOT];
@@ -1082,7 +1084,9 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
 
         return this as any;
       },
-    } as PathCreator<any, any> & Partial<PathAfterDeprecatedQuery<any, any>>;
+    } as PathCreator<any, any> &
+      Partial<PathAfterDeprecatedQuery<any, any>> &
+      AsyncRoute;
   }) as Routes & Router;
 
   const l = pathQueue.length;
@@ -1159,7 +1163,7 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
 
   router[ROOT] = locationControl;
 
-  for (let i = nestingLevels.size; i > 1; i--) {
+  for (let i = nestingLevels.size; i > 0; i--) {
     const map = new Map<ComponentType, FC>();
 
     const level = nestingLevels.get(i)!;
@@ -1315,7 +1319,11 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
 
                 const unlistenParams = paramsControl._subscribe(unlistenAll);
 
-                const unlistenMatch = route._isMatched._subscribe(unlistenAll);
+                const unlistenMatch = route._isMatched._subscribe((value) => {
+                  if (!value) {
+                    unlistenAll();
+                  }
+                });
 
                 const unlistenSource = source[ROOT]._subscribeWithError(() => {
                   unlistenAll();
@@ -1480,7 +1488,7 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
 
   window.addEventListener('popstate', popStateListener);
 
-  return router;
+  return router as any;
 };
 
 export default createRouter;
@@ -1490,6 +1498,12 @@ export type Router = {
   [BLOCK_ROUTER](message: string | (() => string)): () => void;
   [UNBLOCK_ROUTER](): void;
 } & ReadonlyControl<{ readonly pathname: string; readonly search: string }>;
+
+type UnionToIntersection<U> = (U extends any ? (x: U) => void : never) extends (
+  x: infer R
+) => void
+  ? Required<R>
+  : never;
 
 declare const ROUTE_MARKER: unique symbol;
 
@@ -1565,6 +1579,7 @@ type RouteMethods = {
     ignoreBlock?: boolean,
     onClick?: (event: ReactMouseEvent<HTMLAnchorElement, any>) => void
   ): void;
+  readonly _isMatched: InternalControl;
 };
 
 export type RouteBase<Navigable extends boolean> = {
@@ -1577,7 +1592,7 @@ export type RouteBase<Navigable extends boolean> = {
 
 type ProcessParams<O> = O | ((prev: O) => O);
 
-type Route<
+export type Route<
   Children extends Record<string, () => RouteBase<boolean>> = {},
   Params = {},
   OptionalParams extends string = never,
@@ -1593,38 +1608,34 @@ type Route<
       readonly params: Async extends false
         ? ReadonlyControlScope<Params>
         : ReadonlyAsyncControlScope<Params>;
-    }) &
-  ([keyof Params] extends [never]
-    ? {}
-    : {
-        (
-          params: ProcessParams<
-            {
-              [key in Exclude<keyof Params, OptionalParams>]: Params[key];
-            } & {
-              [key in Extract<keyof Params, OptionalParams>]?: Params[key];
-            }
-          >
-        ): Children & RouteBase<true>;
-        <
-          P extends {
-            [key in keyof Params]?: Params[key];
-          } = never,
-        >(
-          params: ProcessParams<P> | null,
-          stringifiedParams: {
-            [key in Exclude<
-              keyof Params,
-              OptionalParams | keyof P
-            >]: Params[key] extends string ? Params[key] : string;
+      (
+        params: ProcessParams<
+          {
+            [key in Exclude<keyof Params, OptionalParams>]: Params[key];
           } & {
-            [key in Extract<
-              keyof Params,
-              OptionalParams | keyof P
-            >]?: NonNullable<Params[key]> extends string ? Params[key] : string;
+            [key in Extract<keyof Params, OptionalParams>]?: Params[key];
           }
-        ): Children & RouteBase<true>;
-      });
+        >
+      ): Children & RouteBase<true>;
+      <
+        P extends {
+          [key in keyof Params]?: Params[key];
+        } = never,
+      >(
+        params: ProcessParams<P> | null,
+        stringifiedParams: {
+          [key in Exclude<
+            keyof Params,
+            OptionalParams | keyof P
+          >]: Params[key] extends string ? Params[key] : string;
+        } & {
+          [key in Extract<
+            keyof Params,
+            OptionalParams | keyof P
+          >]?: NonNullable<Params[key]> extends string ? Params[key] : string;
+        }
+      ): Children & RouteBase<true>;
+    });
 
 type ToOptions = {
   load?(): (() => void) | Array<() => void> | void;
@@ -1650,7 +1661,7 @@ declare class PathBase<
       Wrapper?: ComponentType<PropsWithChildren>;
     } & ToOptions
   ): Route<
-    Routes,
+    UnionToIntersection<Routes>,
     Params,
     OptionalParams,
     [AsyncSource[number]] extends [never] ? false : true
@@ -1737,8 +1748,7 @@ type PathCreator<
   OptionalParams extends string = never,
   QueryParams extends string = never,
   AsyncSource extends [any?] | [] = [],
-> = AsyncRoute &
-  PathAfterArray<Params, OptionalParams, QueryParams, AsyncSource> &
+> = PathAfterArray<Params, OptionalParams, QueryParams, AsyncSource> &
   PathAfterQuery<Params, OptionalParams, QueryParams, AsyncSource> & {
     param<
       N extends string,
