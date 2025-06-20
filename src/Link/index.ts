@@ -1,4 +1,9 @@
-import type { FC, MouseEvent, ReactNode } from 'react';
+import {
+  useSyncExternalStore,
+  type FC,
+  type MouseEvent,
+  type ReactNode,
+} from 'react';
 import type { RouteBase } from '../createRouter';
 import { ROUTE_METHODS, ROUTE_PARAMS } from '../utils/constants';
 
@@ -7,14 +12,15 @@ export type LinkProps = {
   onClick?(e: MouseEvent<HTMLAnchorElement, any>): void;
   render(
     href: string,
-    onClick: (e: MouseEvent<HTMLAnchorElement, any>) => void
+    onClick: (e: MouseEvent<HTMLAnchorElement, any>) => void,
+    isMatched: boolean
   ): ReactNode;
   ignoreBlock?: boolean;
 };
 
 const Link: FC<LinkProps> = ({
   to: {
-    [ROUTE_METHODS]: { _navigate, _useHref },
+    [ROUTE_METHODS]: { _navigate, _useHref, _isMatched },
     [ROUTE_PARAMS]: params,
   },
   render,
@@ -25,7 +31,10 @@ const Link: FC<LinkProps> = ({
     _useHref(params),
     params || onClick || ignoreBlock
       ? (e) => _navigate(e, params, false, ignoreBlock, onClick)
-      : _navigate
+      : _navigate,
+    render.length < 3
+      ? false
+      : useSyncExternalStore(_isMatched._subscribe, () => _isMatched._value)
   );
 
 export default Link;
