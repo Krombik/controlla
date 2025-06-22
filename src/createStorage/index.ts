@@ -26,6 +26,7 @@ import type createRequestableControl from '../createRequestableControl';
 import type createRequestableControlScope from '../createRequestableControlScope';
 import type createPollableControl from '../createPollableControl';
 import type createPollableControlScope from '../createPollableControlScope';
+import { ROOT } from '../utils/constants';
 // import type createPaginatedStorage from '../createPaginatedStorage';
 // import type {
 //   PaginatedPollableNestedStateArgs,
@@ -303,6 +304,12 @@ function _delete(this: Storage<any, any>, ...keys: PrimitiveOrNested[]) {
 
   const l = keys.length - 1;
 
+  if (l < 0) {
+    item.clear();
+
+    return;
+  }
+
   for (let i = 0; i < l; i++) {
     let key = keys[i];
 
@@ -336,6 +343,100 @@ function _delete(this: Storage<any, any>, ...keys: PrimitiveOrNested[]) {
       item.delete(strKey);
     }
   }
+}
+
+function clear(this: Storage<any, any>, ...keys: PrimitiveOrNested[]) {
+  let item = this._storage;
+
+  const l = keys.length;
+
+  for (let i = 0; i < l; i++) {
+    let key = keys[i];
+
+    if (!item.has(key)) {
+      if (key && typeof key == 'object') {
+        const strKey = toKey(key);
+
+        if (item.has(strKey)) {
+          key = item.get(strKey)!;
+        } else {
+          return;
+        }
+      } else {
+        return;
+      }
+    }
+
+    item = item.get(key)!;
+  }
+
+  if (item instanceof Map) {
+    const queue: Map<any, any>[] = [item];
+
+    const push = queue.push.bind(queue);
+
+    const pop = queue.pop.bind(queue);
+
+    while (queue.length) {
+      const item = pop()!;
+
+      let i = item.size;
+
+      if (i) {
+        const it = item.values();
+
+        const next = it.next.bind(it);
+
+        const first = next().value;
+
+        if (first instanceof Map) {
+          push(first);
+
+          while (--i) {
+            push(next().value);
+          }
+        } else {
+          (first as Control)[ROOT]._set(undefined);
+
+          while (--i) {
+            (next().value as Control)[ROOT]._set(undefined);
+          }
+        }
+      }
+    }
+  } else {
+    (item as Control)[ROOT]._set(undefined);
+  }
+}
+
+function has(this: Storage<any, any>, ...keys: PrimitiveOrNested[]) {
+  let item = this._storage;
+
+  const l = keys.length - 1;
+
+  for (let i = 0; i < l; i++) {
+    let key = keys[i];
+
+    if (!item.has(key)) {
+      if (key && typeof key == 'object') {
+        const strKey = toKey(key);
+
+        if (item.has(strKey)) {
+          key = item.get(strKey)!;
+        } else {
+          return false;
+        }
+      } else {
+        return false;
+      }
+    }
+
+    item = item.get(key)!;
+  }
+
+  const lastKey = keys[l];
+
+  return item.has(lastKey) || item.has(toKey(lastKey));
 }
 
 function get(this: Storage<any, any>, ...keys: any[]): any {
@@ -433,8 +534,10 @@ const createStorage: CreateStorage = (
     typeof arg1 != 'object'
       ? {
           _storage: new Map(),
-          delete: _delete,
+          unsafe_delete: _delete,
           get,
+          clear,
+          has,
           _getItem: arg1,
           _arg1: arg2,
           _arg2: arg3,
@@ -443,8 +546,10 @@ const createStorage: CreateStorage = (
         }
       : {
           _storage: new Map(),
-          delete: _delete,
+          unsafe_delete: _delete,
           get,
+          clear,
+          has,
           _getItem: createStorageRecord,
           _arg1: arg1,
           _keys: keys,

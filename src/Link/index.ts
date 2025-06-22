@@ -16,6 +16,8 @@ export type LinkProps = {
     isMatched: boolean
   ): ReactNode;
   ignoreBlock?: boolean;
+  scrollToTop?: boolean;
+  scrollRestoration?: boolean;
 };
 
 const Link: FC<LinkProps> = ({
@@ -26,11 +28,26 @@ const Link: FC<LinkProps> = ({
   render,
   onClick,
   ignoreBlock,
+  scrollToTop,
+  scrollRestoration,
 }) =>
   render(
     _useHref(params),
-    params || onClick || ignoreBlock
-      ? (e) => _navigate(e, params, false, ignoreBlock, onClick)
+    params ||
+      onClick ||
+      ignoreBlock ||
+      scrollToTop != null ||
+      scrollRestoration != null
+      ? (e) =>
+          _navigate(
+            e,
+            params,
+            false,
+            ignoreBlock,
+            scrollToTop,
+            scrollRestoration,
+            onClick
+          )
       : _navigate,
     render.length < 3
       ? false

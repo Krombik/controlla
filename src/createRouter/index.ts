@@ -41,7 +41,7 @@ import getAsyncControl from '../utils/getAsyncControl';
 import { set } from '../utils/control/scope';
 import load from '../load';
 
-type HistoryState = { idx?: number };
+type HistoryState = { idx?: number; scroll?: [x: number, y: number] };
 
 let popStateListener: undefined | ((e: PopStateEvent) => void);
 
@@ -84,7 +84,7 @@ const handleHref = (
   routes: RouteData[],
   updatedParams: RouteParams[] | undefined,
   maxControls: number,
-  locationControl?: InternalControl
+  isMutable?: true
 ) => {
   let path = '';
 
@@ -117,7 +117,7 @@ const handleHref = (
   };
 
   if (updatedParams) {
-    const updateQueue = locationControl && ([] as ParamsUpdatedData[]);
+    const updateQueue = isMutable && ([] as ParamsUpdatedData[]);
 
     const updatedParamsLastRoute =
       updatedParams[updatedParams.length - 1]._route;
@@ -210,10 +210,6 @@ const handleHref = (
     }
   }
 
-  if (locationControl) {
-    locationControl._set({ pathname: path || '/', search });
-  }
-
   return (path || '/') + search;
 };
 
@@ -269,7 +265,8 @@ const handleStringify = (
 };
 
 const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
-  options: ToOptions & {
+  options: ToOptions<[]> & {
+    Wrapper?: ComponentType<PropsWithChildren>;
     NotFound: ComponentType;
     getRoutes(createRoute: () => PathCreator & AsyncRoute): Routes;
   }
@@ -296,7 +293,7 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
 
   let paramsWasReplaced = false;
 
-  const { NotFound, load: _load } = options;
+  const { NotFound, load: _load, Wrapper } = options;
 
   const pathQueue: string[] = [];
 
@@ -434,6 +431,8 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
     params: RouteParams[] | undefined,
     replace: boolean | undefined,
     ignoreBlock: boolean | undefined,
+    enableScrollToTop: boolean | undefined,
+    enableScrollRestoration: boolean | undefined,
     onClick:
       | ((event: ReactMouseEvent<HTMLAnchorElement, any>) => void)
       | undefined
@@ -469,24 +468,52 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
     ) {
       const state = history.state;
 
-      const href = handleHref(routes, params, 0, locationControl);
+      const isNewPage = currentRouteIndex != index;
+
+      const href = handleHref(routes, params, 0, true);
 
       handleMatching(routes, componentList);
 
       currentRouteIndex = index;
 
-      history[replace ? 'replaceState' : 'pushState'](
-        replace
-          ? state
-          : state && typeof state == 'object'
-            ? {
-                ...state,
-                idx: ++currentHistoryIndex,
-              }
-            : { idx: ++currentHistoryIndex },
-        '',
-        href
-      );
+      if (replace) {
+        history.replaceState(state, '', href);
+
+        locationControl._set({
+          action: 'replace',
+          delta: 0,
+        });
+      } else {
+        if (
+          enableScrollRestoration == null ? isNewPage : enableScrollRestoration
+        ) {
+          history.replaceState(
+            {
+              ...state,
+              scroll: [window.scrollX, window.scrollY],
+            } satisfies HistoryState,
+            ''
+          );
+        }
+
+        history.pushState(
+          {
+            ...state,
+            idx: ++currentHistoryIndex,
+          } satisfies HistoryState,
+          '',
+          href
+        );
+
+        locationControl._set({
+          action: 'push',
+          delta: 1,
+        });
+      }
+
+      if (enableScrollToTop == null ? isNewPage : enableScrollToTop) {
+        window.scroll(0, 0);
+      }
     }
   };
 
@@ -525,7 +552,7 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
 
     return {
       to(
-        options: ToOptions &
+        options: ToOptions<[any]> &
           (
             | {
                 Wrapper?: ComponentType<PropsWithChildren>;
@@ -564,10 +591,12 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
               : createControlScope()
             : null;
 
+        const paramsRoot = paramsControl && paramsControl[ROOT];
+
         const routeData: RouteData = {
           _load: _load
             ? function (this: RouteData) {
-                const res = _load();
+                const res = _load(paramsRoot && paramsRoot._value);
 
                 this._unloads = res
                   ? typeof res == 'object'
@@ -729,7 +758,7 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
               }
             : noop,
           _isMatched: isMatchedRoot,
-          _params: paramsControl && paramsControl[ROOT],
+          _params: paramsRoot,
           _source: asyncSourceControl,
         };
 
@@ -739,6 +768,30 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
           stringifiedPrams?: Record<string, string>
         ) => RouteBase<boolean>;
 
+        if (paramsRoot && _load) {
+          let unlisten = noop;
+
+          isMatchedRoot._subscribe((isMatched) => {
+            if (isMatched) {
+              unlisten = paramsRoot._subscribe(() => {
+                if (isMatchedRoot._value) {
+                  const unloads = routeData._unloads;
+
+                  routeData._load();
+
+                  for (let i = 0; i < unloads.length; i++) {
+                    unloads[i]();
+                  }
+                }
+              });
+            } else {
+              unlisten();
+
+              unlisten = noop;
+            }
+          });
+        }
+
         if ('Component' in options) {
           const routes = new Array<RouteData>(nestingIndex);
 
@@ -747,7 +800,15 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
           const routeIndex = pathQueue.length;
 
           const methods: RouteMethods = {
-            _navigate(event, params, replace, ignoreBlock, onClick) {
+            _navigate(
+              event,
+              params,
+              replace,
+              ignoreBlock,
+              enableScrollToTop,
+              enableScrollRestoration,
+              onClick
+            ) {
               navigate(
                 routeIndex,
                 routes,
@@ -756,6 +817,8 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
                 params,
                 replace,
                 ignoreBlock,
+                enableScrollToTop,
+                enableScrollRestoration,
                 onClick
               );
             },
@@ -820,7 +883,15 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
           const { Wrapper, routes } = options;
 
           const methods: RouteMethods = {
-            _navigate(event, params, replace, ignoreBlock, onClick) {
+            _navigate(
+              event,
+              params,
+              replace,
+              ignoreBlock,
+              enableScrollToTop,
+              enableScrollRestoration,
+              onClick
+            ) {
               navigate(
                 currentRouteIndex,
                 routesQueue[currentRouteIndex],
@@ -829,6 +900,8 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
                 params,
                 replace,
                 ignoreBlock,
+                enableScrollToTop,
+                enableScrollRestoration,
                 onClick
               );
             },
@@ -1089,17 +1162,18 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
       AsyncRoute;
   }) as Routes & Router;
 
-  const l = pathQueue.length;
+  const pathQueueSize = pathQueue.length;
 
   const findCurrentRouteArr = new Array<
     (path: string, search: string) => boolean
-  >(l);
+  >(pathQueueSize);
 
   const setControlArr: Array<(component: ComponentType) => void> = [];
 
   const { pathname, search } = location;
 
-  const locationControl = createSimpleControl()[ROOT];
+  const locationControl: InternalControl<RouterLocation> =
+    createSimpleControl<RouterLocation>({ action: 'none', delta: 0 })[ROOT];
 
   const handleRouter = () => {
     let onValueChange: () => void = noop;
@@ -1140,7 +1214,11 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
     }
   }
 
-  router[ROUTER] = handleRouter();
+  const Router = handleRouter();
+
+  router[ROUTER] = Wrapper
+    ? () => jsx(Wrapper, { children: jsx(Router, EMPTY_OBJECT) })
+    : Router;
 
   router[BLOCK_ROUTER] = (message) => {
     isRouterAvailable = false;
@@ -1185,7 +1263,22 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
     }
   }
 
-  for (let i = 0; i < l; i++) {
+  let currentHistoryIndex = 0;
+
+  const state = history.state as HistoryState | null;
+
+  if (!state || state.idx == null) {
+    history.replaceState(
+      (state && typeof state == 'object'
+        ? { ...state, idx: 0 }
+        : { idx: 0 }) satisfies HistoryState,
+      ''
+    );
+  } else {
+    currentHistoryIndex = state.idx;
+  }
+
+  for (let i = 0; i < pathQueueSize; i++) {
     const regex = new RegExp(`^${pathQueue[i] || '/'}$`);
 
     const routes = routesQueue[i];
@@ -1359,7 +1452,7 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
                           routes,
                           [{ _params: params, _route: route }],
                           0,
-                          locationControl
+                          true
                         )
                       );
                     } else {
@@ -1377,13 +1470,9 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
             history.replaceState(
               history.state,
               '',
-              handleHref(routes, updatedParamsQueue, 0, locationControl)
+              handleHref(routes, updatedParamsQueue, 0, true)
             );
-          } else {
-            locationControl._set({ pathname, search });
           }
-        } else {
-          locationControl._set({ pathname, search });
         }
 
         handleMatching(routes, components);
@@ -1407,19 +1496,16 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
 
   let delta = 0;
 
+  let isPopTriggeredByBlocking = false;
+
   let isRouterBlockPopupAllowed = true;
 
-  let currentHistoryIndex = 0;
+  let isPopTriggeredForScrollSave = false;
 
-  const state = history.state as HistoryState | null;
+  let isPopTriggeredByScrollSaving = false;
 
-  if (!state || state.idx == null) {
-    history.replaceState(
-      state && typeof state == 'object' ? { ...state, idx: 0 } : { idx: 0 },
-      ''
-    );
-  } else {
-    currentHistoryIndex = state.idx;
+  if ('scrollRestoration' in history) {
+    history.scrollRestoration = 'manual';
   }
 
   popStateListener = (e) => {
@@ -1427,36 +1513,70 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
 
     const nextHistoryIndex = state && state.idx;
 
-    if (delta) {
-      if (window.confirm(getBlockedRouterMessage())) {
-        isRouterBlockPopupAllowed = false;
-
-        history.go(-delta);
-      }
-
-      delta = 0;
-    } else if (nextHistoryIndex != currentHistoryIndex) {
+    if (isPopTriggeredByBlocking || isPopTriggeredForScrollSave) {
       if (
-        isRouterBlockPopupAllowed &&
-        !isRouterAvailable &&
-        nextHistoryIndex != null
+        isPopTriggeredByBlocking &&
+        !window.confirm(getBlockedRouterMessage())
       ) {
-        delta = currentHistoryIndex - nextHistoryIndex;
-
-        history.go(delta);
+        isPopTriggeredByBlocking = isPopTriggeredForScrollSave = false;
 
         return;
       }
 
+      if (isPopTriggeredForScrollSave) {
+        isPopTriggeredForScrollSave = false;
+
+        isPopTriggeredByScrollSaving = true;
+
+        history.replaceState(
+          {
+            ...state,
+            scroll: [window.scrollX, window.scrollY],
+          } satisfies HistoryState,
+          ''
+        );
+      }
+
+      isPopTriggeredByBlocking = isRouterBlockPopupAllowed = false;
+
+      history.go(delta);
+    } else if (nextHistoryIndex != currentHistoryIndex) {
       if (nextHistoryIndex != null) {
+        const scroll = state && state.scroll;
+
+        delta = nextHistoryIndex - currentHistoryIndex;
+
+        isPopTriggeredByBlocking =
+          isRouterBlockPopupAllowed && !isRouterAvailable;
+
+        isPopTriggeredForScrollSave = !!scroll && !isPopTriggeredByScrollSaving;
+
+        if (isPopTriggeredByBlocking || isPopTriggeredForScrollSave) {
+          history.go(-delta);
+
+          return;
+        }
+
+        if (scroll && isPopTriggeredByScrollSaving) {
+          isPopTriggeredByScrollSaving = false;
+
+          window.scroll(scroll[0], scroll[1]);
+
+          history.replaceState({ ...state, scroll: undefined }, '');
+        }
+
         currentHistoryIndex = nextHistoryIndex;
+      } else {
+        delta = 0;
       }
 
       isRouterBlockPopupAllowed = true;
 
+      locationControl._set({ action: 'pop', delta });
+
       const { pathname, search } = location;
 
-      for (let i = 0; i < l; i++) {
+      for (let i = 0; i < pathQueueSize; i++) {
         if (findCurrentRouteArr[i](pathname, search)) {
           return;
         }
@@ -1493,11 +1613,16 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
 
 export default createRouter;
 
+type RouterLocation = {
+  readonly action: 'none' | 'push' | 'replace' | 'pop';
+  readonly delta: number;
+};
+
 export type Router = {
   [ROUTER](): ReactElement;
   [BLOCK_ROUTER](message: string | (() => string)): () => void;
   [UNBLOCK_ROUTER](): void;
-} & ReadonlyControl<{ readonly pathname: string; readonly search: string }>;
+} & ReadonlyControl<RouterLocation>;
 
 type UnionToIntersection<U> = (U extends any ? (x: U) => void : never) extends (
   x: infer R
@@ -1532,7 +1657,7 @@ type RouteData = {
   readonly _selfIndex: number;
   readonly _params: InternalControl | InternalAsyncControl | null;
   readonly _source: InternalAsyncControl | undefined;
-  readonly _isMatched: InternalControl;
+  readonly _isMatched: InternalControl<boolean>;
   readonly _pathParamsCount: number;
   _getPath(
     params: Record<string, any>,
@@ -1577,9 +1702,11 @@ type RouteMethods = {
     params?: RouteParams[],
     replace?: boolean,
     ignoreBlock?: boolean,
+    enableScrollToTop?: boolean,
+    enableScrollRestoration?: boolean,
     onClick?: (event: ReactMouseEvent<HTMLAnchorElement, any>) => void
   ): void;
-  readonly _isMatched: InternalControl;
+  readonly _isMatched: InternalControl<boolean>;
 };
 
 export type RouteBase<Navigable extends boolean> = {
@@ -1637,8 +1764,8 @@ export type Route<
       ): Children & RouteBase<true>;
     });
 
-type ToOptions = {
-  load?(): (() => void) | Array<() => void> | void;
+type ToOptions<Params extends [any] | []> = {
+  load?(...args: Params): (() => void) | Array<() => void> | void;
 };
 
 declare class PathBase<
@@ -1647,7 +1774,15 @@ declare class PathBase<
   AsyncSource extends [any?] | [] = [],
 > {
   to(
-    options: { Component: ComponentType; routes?: undefined } & ToOptions
+    options: { Component: ComponentType; routes?: undefined } & ToOptions<
+      [keyof Params] extends [never]
+        ? []
+        : [
+            params:
+              | Params
+              | ([AsyncSource[number]] extends [never] ? never : undefined),
+          ]
+    >
   ): Route<
     {},
     Params,
@@ -1659,7 +1794,15 @@ declare class PathBase<
       routes: Routes;
       Component?: undefined;
       Wrapper?: ComponentType<PropsWithChildren>;
-    } & ToOptions
+    } & ToOptions<
+      [keyof Params] extends [never]
+        ? []
+        : [
+            params:
+              | Params
+              | ([AsyncSource[number]] extends [never] ? never : undefined),
+          ]
+    >
   ): Route<
     UnionToIntersection<Routes>,
     Params,
