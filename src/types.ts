@@ -16,12 +16,12 @@ export type ScopeCallbackMap = Partial<
   Pick<InternalControl, '_callbacks' | '_children'>
 >;
 
-export interface InternalControl {
+export interface InternalControl<T = any> {
   readonly [ROOT]?: this;
-  _value: any;
+  _value: T;
   _subscribe(cb: (value: any) => void): () => void;
   _get(): any;
-  _set(value: any, path?: readonly string[]): void;
+  _set(value: T, path?: readonly string[]): void;
   readonly _path?: readonly string[];
   readonly _callbacks: ValueChangeCallbacks;
   _children?: Map<string, ScopeCallbackMap>;
@@ -88,9 +88,7 @@ declare const LOADABLE_MARKER: unique symbol;
 
 declare const LOADING_PROCESS_MARKER: unique symbol;
 
-declare class _Base {}
-
-export type ReadonlyControl<Value = any> = _Base & {
+export type ReadonlyControl<Value = any> = {
   /** @internal */
   [ROOT]: InternalControl;
   [CONTROL_MARKER]: Value;
@@ -323,11 +321,8 @@ export type StorageRecord = {
   [key in string]: StorageItem | StorageMarker<any[], StorageItem>;
 };
 
-export type StorageItem =
-  | Control
-  | ScopeMarker
-  | StorageRecord
-  | Omit<PaginatedStorage<any>, 'usePages'>;
+export type StorageItem = Control | ScopeMarker | StorageRecord;
+// | Omit<PaginatedStorage<any>, 'usePages'>;
 
 declare const CONTROL_STORAGE_IDENTIFIER: unique symbol;
 
@@ -358,13 +353,14 @@ export type Storage<
    * ```
    */
   get(...keys: Keys): T;
+  has(...keys: Keys | PartialTuple<Keys>): boolean;
   /**
    * Deletes a control entry from the storage associated with the given key.
    *
    * **Warning**: This is an unsafe method. It only removes the control entry from
    * the storage but does not clear or reset the control itself.
    */
-  delete(...keys: Keys | PartialTuple<Keys>): void;
+  unsafe_delete(...keys: Keys | PartialTuple<Keys> | []): void;
   /** @internal */
   readonly _keys: any[] | undefined;
   /** @internal */
@@ -377,7 +373,11 @@ export type Storage<
   readonly _arg2?: any;
   /** @internal */
   readonly _arg3?: any;
-};
+} & (T extends AsyncControl
+    ? {
+        clear(...keys: Keys | PartialTuple<Keys> | []): void;
+      }
+    : {});
 
 export type PaginatedStorageOptions<T> = {
   shouldRevalidate?:
