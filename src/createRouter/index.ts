@@ -251,8 +251,7 @@ const handleStringify = (
 
     return stringify
       ? getDefaultValue
-        ? (value) =>
-            value !== undefined ? stringify(value) : getDefaultValue()
+        ? (value) => stringify(value !== undefined ? value : getDefaultValue())
         : (value) => (value !== undefined ? stringify(value) : value)
       : getDefaultValue
         ? (value) => (value !== undefined ? value : getDefaultValue())
@@ -266,7 +265,7 @@ const handleStringify = (
 
 const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
   options: ToOptions<[]> & {
-    Wrapper?: ComponentType<PropsWithChildren>;
+    Container?: ComponentType<PropsWithChildren>;
     NotFound: ComponentType;
     getRoutes(createRoute: () => PathCreator & AsyncRoute): Routes;
   }
@@ -293,7 +292,7 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
 
   let paramsWasReplaced = false;
 
-  const { NotFound, load: _load, Wrapper } = options;
+  const { NotFound, load: _load, Container } = options;
 
   const pathQueue: string[] = [];
 
@@ -555,7 +554,7 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
         options: ToOptions<[any]> &
           (
             | {
-                Wrapper?: ComponentType<PropsWithChildren>;
+                Container?: ComponentType<PropsWithChildren>;
                 routes: Record<string, () => RouteBase<boolean>>;
               }
             | { Component: ComponentType }
@@ -564,6 +563,8 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
         const { load: _load } = options;
 
         const l = path.length;
+
+        const path0 = path[0];
 
         const pathParamsCount = pathParams.length;
 
@@ -607,7 +608,7 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
             : noop,
           _unloads: EMPTY_ARR,
           _pathParamsCount: pathParamsCount,
-          _currentPath: pathParamsCount || !l ? '' : path[0],
+          _currentPath: pathParamsCount || !l ? '' : path0,
           _currentSearch: '',
           _selfIndex: currentNestingIndex,
           _extractParams:
@@ -657,7 +658,9 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
 
                 return str;
               }
-            : getEmptyString,
+            : l
+              ? () => path0
+              : getEmptyString,
           _getSearch: queryParamsCount
             ? (params, stringifiedParams) => {
                 let search = '';
@@ -880,7 +883,7 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
                 ) as RouteBase<boolean>;
               };
         } else {
-          const { Wrapper, routes } = options;
+          const { Container, routes } = options;
 
           const methods: RouteMethods = {
             _navigate(
@@ -920,7 +923,7 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
 
             routesQueue[i][currentNestingIndex] = routeData;
 
-            if (Wrapper) {
+            if (Container) {
               const components = componentsQueue[i];
 
               const l = components.length;
@@ -931,7 +934,7 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
                 nestingLevels.set(l, [i]);
               }
 
-              components.push(Wrapper);
+              components.push(Container);
             }
           }
 
@@ -1206,18 +1209,10 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
       jsx(useSyncExternalStore(subscribe, getComponent), EMPTY_OBJECT);
   };
 
-  if (_load) {
-    const res = _load();
-
-    if (res) {
-      unloads = typeof res == 'object' ? res : [res];
-    }
-  }
-
   const Router = handleRouter();
 
-  router[ROUTER] = Wrapper
-    ? () => jsx(Wrapper, { children: jsx(Router, EMPTY_OBJECT) })
+  router[ROUTER] = Container
+    ? () => jsx(Container, { children: jsx(Router, EMPTY_OBJECT) })
     : Router;
 
   router[BLOCK_ROUTER] = (message) => {
@@ -1251,15 +1246,15 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
     for (let j = 0; j < level.length; j++) {
       const index = level[j];
 
-      const Wrapper = componentsQueue[index][i];
+      const Container = componentsQueue[index][i];
 
-      if (!map.has(Wrapper)) {
-        map.set(Wrapper, () =>
-          jsx(Wrapper, { children: jsx(Router, EMPTY_OBJECT) })
+      if (!map.has(Container)) {
+        map.set(Container, () =>
+          jsx(Container, { children: jsx(Router, EMPTY_OBJECT) })
         );
       }
 
-      routerComponentsList[index].push(map.get(Wrapper)!);
+      routerComponentsList[index].push(map.get(Container)!);
     }
   }
 
@@ -1311,7 +1306,7 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
 
     const testRegex = regex[withPathParams ? 'exec' : 'test'].bind(regex);
 
-    const findCurrentRoute = (path: string, search: string) => {
+    findCurrentRouteArr[i] = (path, search) => {
       const isMatched = testRegex(path);
 
       if (isMatched) {
@@ -1482,13 +1477,21 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
 
       return !!isMatched;
     };
+  }
 
-    findCurrentRouteArr[i] = findCurrentRoute;
+  if (_load) {
+    const res = _load();
 
-    if (currentRouteIndex < 0) {
-      findCurrentRoute(pathname, search);
+    if (res) {
+      unloads = typeof res == 'object' ? res : [res];
     }
   }
+
+  for (
+    let i = 0;
+    i < pathQueueSize && !findCurrentRouteArr[i](pathname, search);
+    i++
+  ) {}
 
   if (currentRouteIndex < 0) {
     setControlArr[0](NotFound);
@@ -1793,7 +1796,7 @@ declare class PathBase<
     options: {
       routes: Routes;
       Component?: undefined;
-      Wrapper?: ComponentType<PropsWithChildren>;
+      Container?: ComponentType<PropsWithChildren>;
     } & ToOptions<
       [keyof Params] extends [never]
         ? []
