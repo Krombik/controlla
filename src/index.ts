@@ -78,5 +78,9 @@ export type {
   PollableControlOptions,
   RequestableControlOptions,
   Storage,
+  ReadonlyAsyncControl,
+  ReadonlyAsyncControlScope,
+  ReadonlyControl,
+  ReadonlyControlScope,
   // PaginatedStorage,
 } from './types';

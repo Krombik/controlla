@@ -264,10 +264,8 @@ const handleStringify = (
 };
 
 const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
-  options: ToOptions<[]> & {
-    Container?: ComponentType<PropsWithChildren>;
+  options: RoutesOptions<Routes> & {
     NotFound: ComponentType;
-    getRoutes(createRoute: () => PathCreator & AsyncRoute): Routes;
   }
 ): UnionToIntersection<Routes> & Router => {
   if (popStateListener) {
@@ -394,15 +392,9 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
             }
 
             if (currRoute) {
-              const unloads = currRoute._unloads;
+              currRoute._unload();
 
               currRoute._isMatched._set(false);
-
-              for (let i = 0; i < unloads.length; i++) {
-                unloads[i]();
-              }
-
-              currRoute._unloads = EMPTY_ARR;
             }
           }
         }
@@ -516,7 +508,7 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
     }
   };
 
-  const router = options.getRoutes(() => {
+  const createRoute = () => {
     let asyncSourceControl: InternalAsyncControl | undefined;
 
     let regexStr = '';
@@ -551,14 +543,9 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
 
     return {
       to(
-        options: ToOptions<[any]> &
-          (
-            | {
-                Container?: ComponentType<PropsWithChildren>;
-                routes: Record<string, () => RouteBase<boolean>>;
-              }
-            | { Component: ComponentType }
-          )
+        options:
+          | RoutesOptions<any, any[]>
+          | ({ Page: ComponentType } & ToOptions<any[]>)
       ) {
         const { load: _load } = options;
 
@@ -594,19 +581,129 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
 
         const paramsRoot = paramsControl && paramsControl[ROOT];
 
-        const routeData: RouteData = {
-          _load: _load
-            ? function (this: RouteData) {
-                const res = _load(paramsRoot && paramsRoot._value);
+        let handleLoad = noop;
 
-                this._unloads = res
-                  ? typeof res == 'object'
-                    ? res
-                    : [res]
-                  : EMPTY_ARR;
-              }
-            : noop,
-          _unloads: EMPTY_ARR,
+        if (_load) {
+          const l = _load.length;
+
+          handleLoad = l
+            ? l > 1
+              ? function (this: RouteData) {
+                  const routes = routesQueue[currentRouteIndex];
+
+                  const args: any[] = [];
+
+                  const unlisteners: Array<() => void> = [];
+
+                  let isAvailable = true;
+
+                  for (
+                    let i = currentNestingIndex + 1, count = l;
+                    count && i--;
+
+                  ) {
+                    const { _params } = routes[i];
+
+                    if (_params) {
+                      count--;
+
+                      args.push(_params._value);
+
+                      unlisteners.push(
+                        _params._subscribe((value) => {
+                          args[i] = value;
+
+                          if (isAvailable) {
+                            isAvailable = false;
+
+                            postBatchCallbacksPush(() => {
+                              const res = _load(...args);
+
+                              for (let i = 0; i < unloads.length; i++) {
+                                unloads[i]();
+                              }
+
+                              unloads = res || EMPTY_ARR;
+
+                              isAvailable = true;
+                            });
+                          }
+                        })
+                      );
+                    }
+                  }
+
+                  const res = _load(...args);
+
+                  let unloads = res || EMPTY_ARR;
+
+                  this._unload = function () {
+                    for (let i = 0; i < unlisteners.length; i++) {
+                      unlisteners[i]();
+                    }
+
+                    for (let i = 0; i < unloads.length; i++) {
+                      unloads[i]();
+                    }
+
+                    this._unload = noop;
+                  };
+                }
+              : function (this: RouteData) {
+                  const routes = routesQueue[currentRouteIndex];
+
+                  for (let i = currentNestingIndex + 1; i--; ) {
+                    const { _params } = routes[i];
+
+                    if (_params) {
+                      const unlisten = _params._subscribe((value) => {
+                        const res = _load(value);
+
+                        for (let i = 0; i < unloads.length; i++) {
+                          unloads[i]();
+                        }
+
+                        unloads = res || EMPTY_ARR;
+                      });
+
+                      const res = _load(_params._value);
+
+                      let unloads = res || EMPTY_ARR;
+
+                      this._unload = function () {
+                        unlisten();
+
+                        for (let i = 0; i < unloads.length; i++) {
+                          unloads[i]();
+                        }
+
+                        this._unload = noop;
+                      };
+
+                      return;
+                    }
+                  }
+
+                  throw new Error('no params available for this route');
+                }
+            : function (this: RouteData) {
+                const unloads = _load();
+
+                if (unloads) {
+                  this._unload = function () {
+                    for (let i = 0; i < unloads.length; i++) {
+                      unloads[i]();
+                    }
+
+                    this._unload = noop;
+                  };
+                }
+              };
+        }
+
+        const routeData: RouteData = {
+          _load: handleLoad,
+          _unload: noop,
           _pathParamsCount: pathParamsCount,
           _currentPath: pathParamsCount || !l ? '' : path0,
           _currentSearch: '',
@@ -771,31 +868,7 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
           stringifiedPrams?: Record<string, string>
         ) => RouteBase<boolean>;
 
-        if (paramsRoot && _load) {
-          let unlisten = noop;
-
-          isMatchedRoot._subscribe((isMatched) => {
-            if (isMatched) {
-              unlisten = paramsRoot._subscribe(() => {
-                if (isMatchedRoot._value) {
-                  const unloads = routeData._unloads;
-
-                  routeData._load();
-
-                  for (let i = 0; i < unloads.length; i++) {
-                    unloads[i]();
-                  }
-                }
-              });
-            } else {
-              unlisten();
-
-              unlisten = noop;
-            }
-          });
-        }
-
-        if ('Component' in options) {
+        if ('Page' in options) {
           const routes = new Array<RouteData>(nestingIndex);
 
           const componentList: ComponentType[] = [];
@@ -839,7 +912,7 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
 
           routesQueue.push(routes);
 
-          componentsQueue.push([options.Component]);
+          componentsQueue.push([options.Page]);
 
           routerComponentsList.push(componentList);
 
@@ -883,7 +956,9 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
                 ) as RouteBase<boolean>;
               };
         } else {
-          const { Container, routes } = options;
+          const { Container } = options;
+
+          const routes = options.getRoutes(createRoute);
 
           const methods: RouteMethods = {
             _navigate(
@@ -1163,7 +1238,9 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
     } as PathCreator<any, any> &
       Partial<PathAfterDeprecatedQuery<any, any>> &
       AsyncRoute;
-  }) as Routes & Router;
+  };
+
+  const router = options.getRoutes(createRoute) as Routes & Router;
 
   const pathQueueSize = pathQueue.length;
 
@@ -1483,7 +1560,7 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
     const res = _load();
 
     if (res) {
-      unloads = typeof res == 'object' ? res : [res];
+      unloads = res;
     }
   }
 
@@ -1591,15 +1668,9 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
         for (let i = routes.length; i--; ) {
           const route = routes[i];
 
-          const unloads = route._unloads;
+          route._unload();
 
           route._isMatched._set(false);
-
-          for (let i = 0; i < unloads.length; i++) {
-            unloads[i]();
-          }
-
-          route._unloads = EMPTY_ARR;
         }
 
         currentRouteIndex = -1;
@@ -1687,7 +1758,7 @@ type RouteData = {
     source: any
   ): void;
   _load(): void;
-  _unloads: Array<() => void>;
+  _unload(): void;
   _currentPath: string;
   _currentSearch: string;
 };
@@ -1720,7 +1791,7 @@ export type RouteBase<Navigable extends boolean> = {
   [ROUTE_MARKER]: Navigable;
 };
 
-type ProcessParams<O> = O | ((prev: O) => O);
+type ProcessParams<O, P = O> = O | ((prev: P) => O);
 
 export type Route<
   Children extends Record<string, () => RouteBase<boolean>> = {},
@@ -1752,7 +1823,7 @@ export type Route<
           [key in keyof Params]?: Params[key];
         } = never,
       >(
-        params: ProcessParams<P> | null,
+        params: ProcessParams<P, Params> | null,
         stringifiedParams: {
           [key in Exclude<
             keyof Params,
@@ -1767,23 +1838,41 @@ export type Route<
       ): Children & RouteBase<true>;
     });
 
-type ToOptions<Params extends [any] | []> = {
-  load?(...args: Params): (() => void) | Array<() => void> | void;
+type ToOptions<Params extends any[]> = {
+  load?(...args: Params): Array<() => void> | void;
 };
+
+type RoutesOptions<
+  Routes extends Record<string, () => RouteBase<boolean>>,
+  Params extends any[] = [],
+> = {
+  Container?: ComponentType<PropsWithChildren>;
+  getRoutes(
+    createRoute: () => PathCreator<{}, never, never, [], Params> &
+      AsyncRoute<Params>
+  ): Routes;
+} & ToOptions<Params>;
 
 declare class PathBase<
   Params = {},
   OptionalParams extends string = never,
   AsyncSource extends [any?] | [] = [],
+  ParentParams extends any[] = [],
 > {
   to(
-    options: { Component: ComponentType; routes?: undefined } & ToOptions<
+    options: {
+      Page: ComponentType;
+      getRoutes?: undefined;
+      Container?: undefined;
+    } & ToOptions<
       [keyof Params] extends [never]
-        ? []
+        ? ParentParams
         : [
-            params:
+            (
               | Params
-              | ([AsyncSource[number]] extends [never] ? never : undefined),
+              | ([AsyncSource[number]] extends [never] ? never : undefined)
+            ),
+            ...ParentParams,
           ]
     >
   ): Route<
@@ -1793,19 +1882,18 @@ declare class PathBase<
     [AsyncSource[number]] extends [never] ? false : true
   >;
   to<Routes extends Record<string, () => RouteBase<boolean>>>(
-    options: {
-      routes: Routes;
-      Component?: undefined;
-      Container?: ComponentType<PropsWithChildren>;
-    } & ToOptions<
+    options: RoutesOptions<
+      Routes,
       [keyof Params] extends [never]
-        ? []
+        ? ParentParams
         : [
-            params:
+            (
               | Params
-              | ([AsyncSource[number]] extends [never] ? never : undefined),
+              | ([AsyncSource[number]] extends [never] ? never : undefined)
+            ),
+            ...ParentParams,
           ]
-    >
+    > & { Page?: undefined }
   ): Route<
     UnionToIntersection<Routes>,
     Params,
@@ -1819,11 +1907,24 @@ type PathAfterArray<
   OptionalParams extends string = never,
   QueryParams extends string = never,
   AsyncSource extends [any?] | [] = [],
-> = PathBase<Params, OptionalParams, AsyncSource> &
-  PathAfterQuery<Params, OptionalParams, QueryParams, AsyncSource> & {
+  ParentParams extends any[] = [],
+> = PathBase<Params, OptionalParams, AsyncSource, ParentParams> &
+  PathAfterQuery<
+    Params,
+    OptionalParams,
+    QueryParams,
+    AsyncSource,
+    ParentParams
+  > & {
     segment<T extends string>(
       text: T extends `${string}/${string}` ? never : T
-    ): PathCreator<Params, OptionalParams, QueryParams, AsyncSource>;
+    ): PathCreator<
+      Params,
+      OptionalParams,
+      QueryParams,
+      AsyncSource,
+      ParentParams
+    >;
     oneOf<N extends string, const T extends string[]>(
       name: N extends keyof Params ? never : N,
       variants: T,
@@ -1834,7 +1935,8 @@ type PathAfterArray<
       },
       QueryParams,
       OptionalParams,
-      AsyncSource
+      AsyncSource,
+      ParentParams
     >;
   };
 
@@ -1843,7 +1945,8 @@ type PathAfterQuery<
   OptionalParams extends string = never,
   QueryParams extends string = never,
   AsyncSource extends [any?] | [] = [],
-> = PathBase<Params, OptionalParams, AsyncSource> & {
+  ParentParams extends any[] = [],
+> = PathBase<Params, OptionalParams, AsyncSource, ParentParams> & {
   query<
     N extends string,
     O extends boolean = false,
@@ -1853,20 +1956,24 @@ type PathAfterQuery<
     name: N extends keyof Params ? never : N,
     options?: ParamOptions<Value, DefaultValue, O, AsyncSource>
   ): PathAfterQuery<
-    Params & {
-      [key in N]:
-        | Value
-        | (O extends false
-            ? never
-            : [DefaultValue] extends [never]
-              ? undefined
-              : never);
-    },
+    Params &
+      (O extends true
+        ? [DefaultValue] extends [never]
+          ? { [key in N]?: Value }
+          : { [key in N]: Value }
+        : { [key in N]: Value }),
     OptionalParams | (O extends true ? N : never),
     QueryParams | N,
-    AsyncSource
+    AsyncSource,
+    ParentParams
   > &
-    PathAfterDeprecatedQuery<Params, OptionalParams, QueryParams, AsyncSource>;
+    PathAfterDeprecatedQuery<
+      Params,
+      OptionalParams,
+      QueryParams,
+      AsyncSource,
+      ParentParams
+    >;
 };
 
 type PathAfterDeprecatedQuery<
@@ -1874,19 +1981,20 @@ type PathAfterDeprecatedQuery<
   OptionalParams extends string = never,
   QueryParams extends string = never,
   AsyncSource extends [any?] | [] = [],
-> = PathBase<Params, OptionalParams, AsyncSource> & {
+  ParentParams extends any[] = [],
+> = PathBase<Params, OptionalParams, AsyncSource, ParentParams> & {
   deprecatedQuery<const S extends string[]>(
     keys: S,
     mapper: (deprecatedValues: Partial<Record<S[number], string>>) => {
       [key in Extract<keyof Params, QueryParams>]?: Params[key];
     }
-  ): PathBase<Params, OptionalParams, AsyncSource>;
+  ): PathBase<Params, OptionalParams, AsyncSource, ParentParams>;
 };
 
-type AsyncRoute = {
+type AsyncRoute<ParentParams extends any[] = []> = {
   async<T>(
     source: AsyncControl<T>
-  ): PathCreator<{}, never, never, [source?: T]>;
+  ): PathCreator<{}, never, never, [source?: T], ParentParams>;
 };
 
 type PathCreator<
@@ -1894,8 +2002,21 @@ type PathCreator<
   OptionalParams extends string = never,
   QueryParams extends string = never,
   AsyncSource extends [any?] | [] = [],
-> = PathAfterArray<Params, OptionalParams, QueryParams, AsyncSource> &
-  PathAfterQuery<Params, OptionalParams, QueryParams, AsyncSource> & {
+  ParentParams extends any[] = [],
+> = PathAfterArray<
+  Params,
+  OptionalParams,
+  QueryParams,
+  AsyncSource,
+  ParentParams
+> &
+  PathAfterQuery<
+    Params,
+    OptionalParams,
+    QueryParams,
+    AsyncSource,
+    ParentParams
+  > & {
     param<
       N extends string,
       O extends boolean = false,
@@ -1905,18 +2026,16 @@ type PathCreator<
       name: N extends keyof Params ? never : N,
       options?: ParamOptions<Value, DefaultValue, O, AsyncSource>
     ): PathCreator<
-      Params & {
-        [key in N]:
-          | Value
-          | (O extends false
-              ? never
-              : [DefaultValue] extends [never]
-                ? undefined
-                : never);
-      },
+      Params &
+        (O extends true
+          ? [DefaultValue] extends [never]
+            ? { [key in N]?: Value }
+            : { [key in N]: Value }
+          : { [key in N]: Value }),
       OptionalParams | (O extends true ? N : never),
       QueryParams,
-      AsyncSource
+      AsyncSource,
+      ParentParams
     >;
     array<N extends string, Value = string[]>(
       name: N extends keyof Params ? never : N,
@@ -1930,7 +2049,8 @@ type PathCreator<
       },
       OptionalParams,
       QueryParams,
-      AsyncSource
+      AsyncSource,
+      ParentParams
     >;
     oneOf<
       N extends string,
@@ -1942,13 +2062,13 @@ type PathCreator<
       optional: true,
       defaultValue?: DefaultValue | (() => DefaultValue)
     ): PathCreator<
-      Params & {
-        [key in N]:
-          | T[number]
-          | ([DefaultValue] extends [never] ? undefined : never);
-      },
+      Params &
+        ([DefaultValue] extends [never]
+          ? { [key in N]?: T[number] }
+          : { [key in N]: T[number] }),
       OptionalParams | N,
       QueryParams,
-      AsyncSource
+      AsyncSource,
+      ParentParams
     >;
   };
