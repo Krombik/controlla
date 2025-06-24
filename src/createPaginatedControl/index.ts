@@ -10,6 +10,10 @@
 //   LoadableStateScope,
 //   PollableStateScope,
 //   PaginatedStorageOptions,
+//   ReadonlyControl,
+//   AsyncControl,
+//   ReadonlyAsyncControl,
+//   Control,
 // } from '../types';
 // import onValueChange from '../onValueChange';
 // import alwaysFalse from '../utils/alwaysFalse';
@@ -25,6 +29,7 @@
 // import noop from 'lodash.noop';
 // import identity from 'lodash.identity';
 // import createSimpleState from '../utils/createSimpleState';
+// import { ROOT } from '../utils/constants';
 
 // function getItem(this: PaginatedStorage<any>, page: number) {
 //   const self = this;
@@ -263,12 +268,25 @@
 //   PollableStateOptions<T, E, [...Keys, page: number]>
 // >;
 
+// type PaginatedOptions<Value, T, Data> = {
+//   throttle?: number;
+//   getItem(value: Value): T;
+//   getData(value: Value): Data;
+//   shouldRevalidate?: boolean | ((value: Value) => boolean);
+// };
+
+// type PaginatedControl<T, Data> = ReadonlyControl<T[]> & {
+//   // get(page: number): Control extends
+//   readonly data: ReadonlyAsyncControl<Data>;
+//   readonly page: Control<number>;
+// };
+
 // /**
 //  * Creates a paginated state storage to manage and load data efficiently across multiple pages.
 //  * The created storage allows the loading and handling of data in a paginated structure, with support
 //  * for {@link createRequestableState requestable} and {@link createPollableState pollable} states.
 //  */
-// const createPaginatedStorage: {
+// const createPaginatedControl: {
 //   <T, Error = any>(
 //     ...args: PaginatedRequestableStateArgs<T, Error>
 //   ): PaginatedStorage<LoadableState<T, Error>>;
@@ -306,4 +324,4 @@
 
 // export type { PaginatedStorage };
 
-// export default createPaginatedStorage;
+// export default createPaginatedControl;
