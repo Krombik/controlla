@@ -386,7 +386,7 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
 
           if (currRoute != nextRoute) {
             if (nextRoute) {
-              nextRoute._load();
+              nextRoute._load(nextRoutes);
 
               nextRoute._isMatched._set(true);
             }
@@ -403,7 +403,7 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
       for (let i = 0; i < nextRoutes.length; i++) {
         const route = nextRoutes[i];
 
-        route._load();
+        route._load(nextRoutes);
 
         route._isMatched._set(true);
       }
@@ -588,9 +588,7 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
 
           handleLoad = l
             ? l > 1
-              ? function (this: RouteData) {
-                  const routes = routesQueue[currentRouteIndex];
-
+              ? function (this: RouteData, routes: RouteData[]) {
                   const args: any[] = [];
 
                   const unlisteners: Array<() => void> = [];
@@ -649,9 +647,7 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
                     this._unload = noop;
                   };
                 }
-              : function (this: RouteData) {
-                  const routes = routesQueue[currentRouteIndex];
-
+              : function (this: RouteData, routes: RouteData[]) {
                   for (let i = currentNestingIndex + 1; i--; ) {
                     const { _params } = routes[i];
 
@@ -1757,7 +1753,7 @@ type RouteData = {
     stringifiedParams: Record<string, string>,
     source: any
   ): void;
-  _load(): void;
+  _load(this: RouteData, routes: RouteData[]): void;
   _unload(): void;
   _currentPath: string;
   _currentSearch: string;

@@ -311,38 +311,20 @@ function _delete(this: Storage<any, any>, ...keys: PrimitiveOrNested[]) {
   }
 
   for (let i = 0; i < l; i++) {
-    let key = keys[i];
+    const _key = keys[i];
+
+    const key = _key && typeof _key == 'object' ? toKey(_key) : _key;
 
     if (!item.has(key)) {
-      if (key && typeof key == 'object') {
-        const strKey = toKey(key);
-
-        if (item.has(strKey)) {
-          key = item.get(strKey)!;
-        } else {
-          return;
-        }
-      } else {
-        return;
-      }
+      return;
     }
 
     item = item.get(key)!;
   }
 
-  const key = keys[l];
+  const _key = keys[l];
 
-  if (item.has(key)) {
-    item.delete(key);
-  } else if (key && typeof key == 'object') {
-    const strKey = toKey(key);
-
-    if (item.has(strKey)) {
-      item.delete(item.get(strKey)!);
-
-      item.delete(strKey);
-    }
-  }
+  item.delete(_key && typeof _key == 'object' ? toKey(_key) : _key);
 }
 
 function clear(this: Storage<any, any>, ...keys: PrimitiveOrNested[]) {
@@ -351,20 +333,12 @@ function clear(this: Storage<any, any>, ...keys: PrimitiveOrNested[]) {
   const l = keys.length;
 
   for (let i = 0; i < l; i++) {
-    let key = keys[i];
+    const _key = keys[i];
+
+    const key = _key && typeof _key == 'object' ? toKey(_key) : _key;
 
     if (!item.has(key)) {
-      if (key && typeof key == 'object') {
-        const strKey = toKey(key);
-
-        if (item.has(strKey)) {
-          key = item.get(strKey)!;
-        } else {
-          return;
-        }
-      } else {
-        return;
-      }
+      return;
     }
 
     item = item.get(key)!;
@@ -415,28 +389,20 @@ function has(this: Storage<any, any>, ...keys: PrimitiveOrNested[]) {
   const l = keys.length - 1;
 
   for (let i = 0; i < l; i++) {
-    let key = keys[i];
+    const _key = keys[i];
+
+    const key = _key && typeof _key == 'object' ? toKey(_key) : _key;
 
     if (!item.has(key)) {
-      if (key && typeof key == 'object') {
-        const strKey = toKey(key);
-
-        if (item.has(strKey)) {
-          key = item.get(strKey)!;
-        } else {
-          return false;
-        }
-      } else {
-        return false;
-      }
+      return false;
     }
 
     item = item.get(key)!;
   }
 
-  const lastKey = keys[l];
+  const _key = keys[l];
 
-  return item.has(lastKey) || item.has(toKey(lastKey));
+  return item.has(_key && typeof _key == 'object' ? toKey(_key) : _key);
 }
 
 function get(this: Storage<any, any>, ...keys: any[]): any {
@@ -447,56 +413,34 @@ function get(this: Storage<any, any>, ...keys: any[]): any {
   let item = self._storage;
 
   for (let i = 0; i < l; i++) {
-    const key = keys[i];
+    const _key = keys[i];
+
+    const key = _key && typeof _key == 'object' ? toKey(_key) : _key;
 
     if (item.has(key)) {
       item = item.get(key)!;
+    } else {
+      const parentItem = item;
 
-      continue;
-    }
-
-    if (key && typeof key == 'object') {
-      const strKey = toKey(key);
-
-      if (item.has(strKey)) {
-        const prevKey = item.get(strKey)!;
-
-        const prevItem = item.get(prevKey)!;
-
-        item.delete(prevKey);
-
-        item.set(key, prevItem);
-
-        item.set(strKey, key);
-
-        item = prevItem;
-
-        continue;
+      if (i < l - 1) {
+        item = new Map();
+      } else if (self._getItem.length != 4) {
+        item = self._getItem(
+          self._arg1,
+          self._arg2,
+          self._keys ? self._keys.concat(keys) : keys
+        );
+      } else {
+        item = self._getItem(
+          self._arg1,
+          self._arg2,
+          self._arg3,
+          self._keys ? self._keys.concat(keys) : keys
+        );
       }
 
-      item.set(strKey, key);
+      parentItem.set(key, item);
     }
-
-    const parentItem = item;
-
-    if (i < l - 1) {
-      item = new Map();
-    } else if (self._getItem.length != 4) {
-      item = self._getItem(
-        self._arg1,
-        self._arg2,
-        self._keys ? self._keys.concat(keys) : keys
-      );
-    } else {
-      item = self._getItem(
-        self._arg1,
-        self._arg2,
-        self._arg3,
-        self._keys ? self._keys.concat(keys) : keys
-      );
-    }
-
-    parentItem.set(key, item);
   }
 
   return item;
