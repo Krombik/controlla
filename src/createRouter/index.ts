@@ -217,11 +217,17 @@ const handleParamUpdates = (queue: ParamsUpdatedData[]) => {
   for (let i = 0; i < queue.length; i++) {
     const { _route, _currentPath, _currentSearch, _params } = queue[i];
 
+    const control = _route._params!;
+
     _route._currentPath = _currentPath;
 
     _route._currentSearch = _currentSearch;
 
-    _route._params!._set(_params);
+    if (_route._isMatched._value) {
+      control._set(_params);
+    } else {
+      control._value = _params;
+    }
   }
 };
 
@@ -263,7 +269,9 @@ const handleStringify = (
     : nonUndefinedIdentity;
 };
 
-const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
+const createRouter = <
+  Routes extends Record<string, (...args: any[]) => RouteBase<boolean>>,
+>(
   options: RoutesOptions<Routes> & {
     NotFound: ComponentType;
   }
@@ -395,6 +403,10 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
               currRoute._unload();
 
               currRoute._isMatched._set(false);
+
+              if (currRoute._params) {
+                currRoute._params._value = undefined;
+              }
             }
           }
         }
@@ -508,7 +520,7 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
     }
   };
 
-  const createRoute = () => {
+  const createRoute = (): any => {
     let asyncSourceControl: InternalAsyncControl | undefined;
 
     let regexStr = '';
@@ -603,13 +615,15 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
                     const { _params } = routes[i];
 
                     if (_params) {
+                      const currentIndex = args.length;
+
                       count--;
 
                       args.push(_params._value);
 
                       unlisteners.push(
                         _params._subscribe((value) => {
-                          args[i] = value;
+                          args[currentIndex] = value;
 
                           if (isAvailable) {
                             isAvailable = false;
@@ -956,38 +970,6 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
 
           const routes = options.getRoutes(createRoute);
 
-          const methods: RouteMethods = {
-            _navigate(
-              event,
-              params,
-              replace,
-              ignoreBlock,
-              enableScrollToTop,
-              enableScrollRestoration,
-              onClick
-            ) {
-              navigate(
-                currentRouteIndex,
-                routesQueue[currentRouteIndex],
-                routerComponentsList[currentRouteIndex],
-                event,
-                params,
-                replace,
-                ignoreBlock,
-                enableScrollToTop,
-                enableScrollRestoration,
-                onClick
-              );
-            },
-            _useHref: (params) =>
-              handleHref(
-                routesQueue[currentRouteIndex],
-                params,
-                maxParamsPerRoute
-              ),
-            _isMatched: isMatchedRoot,
-          };
-
           for (let i = currentPathQueueIndex; i < pathQueue.length; i++) {
             pathQueue[i] =
               (pathParamsCount ? `(${regexStr})` : regexStr) + pathQueue[i];
@@ -1009,46 +991,80 @@ const createRouter = <Routes extends Record<string, () => RouteBase<boolean>>>(
             }
           }
 
-          route = paramsControl
-            ? function (params, stringifiedPrams) {
-                return (
-                  params !== undefined
-                    ? {
-                        ...routes,
-                        [ROUTE_METHODS]: methods,
-                        [ROUTE_PARAMS]:
-                          ROUTE_PARAMS in this
-                            ? concat(this[ROUTE_PARAMS]!, {
+          if (paramsControl) {
+            const methods: RouteMethods = {
+              _navigate(
+                event,
+                params,
+                replace,
+                ignoreBlock,
+                enableScrollToTop,
+                enableScrollRestoration,
+                onClick
+              ) {
+                navigate(
+                  currentRouteIndex,
+                  routesQueue[currentRouteIndex],
+                  routerComponentsList[currentRouteIndex],
+                  event,
+                  params,
+                  replace,
+                  ignoreBlock,
+                  enableScrollToTop,
+                  enableScrollRestoration,
+                  onClick
+                );
+              },
+              _useHref: (params) =>
+                handleHref(
+                  routesQueue[currentRouteIndex],
+                  params,
+                  maxParamsPerRoute
+                ),
+              _isMatched: isMatchedRoot,
+            };
+
+            route = function (params, stringifiedPrams) {
+              return (
+                params !== undefined
+                  ? {
+                      ...routes,
+                      [ROUTE_METHODS]: methods,
+                      [ROUTE_PARAMS]:
+                        ROUTE_PARAMS in this
+                          ? concat(this[ROUTE_PARAMS]!, {
+                              _params: params,
+                              _stringifiedParams: stringifiedPrams,
+                              _route: routeData,
+                            })
+                          : [
+                              {
                                 _params: params,
                                 _stringifiedParams: stringifiedPrams,
                                 _route: routeData,
-                              })
-                            : [
-                                {
-                                  _params: params,
-                                  _stringifiedParams: stringifiedPrams,
-                                  _route: routeData,
-                                },
-                              ],
-                      }
-                    : ROUTE_PARAMS in this
-                      ? {
-                          ...routes,
-                          [ROUTE_PARAMS]: this[ROUTE_PARAMS],
-                        }
-                      : routes
-                ) as RouteBase<boolean>;
-              }
-            : function (this: RouteBase<boolean>) {
-                return (
-                  ROUTE_PARAMS in this
+                              },
+                            ],
+                    }
+                  : ROUTE_PARAMS in this
                     ? {
                         ...routes,
-                        [ROUTE_PARAMS]: this[ROUTE_PARAMS]!,
+                        [ROUTE_PARAMS]: this[ROUTE_PARAMS],
                       }
                     : routes
-                ) as RouteBase<boolean>;
-              };
+              ) as RouteBase<boolean>;
+            };
+          } else {
+            route = function (this: RouteBase<boolean>) {
+              return (
+                ROUTE_PARAMS in this
+                  ? {
+                      ...routes,
+                      [ROUTE_PARAMS]: this[ROUTE_PARAMS]!,
+                    }
+                  : routes
+              ) as RouteBase<boolean>;
+            };
+          }
         }
 
         if (paramsControl) {
@@ -1790,56 +1806,60 @@ export type RouteBase<Navigable extends boolean> = {
 type ProcessParams<O, P = O> = O | ((prev: P) => O);
 
 export type Route<
-  Children extends Record<string, () => RouteBase<boolean>> = {},
+  Children extends Record<string, (...args: any[]) => RouteBase<boolean>> = {},
   Params = {},
   OptionalParams extends string = never,
   Async extends boolean = false,
 > = {
-  (): [keyof Children] extends [never]
-    ? RouteBase<true>
-    : Children & RouteBase<false>;
   readonly isMatched: ReadonlyControl<boolean>;
-} & ([keyof Params] extends [never]
+} & ([keyof Children] extends [never]
   ? {}
   : {
-      readonly params: Async extends false
-        ? ReadonlyControlScope<Params>
-        : ReadonlyAsyncControlScope<Params>;
-      (
-        params: ProcessParams<
-          {
-            [key in Exclude<keyof Params, OptionalParams>]: Params[key];
+      (): Children & RouteBase<false>;
+    }) &
+  ([keyof Params] extends [never]
+    ? [keyof Children] extends [never]
+      ? { (): RouteBase<true> }
+      : {}
+    : {
+        readonly params: Async extends false
+          ? ReadonlyControlScope<Params>
+          : ReadonlyAsyncControlScope<Params>;
+        (
+          params: ProcessParams<
+            {
+              [key in Exclude<keyof Params, OptionalParams>]: Params[key];
+            } & {
+              [key in Extract<keyof Params, OptionalParams>]?: Params[key];
+            }
+          >
+        ): Children & RouteBase<true>;
+        <
+          P extends {
+            [key in keyof Params]?: Params[key];
+          } = never,
+        >(
+          params: ProcessParams<P, Params> | null,
+          stringifiedParams: {
+            [key in Exclude<
+              keyof Params,
+              OptionalParams | keyof P
+            >]: Params[key] extends string ? Params[key] : string;
           } & {
-            [key in Extract<keyof Params, OptionalParams>]?: Params[key];
+            [key in Extract<
+              keyof Params,
+              OptionalParams | keyof P
+            >]?: NonNullable<Params[key]> extends string ? Params[key] : string;
           }
-        >
-      ): Children & RouteBase<true>;
-      <
-        P extends {
-          [key in keyof Params]?: Params[key];
-        } = never,
-      >(
-        params: ProcessParams<P, Params> | null,
-        stringifiedParams: {
-          [key in Exclude<
-            keyof Params,
-            OptionalParams | keyof P
-          >]: Params[key] extends string ? Params[key] : string;
-        } & {
-          [key in Extract<
-            keyof Params,
-            OptionalParams | keyof P
-          >]?: NonNullable<Params[key]> extends string ? Params[key] : string;
-        }
-      ): Children & RouteBase<true>;
-    });
+        ): Children & RouteBase<true>;
+      });
 
 type ToOptions<Params extends any[]> = {
   load?(...args: Params): Array<() => void> | void;
 };
 
 type RoutesOptions<
-  Routes extends Record<string, () => RouteBase<boolean>>,
+  Routes extends Record<string, (...args: any[]) => RouteBase<boolean>>,
   Params extends any[] = [],
 > = {
   Container?: ComponentType<PropsWithChildren>;
@@ -1877,7 +1897,7 @@ declare class PathBase<
     OptionalParams,
     [AsyncSource[number]] extends [never] ? false : true
   >;
-  to<Routes extends Record<string, () => RouteBase<boolean>>>(
+  to<Routes extends Record<string, (...args: any[]) => RouteBase<boolean>>>(
     options: RoutesOptions<
       Routes,
       [keyof Params] extends [never]
