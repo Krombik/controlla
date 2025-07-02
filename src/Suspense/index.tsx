@@ -6,35 +6,52 @@ import {
   type SuspenseProps,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
 } from 'react';
 import SuspenseContext from '../utils/SuspenseContext';
 import ErrorBoundaryContext from '../utils/ErrorBoundaryContext';
 import noop from 'lodash.noop';
+import { EMPTY_ARR } from '../utils/constants';
 
 type Ctx = NonNullable<ContextType<typeof SuspenseContext>>;
+
+const handleCleanup =
+  (ctx: Ctx, errorBoundaryCtx: { delete(fn: () => void): void }) => () => {
+    const it = ctx.values();
+
+    for (let i = ctx.size; i--; ) {
+      const unload = it.next().value;
+
+      unload();
+
+      errorBoundaryCtx.delete(unload);
+    }
+
+    ctx.clear();
+  };
+
+/** @link https://github.com/facebook/react/blob/602917c8cb521e6f9b8eae7070985e2a698fc0d0/packages/react-reconciler/src/ReactFiberWorkLoop.js#L471 */
+const FALLBACK_THROTTLE_MS = 500;
 
 const Fallback: FC<PropsWithChildren<{ _ctx: Ctx }>> = (props) => {
   const ctx = props._ctx;
 
   const errorBoundaryCtx = useContext(ErrorBoundaryContext) || { delete: noop };
 
-  useEffect(
-    () => () => {
-      const it = ctx.values();
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-      for (let i = ctx.size; i--; ) {
-        const unload = it.next().value;
+  useEffect(() => handleCleanup(ctx, errorBoundaryCtx), EMPTY_ARR);
 
-        unload();
+  useLayoutEffect(() => {
+    clearTimeout(timeoutRef.current!);
+  }, EMPTY_ARR);
 
-        errorBoundaryCtx.delete(unload);
-      }
-
-      ctx.clear();
-    },
-    []
-  );
+  if (timeoutRef.current == null) {
+    timeoutRef.current = setTimeout(() => {
+      timeoutRef.current = setTimeout(handleCleanup(ctx, errorBoundaryCtx));
+    }, FALLBACK_THROTTLE_MS);
+  }
 
   return props.children;
 };

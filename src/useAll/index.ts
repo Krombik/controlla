@@ -82,6 +82,10 @@ const useAll = <
 
   const errors = Array(l);
 
+  const errorBoundaryCtx = useContext(ErrorBoundaryContext);
+
+  const suspenseCtx = useContext(SuspenseContext);
+
   for (let i = 0; i < l; i++) {
     const control = controls[i];
 
@@ -134,6 +138,8 @@ const useAll = <
               throw err;
             }
           }
+
+          useSyncExternalStore(alwaysNoop, noop);
         }
 
         throw new Promise<void>((res) => {
@@ -148,10 +154,6 @@ const useAll = <
           };
 
           const rej = safeReturn ? onResolve : res;
-
-          const errorBoundaryCtx = useContext(ErrorBoundaryContext);
-
-          const suspenseCtx = useContext(SuspenseContext);
 
           for (let i = 0; i < l; i++) {
             handleSuspense(
