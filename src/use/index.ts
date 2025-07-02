@@ -53,6 +53,10 @@ const use: {
       : Readonly<[value: T, error: undefined] | [value: undefined, error: E]>
     : undefined;
 } = (control, safeReturn) => {
+  const errorBoundaryCtx = useContext(ErrorBoundaryContext);
+
+  const suspenseCtx = useContext(SuspenseContext);
+
   if (control) {
     const utils = control[ROOT];
 
@@ -83,11 +87,9 @@ const use: {
       return safeReturn ? [value, err] : value;
     }
 
-    throw handleSuspense(
-      root,
-      useContext(ErrorBoundaryContext),
-      useContext(SuspenseContext)
-    );
+    useSyncExternalStore(alwaysNoop, noop);
+
+    throw handleSuspense(root, errorBoundaryCtx, suspenseCtx);
   }
 
   useSyncExternalStore(alwaysNoop, noop);
