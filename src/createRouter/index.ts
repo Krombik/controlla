@@ -21,13 +21,10 @@ import noop from 'lodash.noop';
 import createSimpleControl from '../utils/createSimpleControl';
 import identity from 'lodash.identity';
 import {
-  BLOCK_ROUTER,
   ROOT,
   ROUTE_METHODS,
   ROUTE_PARAMS,
-  ROUTER,
   EMPTY_OBJECT,
-  UNBLOCK_ROUTER,
   EMPTY_STRING,
   EMPTY_ARR,
 } from '../utils/constants';
@@ -35,7 +32,11 @@ import { jsx } from 'react/jsx-runtime';
 import concat from '../utils/concat';
 import alwaysNoop from '../utils/alwaysNoop';
 import alwaysTrue from '../utils/alwaysTrue';
-import { postBatchCallbacksPush, scheduleBatch } from '../utils/batching';
+import {
+  beforeBatchCallbacksPush,
+  postBatchCallbacksPush,
+  scheduleBatch,
+} from '../utils/batching';
 import createScope from '../utils/createScope';
 import getAsyncControl from '../utils/getAsyncControl';
 import { set } from '../utils/control/scope';
@@ -82,8 +83,8 @@ const useParam = (route: RouteData) => {
 
 const handleHref = (
   routes: RouteData[],
-  updatedParams: RouteParams[] | undefined,
-  maxControls: number,
+  updatedParams?: RouteParams[],
+  maxControls?: number,
   isMutable?: true
 ) => {
   let path = '';
@@ -132,7 +133,11 @@ const handleHref = (
     }
 
     for (let i = 0; i < updatedParams.length; i++) {
-      const { _route: route, _params, _stringifiedParams } = updatedParams[i];
+      const {
+        _route: route,
+        _params,
+        _stringifiedParams = EMPTY_OBJECT,
+      } = updatedParams[i];
 
       const max = route._selfIndex;
 
@@ -145,32 +150,24 @@ const handleHref = (
           ? _params || EMPTY_OBJECT
           : _params!(route._params!._value);
 
-      const nextSearch = route._getSearch(
-        params,
-        _stringifiedParams || EMPTY_OBJECT
-      );
+      const nextSearch = route._getSearch(params, _stringifiedParams);
 
-      const nextPath = route._getPath(
-        params,
-        _stringifiedParams || EMPTY_OBJECT
-      );
+      const nextPath = route._getPath(params, _stringifiedParams);
 
       if (updateQueue) {
-        if (_stringifiedParams) {
-          params = { ...params };
+        const source = route._source && route._source._get();
 
-          route._extractParams(
-            params,
-            _stringifiedParams,
-            route._source && route._source._get()
-          );
-        }
+        const target = {};
+
+        route._extractPathParams(target, params, _stringifiedParams, source);
+
+        route._extractQueryParams(target, params, _stringifiedParams, source);
 
         updateQueue.push({
           _route: route,
           _currentPath: nextPath,
           _currentSearch: nextSearch,
-          _params: params,
+          _params: target,
         });
       } else if (maxControls) {
         if (typeof _params == 'function') {
@@ -223,11 +220,7 @@ const handleParamUpdates = (queue: ParamsUpdatedData[]) => {
 
     _route._currentSearch = _currentSearch;
 
-    if (_route._isMatched._value) {
-      control._set(_params);
-    } else {
-      control._value = _params;
-    }
+    control._set(_params);
   }
 };
 
@@ -269,13 +262,14 @@ const handleStringify = (
     : nonUndefinedIdentity;
 };
 
-const createRouter = <
-  Routes extends Record<string, (...args: any[]) => RouteBase<boolean>>,
->(
-  options: RoutesOptions<Routes> & {
+const createRouter = <Routes extends AnyRoutes>(
+  options: RoutesOptions & {
+    getRoutes(
+      createRoute: () => PathCreator<{}, never, never, []> & AsyncRoute
+    ): Routes;
     NotFound: ComponentType;
   }
-): UnionToIntersection<Routes> & Router => {
+): Router<UnionToIntersection<Routes>> => {
   if (popStateListener) {
     window.removeEventListener('popstate', popStateListener);
   }
@@ -288,7 +282,7 @@ const createRouter = <
 
   let isRouterAvailable = true;
 
-  let getBlockedRouterMessage = getEmptyString;
+  let allowNavigate: () => void = noop;
 
   let nestingIndex = 0;
 
@@ -299,6 +293,14 @@ const createRouter = <
   let paramsWasReplaced = false;
 
   const { NotFound, load: _load, Container } = options;
+
+  if (_load) {
+    beforeBatchCallbacksPush(() => {
+      unloads = _load() || EMPTY_ARR;
+    });
+
+    scheduleBatch();
+  }
 
   const pathQueue: string[] = [];
 
@@ -394,14 +396,10 @@ const createRouter = <
 
           if (currRoute != nextRoute) {
             if (nextRoute) {
-              nextRoute._load(nextRoutes);
-
               nextRoute._isMatched._set(true);
             }
 
             if (currRoute) {
-              currRoute._unload();
-
               currRoute._isMatched._set(false);
 
               if (currRoute._params) {
@@ -413,11 +411,7 @@ const createRouter = <
       }
     } else {
       for (let i = 0; i < nextRoutes.length; i++) {
-        const route = nextRoutes[i];
-
-        route._load(nextRoutes);
-
-        route._isMatched._set(true);
+        nextRoutes[i]._isMatched._set(true);
       }
     }
 
@@ -464,11 +458,7 @@ const createRouter = <
       event.preventDefault();
     }
 
-    if (
-      isRouterAvailable ||
-      ignoreBlock ||
-      window.confirm(getBlockedRouterMessage())
-    ) {
+    const fn = () => {
       const state = history.state;
 
       const isNewPage = currentRouteIndex != index;
@@ -517,10 +507,18 @@ const createRouter = <
       if (enableScrollToTop == null ? isNewPage : enableScrollToTop) {
         window.scroll(0, 0);
       }
+    };
+
+    if (isRouterAvailable || ignoreBlock) {
+      fn();
+    } else {
+      allowNavigate = fn;
+
+      isLeaveControl._set(true);
     }
   };
 
-  const createRoute = (): any => {
+  const routes = options.getRoutes((): any => {
     let asyncSourceControl: InternalAsyncControl | undefined;
 
     let regexStr = '';
@@ -556,9 +554,34 @@ const createRouter = <
     return {
       to(
         options:
-          | RoutesOptions<any, any[]>
-          | ({ Page: ComponentType } & ToOptions<any[]>)
+          | (RoutesOptions & {
+              routes: AnyRoutes;
+            })
+          | ({ Page: ComponentType } & ToOptions)
       ) {
+        function extractParams(
+          this: string[],
+          target: Record<string, any>,
+          params: Record<string, any>,
+          stringifiedParams: Record<string, string>,
+          source: any
+        ) {
+          for (let i = 0; i < this.length; i++) {
+            const key = this[i];
+
+            const item = params[key];
+
+            target[key] =
+              key in stringifiedParams || item === undefined
+                ? getParse(key)!(
+                    stringifiedParams[key] || undefined,
+                    source,
+                    key
+                  )
+                : item;
+          }
+        }
+
         const { load: _load } = options;
 
         const l = path.length;
@@ -593,147 +616,27 @@ const createRouter = <
 
         const paramsRoot = paramsControl && paramsControl[ROOT];
 
-        let handleLoad = noop;
-
         if (_load) {
-          const l = _load.length;
+          let unloads: Array<() => void> = EMPTY_ARR;
 
-          handleLoad = l
-            ? l > 1
-              ? function (this: RouteData, routes: RouteData[]) {
-                  const args: any[] = [];
+          isMatchedRoot._subscribe((isMatched: boolean) => {
+            if (isMatched) {
+              unloads = _load() || EMPTY_ARR;
+            } else {
+              for (let i = 0; i < unloads.length; i++) {
+                unloads[i]();
+              }
 
-                  const unlisteners: Array<() => void> = [];
-
-                  let isAvailable = true;
-
-                  for (
-                    let i = currentNestingIndex + 1, count = l;
-                    count && i--;
-
-                  ) {
-                    const { _params } = routes[i];
-
-                    if (_params) {
-                      const currentIndex = args.length;
-
-                      count--;
-
-                      args.push(_params._value);
-
-                      unlisteners.push(
-                        _params._subscribe((value) => {
-                          args[currentIndex] = value;
-
-                          if (isAvailable) {
-                            isAvailable = false;
-
-                            postBatchCallbacksPush(() => {
-                              const res = _load(...args);
-
-                              for (let i = 0; i < unloads.length; i++) {
-                                unloads[i]();
-                              }
-
-                              unloads = res || EMPTY_ARR;
-
-                              isAvailable = true;
-                            });
-                          }
-                        })
-                      );
-                    }
-                  }
-
-                  const res = _load(...args);
-
-                  let unloads = res || EMPTY_ARR;
-
-                  this._unload = function () {
-                    for (let i = 0; i < unlisteners.length; i++) {
-                      unlisteners[i]();
-                    }
-
-                    for (let i = 0; i < unloads.length; i++) {
-                      unloads[i]();
-                    }
-
-                    this._unload = noop;
-                  };
-                }
-              : function (this: RouteData, routes: RouteData[]) {
-                  for (let i = currentNestingIndex + 1; i--; ) {
-                    const { _params } = routes[i];
-
-                    if (_params) {
-                      const unlisten = _params._subscribe((value) => {
-                        const res = _load(value);
-
-                        for (let i = 0; i < unloads.length; i++) {
-                          unloads[i]();
-                        }
-
-                        unloads = res || EMPTY_ARR;
-                      });
-
-                      const res = _load(_params._value);
-
-                      let unloads = res || EMPTY_ARR;
-
-                      this._unload = function () {
-                        unlisten();
-
-                        for (let i = 0; i < unloads.length; i++) {
-                          unloads[i]();
-                        }
-
-                        this._unload = noop;
-                      };
-
-                      return;
-                    }
-                  }
-
-                  throw new Error('no params available for this route');
-                }
-            : function (this: RouteData) {
-                const unloads = _load();
-
-                if (unloads) {
-                  this._unload = function () {
-                    for (let i = 0; i < unloads.length; i++) {
-                      unloads[i]();
-                    }
-
-                    this._unload = noop;
-                  };
-                }
-              };
+              unloads = EMPTY_ARR;
+            }
+          });
         }
 
         const routeData: RouteData = {
-          _load: handleLoad,
-          _unload: noop,
           _pathParamsCount: pathParamsCount,
           _currentPath: pathParamsCount || !l ? '' : path0,
           _currentSearch: '',
           _selfIndex: currentNestingIndex,
-          _extractParams:
-            pathParamsCount || queryParamsCount
-              ? (target, stringifiedParams, source) => {
-                  for (const key in stringifiedParams) {
-                    const parse = getParse(key);
-
-                    if (parse) {
-                      target[key] = parse(
-                        stringifiedParams[key] || undefined,
-                        source,
-                        key
-                      );
-                    }
-                  }
-                }
-              : noop,
           _getPath: pathParamsCount
             ? (params, stringifiedParams) => {
                 let str = '';
@@ -801,30 +704,10 @@ const createRouter = <
               }
             : getEmptyString,
           _extractPathParams: pathParamsCount
-            ? (target, params, source) => {
-                for (let i = 0; i < pathParamsCount; i++) {
-                  const key = pathParams[i];
-
-                  target[key] = getParse(key)!(
-                    params[key] || undefined,
-                    source,
-                    key
-                  );
-                }
-              }
+            ? extractParams.bind(pathParams)
             : noop,
           _extractQueryParams: queryParamsCount
-            ? (target, params, source) => {
-                for (let i = 0; i < queryParamsCount; i++) {
-                  const key = queryParams[i];
-
-                  target[key] = getParse(key)!(
-                    params[key] || undefined,
-                    source,
-                    key
-                  );
-                }
-              }
+            ? extractParams.bind(queryParams)
             : noop,
           _replaceDeprecatedQueryParams: deprecatedKeys
             ? (searchParams) => {
@@ -966,9 +849,7 @@ const createRouter = <
                 ) as RouteBase<boolean>;
               };
         } else {
-          const { Container } = options;
-
-          const routes = options.getRoutes(createRoute);
+          const { Container, routes } = options;
 
           for (let i = currentPathQueueIndex; i < pathQueue.length; i++) {
             pathQueue[i] =
@@ -1104,7 +985,7 @@ const createRouter = <
         {
           parse,
           stringify,
-          isValid = alwaysTrue,
+          isValid,
           optional,
           fallbackValue,
           defaultValue,
@@ -1213,7 +1094,7 @@ const createRouter = <
         {
           parse,
           stringify,
-          isValid = alwaysTrue,
+          isValid,
           optional,
           fallbackValue,
           defaultValue,
@@ -1250,9 +1131,7 @@ const createRouter = <
     } as PathCreator<any, any> &
       Partial<PathAfterDeprecatedQuery<any, any>> &
       AsyncRoute;
-  };
-
-  const router = options.getRoutes(createRoute) as Routes & Router;
+  });
 
   const pathQueueSize = pathQueue.length;
 
@@ -1263,6 +1142,9 @@ const createRouter = <
   const setControlArr: Array<(component: ComponentType) => void> = [];
 
   const { pathname, search } = location;
+
+  const isLeaveControl: InternalControl<boolean> =
+    createSimpleControl<boolean>(false)[ROOT];
 
   const locationControl: InternalControl<RouterLocation> =
     createSimpleControl<RouterLocation>({ action: 'none', delta: 0 })[ROOT];
@@ -1299,31 +1181,6 @@ const createRouter = <
   };
 
   const Router = handleRouter();
-
-  router[ROUTER] = Container
-    ? () => jsx(Container, { children: jsx(Router, EMPTY_OBJECT) })
-    : Router;
-
-  router[BLOCK_ROUTER] = (message) => {
-    isRouterAvailable = false;
-
-    getBlockedRouterMessage =
-      typeof message == 'string' ? () => message : message;
-
-    window.addEventListener('beforeunload', beforeUnloadListener);
-
-    return router[UNBLOCK_ROUTER];
-  };
-
-  router[UNBLOCK_ROUTER] = () => {
-    isRouterAvailable = true;
-
-    getBlockedRouterMessage = getEmptyString;
-
-    window.removeEventListener('beforeunload', beforeUnloadListener);
-  };
-
-  router[ROOT] = locationControl;
 
   for (let i = nestingLevels.size; i > 0; i--) {
     const map = new Map<ComponentType, FC>();
@@ -1391,82 +1248,108 @@ const createRouter = <
       maxParamsPerRoute = paramsCount;
     }
 
-    const withParams = !!paramsCount;
-
     const testRegex = regex[withPathParams ? 'exec' : 'test'].bind(regex);
 
-    findCurrentRouteArr[i] = (path, search) => {
-      const isMatched = testRegex(path);
+    findCurrentRouteArr[i] = paramsCount
+      ? (path, search) => {
+          const isMatched = testRegex(path);
 
-      if (isMatched) {
-        if (withParams) {
-          const searchParams: Record<string, string> = {};
+          if (isMatched) {
+            let isUrlChanged = false;
 
-          const pathParams = withPathParams
-            ? (isMatched as RegExpExecArray).groups!
-            : EMPTY_OBJECT;
+            const searchParams: Record<string, string> = {};
 
-          const currentParamsQueue: ParamsUpdatedData[] = [];
+            const pathParams = withPathParams
+              ? (isMatched as RegExpExecArray).groups!
+              : EMPTY_OBJECT;
 
-          const updatedParamsQueue: RouteParams[] = [];
+            const currentParamsQueue: ParamsUpdatedData[] = [];
 
-          if (search) {
-            const arr = search.slice(1).split('&');
+            if (search) {
+              const arr = search.slice(1).split('&');
 
-            for (let i = 0; i < arr.length; i++) {
-              const t = arr[i].split('=');
+              for (let i = 0; i < arr.length; i++) {
+                const t = arr[i].split('=');
 
-              const value = t[1];
+                const value = t[1];
 
-              if (value) {
-                searchParams[t[0]] = decodeURIComponent(value);
+                if (value) {
+                  searchParams[t[0]] = decodeURIComponent(value);
+                }
               }
             }
-          }
 
-          for (let i = 0, pathSegmentIndex = 1; i < routes.length; i++) {
-            const route = routes[i];
+            for (let i = 0, pathSegmentIndex = 1; i < routes.length; i++) {
+              const route = routes[i];
 
-            const paramsControl = route._params;
+              const paramsControl = route._params;
 
-            if (paramsControl) {
-              const source = route._source;
+              if (paramsControl) {
+                const source = route._source;
 
-              const currentPath = route._pathParamsCount
-                ? (isMatched as RegExpExecArray)[
-                    (pathSegmentIndex += route._pathParamsCount)
-                  ]
-                : route._currentPath;
+                const currentPath = route._pathParamsCount
+                  ? (isMatched as RegExpExecArray)[
+                      (pathSegmentIndex += route._pathParamsCount)
+                    ]
+                  : route._currentPath;
 
-              if (!source || source[ROOT]._isLoadedControl[ROOT]._value) {
-                const value = source && source._get();
+                if (!source || source[ROOT]._isLoadedControl[ROOT]._value) {
+                  const value = source && source._get();
 
-                const params = {};
+                  const params = {};
 
-                route._replaceDeprecatedQueryParams(searchParams);
+                  route._replaceDeprecatedQueryParams(searchParams);
 
-                try {
-                  route._extractPathParams(params, pathParams, value);
+                  try {
+                    route._extractPathParams(
+                      params,
+                      EMPTY_OBJECT,
+                      pathParams,
+                      value
+                    );
 
-                  route._extractQueryParams(params, searchParams, value);
-                } catch (err) {
-                  paramsWasReplaced = false;
+                    route._extractQueryParams(
+                      params,
+                      EMPTY_OBJECT,
+                      searchParams,
+                      value
+                    );
+                  } catch (err) {
+                    paramsWasReplaced = false;
 
-                  if (source) {
-                    (paramsControl as InternalAsyncControl)._errorControl[
-                      ROOT
-                    ]._set(err);
+                    if (source) {
+                      (paramsControl as InternalAsyncControl)._errorControl[
+                        ROOT
+                      ]._set(err);
 
-                    continue;
+                      continue;
+                    }
+
+                    return false;
                   }
 
-                  return false;
-                }
+                  if (paramsWasReplaced) {
+                    isUrlChanged = true;
 
-                if (paramsWasReplaced) {
-                  paramsWasReplaced = false;
+                    paramsWasReplaced = false;
 
-                  updatedParamsQueue.push({ _params: params, _route: route });
+                    currentParamsQueue.push({
+                      _currentPath: route._getPath(params, EMPTY_OBJECT),
+                      _currentSearch: route._getSearch(params, EMPTY_OBJECT),
+                      _params: params,
+                      _route: route,
+                    });
+                  } else {
+                    currentParamsQueue.push({
+                      _currentPath: currentPath,
+                      _currentSearch: route._getSearch(
+                        EMPTY_OBJECT,
+                        searchParams
+                      ),
+                      _params: params,
+                      _route: route,
+                    });
+                  }
                 } else {
                   currentParamsQueue.push({
                     _currentPath: currentPath,
@@ -1474,106 +1357,108 @@ const createRouter = <
                       EMPTY_OBJECT,
                       searchParams
                     ),
-                    _params: params,
+                    _params: undefined!,
                     _route: route,
                   });
+
+                  const unlistenAll = () => {
+                    unlistenMatch();
+
+                    unlistenParams();
+
+                    unlistenSource();
+                  };
+
+                  const unlistenParams = paramsControl._subscribe(unlistenAll);
+
+                  const unlistenMatch = route._isMatched._subscribe((value) => {
+                    if (!value) {
+                      unlistenAll();
+                    }
+                  });
+
+                  const unlistenSource = source[ROOT]._subscribeWithError(
+                    () => {
+                      unlistenAll();
+
+                      if (route._isMatched._value) {
+                        const value = source._get();
+
+                        const params = {};
+
+                        route._replaceDeprecatedQueryParams(searchParams);
+
+                        try {
+                          route._extractPathParams(
+                            params,
+                            EMPTY_OBJECT,
+                            pathParams,
+                            value
+                          );
+
+                          route._extractQueryParams(
+                            params,
+                            EMPTY_OBJECT,
+                            searchParams,
+                            value
+                          );
+                        } catch (err) {
+                          paramsWasReplaced = false;
+
+                          (paramsControl as InternalAsyncControl)._errorControl[
+                            ROOT
+                          ]._set(err);
+
+                          return;
+                        }
+
+                        if (paramsWasReplaced) {
+                          paramsWasReplaced = false;
+
+                          history.replaceState(
+                            history.state,
+                            '',
+                            handleHref(
+                              routes,
+                              [{ _params: params, _route: route }],
+                              0,
+                              true
+                            )
+                          );
+                        } else {
+                          paramsControl._set(params);
+                        }
+                      }
+                    }
+                  );
                 }
-              } else {
-                currentParamsQueue.push({
-                  _currentPath: currentPath,
-                  _currentSearch: route._getSearch(EMPTY_OBJECT, searchParams),
-                  _params: undefined!,
-                  _route: route,
-                });
-
-                const unlistenAll = () => {
-                  unlistenMatch();
-
-                  unlistenParams();
-
-                  unlistenSource();
-                };
-
-                const unlistenParams = paramsControl._subscribe(unlistenAll);
-
-                const unlistenMatch = route._isMatched._subscribe((value) => {
-                  if (!value) {
-                    unlistenAll();
-                  }
-                });
-
-                const unlistenSource = source[ROOT]._subscribeWithError(() => {
-                  unlistenAll();
-
-                  if (route._isMatched._value) {
-                    const value = source._get();
-
-                    const params = {};
-
-                    route._replaceDeprecatedQueryParams(searchParams);
-
-                    try {
-                      route._extractPathParams(params, pathParams, value);
-
-                      route._extractQueryParams(params, searchParams, value);
-                    } catch (err) {
-                      paramsWasReplaced = false;
-
-                      (paramsControl as InternalAsyncControl)._errorControl[
-                        ROOT
-                      ]._set(err);
-
-                      return;
-                    }
-
-                    if (paramsWasReplaced) {
-                      paramsWasReplaced = false;
-
-                      history.replaceState(
-                        history.state,
-                        '',
-                        handleHref(
-                          routes,
-                          [{ _params: params, _route: route }],
-                          0,
-                          true
-                        )
-                      );
-                    } else {
-                      paramsControl._set(params);
-                    }
-                  }
-                });
               }
+
+              handleParamUpdates(currentParamsQueue);
             }
+
+            handleMatching(routes, components);
+
+            if (isUrlChanged) {
+              history.replaceState(history.state, '', handleHref(routes));
+            }
+
+            currentRouteIndex = i;
           }
 
-          handleParamUpdates(currentParamsQueue);
-
-          if (updatedParamsQueue.length) {
-            history.replaceState(
-              history.state,
-              '',
-              handleHref(routes, updatedParamsQueue, 0, true)
-            );
-          }
+          return !!isMatched;
         }
+      : (path) => {
+          const isMatched = testRegex(path) as boolean;
 
-        handleMatching(routes, components);
+          if (isMatched) {
+            handleMatching(routes, components);
 
-        currentRouteIndex = i;
-      }
+            currentRouteIndex = i;
+          }
 
-      return !!isMatched;
-    };
-  }
-
-  if (_load) {
-    const res = _load();
-
-    if (res) {
-      unloads = res;
-    }
+          return isMatched;
+        };
   }
 
   for (
@@ -1605,45 +1490,58 @@ const createRouter = <
 
     const nextHistoryIndex = state && state.idx;
 
-    if (isPopTriggeredByBlocking || isPopTriggeredForScrollSave) {
-      if (
-        isPopTriggeredByBlocking &&
-        !window.confirm(getBlockedRouterMessage())
-      ) {
-        isPopTriggeredByBlocking = isPopTriggeredForScrollSave = false;
+    if (isPopTriggeredByBlocking) {
+      isPopTriggeredByBlocking = false;
 
-        return;
-      }
+      isLeaveControl._set(true);
+    } else if (isPopTriggeredForScrollSave) {
+      isPopTriggeredForScrollSave = false;
 
-      if (isPopTriggeredForScrollSave) {
-        isPopTriggeredForScrollSave = false;
+      isPopTriggeredByScrollSaving = true;
 
-        isPopTriggeredByScrollSaving = true;
-
-        history.replaceState(
-          {
-            ...state,
-            scroll: [window.scrollX, window.scrollY],
-          } satisfies HistoryState,
-          ''
-        );
-      }
-
-      isPopTriggeredByBlocking = isRouterBlockPopupAllowed = false;
+      history.replaceState(
+        {
+          ...state,
+          scroll: [window.scrollX, window.scrollY],
+        } satisfies HistoryState,
+        ''
+      );
 
       history.go(delta);
     } else if (nextHistoryIndex != currentHistoryIndex) {
       if (nextHistoryIndex != null) {
         const scroll = state && state.scroll;
 
-        delta = nextHistoryIndex - currentHistoryIndex;
-
         isPopTriggeredByBlocking =
           isRouterBlockPopupAllowed && !isRouterAvailable;
 
+        delta = nextHistoryIndex - currentHistoryIndex;
+
+        if (isPopTriggeredByBlocking) {
+          allowNavigate = () => {
+            isRouterBlockPopupAllowed = false;
+
+            if (scroll) {
+              history.replaceState(
+                {
+                  ...state,
+                  scroll: [window.scrollX, window.scrollY],
+                } satisfies HistoryState,
+                ''
+              );
+            }
+
+            history.go(delta);
+          };
+
+          history.go(-delta);
+
+          return;
+        }
+
         isPopTriggeredForScrollSave = !!scroll && !isPopTriggeredByScrollSaving;
 
-        if (isPopTriggeredByBlocking || isPopTriggeredForScrollSave) {
+        if (isPopTriggeredForScrollSave) {
           history.go(-delta);
 
           return;
@@ -1678,11 +1576,7 @@ const createRouter = <
         const routes = routesQueue[currentRouteIndex];
 
         for (let i = routes.length; i--; ) {
-          const route = routes[i];
-
-          route._unload();
-
-          route._isMatched._set(false);
+          routes[i]._isMatched._set(false);
         }
 
         currentRouteIndex = -1;
@@ -1694,7 +1588,47 @@ const createRouter = <
 
   window.addEventListener('popstate', popStateListener);
 
-  return router as any;
+  const allowLeave = () => {
+    isLeaveControl._set(false);
+
+    allowNavigate();
+
+    allowNavigate = noop;
+  };
+
+  const denyLeave = () => {
+    isLeaveControl._set(false);
+
+    allowNavigate = noop;
+  };
+
+  return {
+    [ROOT]: locationControl,
+    routes,
+    _render: Container
+      ? () => jsx(Container, { children: jsx(Router, EMPTY_OBJECT) })
+      : Router,
+    block() {
+      isRouterAvailable = false;
+
+      window.addEventListener('beforeunload', beforeUnloadListener);
+
+      return this.unblock;
+    },
+    unblock() {
+      isRouterAvailable = true;
+
+      window.removeEventListener('beforeunload', beforeUnloadListener);
+    },
+    useLeaveGuard: () => ({
+      isLeaving: useSyncExternalStore(
+        isLeaveControl._subscribe,
+        () => isLeaveControl._value
+      ),
+      allow: allowLeave,
+      deny: denyLeave,
+    }),
+  } as Router<any>;
 };
 
 export default createRouter;
@@ -1704,10 +1638,15 @@ type RouterLocation = {
   readonly delta: number;
 };
 
-export type Router = {
-  [ROUTER](): ReactElement;
-  [BLOCK_ROUTER](message: string | (() => string)): () => void;
-  [UNBLOCK_ROUTER](): void;
+type AnyRoutes = Record<string, (...args: any[]) => RouteBase<boolean>>;
+
+export type Router<Routes extends AnyRoutes> = {
+  /** @internal */
+  _render(): ReactElement;
+  block(): () => void;
+  useLeaveGuard(): { readonly isLeaving: boolean; allow(): void; deny(): void };
+  unblock(): void;
+  readonly routes: Routes;
 } & ReadonlyControl<RouterLocation>;
 
 type UnionToIntersection<U> = (U extends any ? (x: U) => void : never) extends (
@@ -1755,22 +1694,17 @@ type RouteData = {
   ): string;
   _extractPathParams(
     target: Record<string, any>,
-    pathParams: Record<string, any>,
+    params: Record<string, any>,
+    stringifiedParams: Record<string, any>,
     source: any
   ): void;
   _extractQueryParams(
     target: Record<string, any>,
-    searchParams: Record<string, string>,
-    source: any
-  ): void;
-  _replaceDeprecatedQueryParams(searchParams: Record<string, string>): void;
-  _extractParams(
-    target: Record<string, any>,
+    params: Record<string, any>,
     stringifiedParams: Record<string, string>,
     source: any
   ): void;
-  _load(this: RouteData, routes: RouteData[]): void;
-  _unload(): void;
+  _replaceDeprecatedQueryParams(searchParams: Record<string, string>): void;
   _currentPath: string;
   _currentSearch: string;
 };
@@ -1806,7 +1740,7 @@ export type RouteBase<Navigable extends boolean> = {
 type ProcessParams<O, P = O> = O | ((prev: P) => O);
 
 export type Route<
-  Children extends Record<string, (...args: any[]) => RouteBase<boolean>> = {},
+  Children extends AnyRoutes = {},
   Params = {},
   OptionalParams extends string = never,
   Async extends boolean = false,
@@ -1854,62 +1788,33 @@ export type Route<
         ): Children & RouteBase<true>;
       });
 
-type ToOptions<Params extends any[]> = {
-  load?(...args: Params): Array<() => void> | void;
+type ToOptions = {
+  load?(): Array<() => void> | void;
 };
 
-type RoutesOptions<
-  Routes extends Record<string, (...args: any[]) => RouteBase<boolean>>,
-  Params extends any[] = [],
-> = {
+type RoutesOptions = {
   Container?: ComponentType<PropsWithChildren>;
-  getRoutes(
-    createRoute: () => PathCreator<{}, never, never, [], Params> &
-      AsyncRoute<Params>
-  ): Routes;
-} & ToOptions<Params>;
+} & ToOptions;
 
 declare class PathBase<
   Params = {},
   OptionalParams extends string = never,
   AsyncSource extends [any?] | [] = [],
-  ParentParams extends any[] = [],
 > {
   to(
     options: {
       Page: ComponentType;
-      getRoutes?: undefined;
+      routes?: undefined;
       Container?: undefined;
-    } & ToOptions<
-      [keyof Params] extends [never]
-        ? ParentParams
-        : [
-            (
-              | Params
-              | ([AsyncSource[number]] extends [never] ? never : undefined)
-            ),
-            ...ParentParams,
-          ]
-    >
+    } & ToOptions
   ): Route<
     {},
     Params,
     OptionalParams,
     [AsyncSource[number]] extends [never] ? false : true
   >;
-  to<Routes extends Record<string, (...args: any[]) => RouteBase<boolean>>>(
-    options: RoutesOptions<
-      Routes,
-      [keyof Params] extends [never]
-        ? ParentParams
-        : [
-            (
-              | Params
-              | ([AsyncSource[number]] extends [never] ? never : undefined)
-            ),
-            ...ParentParams,
-          ]
-    > & { Page?: undefined }
+  to<Routes extends AnyRoutes>(
+    options: RoutesOptions & { Page?: undefined; routes: Routes }
   ): Route<
     UnionToIntersection<Routes>,
     Params,
@@ -1923,24 +1828,11 @@ type PathAfterArray<
   OptionalParams extends string = never,
   QueryParams extends string = never,
   AsyncSource extends [any?] | [] = [],
-  ParentParams extends any[] = [],
-> = PathBase<Params, OptionalParams, AsyncSource, ParentParams> &
-  PathAfterQuery<
-    Params,
-    OptionalParams,
-    QueryParams,
-    AsyncSource,
-    ParentParams
-  > & {
+> = PathBase<Params, OptionalParams, AsyncSource> &
+  PathAfterQuery<Params, OptionalParams, QueryParams, AsyncSource> & {
     segment<T extends string>(
-      text: T extends `${string}/${string}` ? never : T
-    ): PathCreator<
-      Params,
-      OptionalParams,
-      QueryParams,
-      AsyncSource,
-      ParentParams
-    >;
+      text: T extends `/${string}` ? never : T
+    ): PathCreator<Params, OptionalParams, QueryParams, AsyncSource>;
     oneOf<N extends string, const T extends string[]>(
       name: N extends keyof Params ? never : N,
       variants: T,
@@ -1951,8 +1843,7 @@ type PathAfterArray<
       },
       QueryParams,
       OptionalParams,
-      AsyncSource,
-      ParentParams
+      AsyncSource
     >;
   };
 
@@ -1961,8 +1852,7 @@ type PathAfterQuery<
   OptionalParams extends string = never,
   QueryParams extends string = never,
   AsyncSource extends [any?] | [] = [],
-  ParentParams extends any[] = [],
-> = PathBase<Params, OptionalParams, AsyncSource, ParentParams> & {
+> = PathBase<Params, OptionalParams, AsyncSource> & {
   query<
     N extends string,
     O extends boolean = false,
@@ -1980,16 +1870,9 @@ type PathAfterQuery<
         : { [key in N]: Value }),
     OptionalParams | (O extends true ? N : never),
     QueryParams | N,
-    AsyncSource,
-    ParentParams
+    AsyncSource
   > &
-    PathAfterDeprecatedQuery<
-      Params,
-      OptionalParams,
-      QueryParams,
-      AsyncSource,
-      ParentParams
-    >;
+    PathAfterDeprecatedQuery<Params, OptionalParams, QueryParams, AsyncSource>;
 };
 
 type PathAfterDeprecatedQuery<
@@ -1997,20 +1880,19 @@ type PathAfterDeprecatedQuery<
   OptionalParams extends string = never,
   QueryParams extends string = never,
   AsyncSource extends [any?] | [] = [],
-  ParentParams extends any[] = [],
-> = PathBase<Params, OptionalParams, AsyncSource, ParentParams> & {
+> = PathBase<Params, OptionalParams, AsyncSource> & {
   deprecatedQuery<const S extends string[]>(
     keys: S,
     mapper: (deprecatedValues: Partial<Record<S[number], string>>) => {
       [key in Extract<keyof Params, QueryParams>]?: Params[key];
     }
-  ): PathBase<Params, OptionalParams, AsyncSource, ParentParams>;
+  ): PathBase<Params, OptionalParams, AsyncSource>;
 };
 
-type AsyncRoute<ParentParams extends any[] = []> = {
+type AsyncRoute = {
   async<T>(
     source: AsyncControl<T>
-  ): PathCreator<{}, never, never, [source?: T], ParentParams>;
+  ): PathCreator<{}, never, never, [source?: T]>;
 };
 
 type PathCreator<
@@ -2018,21 +1900,8 @@ type PathCreator<
   OptionalParams extends string = never,
   QueryParams extends string = never,
   AsyncSource extends [any?] | [] = [],
-  ParentParams extends any[] = [],
-> = PathAfterArray<
-  Params,
-  OptionalParams,
-  QueryParams,
-  AsyncSource,
-  ParentParams
-> &
-  PathAfterQuery<
-    Params,
-    OptionalParams,
-    QueryParams,
-    AsyncSource,
-    ParentParams
-  > & {
+> = PathAfterArray<Params, OptionalParams, QueryParams, AsyncSource> &
+  PathAfterQuery<Params, OptionalParams, QueryParams, AsyncSource> & {
     param<
       N extends string,
       O extends boolean = false,
@@ -2050,8 +1919,7 @@ type PathCreator<
           : { [key in N]: Value }),
       OptionalParams | (O extends true ? N : never),
       QueryParams,
-      AsyncSource,
-      ParentParams
+      AsyncSource
     >;
     array<N extends string, Value = string[]>(
       name: N extends keyof Params ? never : N,
@@ -2065,8 +1933,7 @@ type PathCreator<
       },
       OptionalParams,
       QueryParams,
-      AsyncSource,
-      ParentParams
+      AsyncSource
     >;
     oneOf<
       N extends string,
@@ -2084,7 +1951,6 @@ type PathCreator<
           : { [key in N]: T[number] }),
       OptionalParams | N,
       QueryParams,
-      AsyncSource,
-      ParentParams
+      AsyncSource
     >;
   };

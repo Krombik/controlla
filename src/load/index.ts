@@ -1,7 +1,8 @@
 import noop from 'lodash.noop';
 import type { InternalAsyncControl, LoadableControl } from '../types';
-import { RESOLVED_PROMISE, ROOT } from '../utils/constants';
+import { ROOT } from '../utils/constants';
 import { handleSlowLoading, handleUnload } from '../utils/asyncControlUtils';
+import scheduleMicrotask from '../utils/scheduleMicrotask';
 
 const loaderCleanupSet = new Set<InternalAsyncControl>();
 
@@ -11,7 +12,7 @@ const startBatch = () => {
   if (isLoadCleanupPending) {
     isLoadCleanupPending = false;
 
-    RESOLVED_PROMISE.then(() => {
+    scheduleMicrotask(() => {
       const it = loaderCleanupSet.values();
 
       for (let i = loaderCleanupSet.size; i--; ) {

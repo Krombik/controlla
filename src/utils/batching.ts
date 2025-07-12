@@ -1,6 +1,6 @@
 import type { InternalControl } from '../types';
-import { RESOLVED_PROMISE } from './constants';
 import executeSetters from './executeSetters';
+import scheduleMicrotask from './scheduleMicrotask';
 
 const beforeBatchCallbacks: Array<() => void> = [];
 
@@ -14,7 +14,7 @@ export const scheduleBatch = () => {
   if (batchInPending) {
     batchInPending = false;
 
-    RESOLVED_PROMISE.then(() => {
+    scheduleMicrotask(() => {
       for (let i = 0; i < beforeBatchCallbacks.length; i++) {
         beforeBatchCallbacks[i]();
       }

@@ -53,8 +53,6 @@ export { default as Router } from './Router';
 export { default as navigate } from './navigate';
 export { default as Link } from './Link';
 export { default as Redirect } from './Redirect';
-export { default as unblockRouter } from './unblockRouter';
-export { default as blockRouter } from './blockRouter';
 
 export { default as SKELETON_CONTROL } from './SKELETON_CONTROL';
 

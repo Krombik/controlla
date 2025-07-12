@@ -1,10 +1,9 @@
 import type { FC } from 'react';
-import { ROUTER } from '../utils/constants';
 
 type Props = {
-  router: import('../createRouter').Router;
+  router: import('../createRouter').Router<{}>;
 };
 
-const Router: FC<Props> = (props) => props.router[ROUTER]();
+const Router: FC<Props> = (props) => props.router._render();
 
 export default Router;
