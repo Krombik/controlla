@@ -471,3 +471,9 @@ export type ControlInitializer<T = any> = (
 export type ContainerType =
   | ComponentType<PropsWithChildren>
   | keyof JSX.IntrinsicElements;
+
+export type UnionToIntersection<U> = (
+  U extends any ? (x: U) => void : never
+) extends (x: infer R) => void
+  ? Required<R>
+  : never;

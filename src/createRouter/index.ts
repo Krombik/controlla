@@ -6,6 +6,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactElement,
 } from 'react';
+import { jsx } from 'react/jsx-runtime';
 import type {
   AsyncControl,
   AsyncControlScope,
@@ -15,6 +16,7 @@ import type {
   ReadonlyAsyncControlScope,
   ReadonlyControl,
   ReadonlyControlScope,
+  UnionToIntersection,
 } from '../types';
 import createControlScope from '../createControlScope';
 import noop from 'lodash.noop';
@@ -28,7 +30,6 @@ import {
   EMPTY_STRING,
   EMPTY_ARR,
 } from '../utils/constants';
-import { jsx } from 'react/jsx-runtime';
 import concat from '../utils/concat';
 import alwaysNoop from '../utils/alwaysNoop';
 import alwaysTrue from '../utils/alwaysTrue';
@@ -72,9 +73,7 @@ const useParam = (route: RouteData) => {
 
     useSyncExternalStore(
       control._subscribeWithError,
-      () =>
-        errorControl._value === undefined &&
-        route._currentPath + '?' + route._currentSearch
+      () => (errorControl._valueToggler << 1) | control._valueToggler
     );
   } else {
     useSyncExternalStore(control._subscribe, () => control._valueToggler);
@@ -145,7 +144,7 @@ const handleHref = (
         handleRoute(routes[routeIndex]);
       }
 
-      let params =
+      const params =
         typeof _params == 'object'
           ? _params || EMPTY_OBJECT
           : _params!(route._params!._value);
@@ -263,7 +262,7 @@ const handleStringify = (
 };
 
 const createRouter = <Routes extends AnyRoutes>(
-  options: RoutesOptions & {
+  options: ToOptions & {
     getRoutes(
       createRoute: () => PathCreator<{}, never, never, []> & AsyncRoute
     ): Routes;
@@ -292,7 +291,7 @@ const createRouter = <Routes extends AnyRoutes>(
 
   let paramsWasReplaced = false;
 
-  const { NotFound, load: _load, Container } = options;
+  const { NotFound, load: _load } = options;
 
   if (_load) {
     beforeBatchCallbacksPush(() => {
@@ -801,7 +800,7 @@ const createRouter = <Routes extends AnyRoutes>(
 
           routes[currentNestingIndex] = routeData;
 
-          pathQueue.push(regexStr);
+          pathQueue.push(pathParamsCount ? `(${regexStr})` : regexStr);
 
           routesQueue.push(routes);
 
@@ -1588,46 +1587,39 @@ const createRouter = <Routes extends AnyRoutes>(
 
   window.addEventListener('popstate', popStateListener);
 
-  const allowLeave = () => {
-    isLeaveControl._set(false);
-
-    allowNavigate();
-
-    allowNavigate = noop;
-  };
-
-  const denyLeave = () => {
-    isLeaveControl._set(false);
-
-    allowNavigate = noop;
-  };
-
   return {
     [ROOT]: locationControl,
     routes,
-    _render: Container
-      ? () => jsx(Container, { children: jsx(Router, EMPTY_OBJECT) })
-      : Router,
-    block() {
-      isRouterAvailable = false;
+    _render: Router,
+    navigationGuard: {
+      enable() {
+        isRouterAvailable = false;
 
-      window.addEventListener('beforeunload', beforeUnloadListener);
+        window.addEventListener('beforeunload', beforeUnloadListener);
 
-      return this.unblock;
+        return this.disable;
+      },
+      disable() {
+        isRouterAvailable = true;
+
+        window.removeEventListener('beforeunload', beforeUnloadListener);
+      },
+      isNavigating: {
+        [ROOT]: isLeaveControl,
+        allow() {
+          isLeaveControl._set(false);
+
+          allowNavigate();
+
+          allowNavigate = noop;
+        },
+        deny() {
+          isLeaveControl._set(false);
+
+          allowNavigate = noop;
+        },
+      },
     },
-    unblock() {
-      isRouterAvailable = true;
-
-      window.removeEventListener('beforeunload', beforeUnloadListener);
-    },
-    useLeaveGuard: () => ({
-      isLeaving: useSyncExternalStore(
-        isLeaveControl._subscribe,
-        () => isLeaveControl._value
-      ),
-      allow: allowLeave,
-      deny: denyLeave,
-    }),
   } as Router<any>;
 };
 
@@ -1643,17 +1635,16 @@ type AnyRoutes = Record<string, (...args: any[]) => RouteBase<boolean>>;
 export type Router<Routes extends AnyRoutes> = {
   /** @internal */
   _render(): ReactElement;
-  block(): () => void;
-  useLeaveGuard(): { readonly isLeaving: boolean; allow(): void; deny(): void };
-  unblock(): void;
+  readonly navigationGuard: {
+    enable(): () => void;
+    disable(): void;
+    readonly isNavigating: ReadonlyControl<boolean> & {
+      allow(): void;
+      deny(): void;
+    };
+  };
   readonly routes: Routes;
 } & ReadonlyControl<RouterLocation>;
-
-type UnionToIntersection<U> = (U extends any ? (x: U) => void : never) extends (
-  x: infer R
-) => void
-  ? Required<R>
-  : never;
 
 declare const ROUTE_MARKER: unique symbol;
 
