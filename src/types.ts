@@ -172,6 +172,21 @@ type ProcessScope<
           }) &
   ScopeMarker<Value>;
 
+export type IsUnion<T, U = T> = T extends any
+  ? // isUnion check
+    [U] extends [T]
+    ? false
+    : true
+  : never;
+
+export type HandleUnknown<T, Fallback> = 0 extends 1 & T
+  ? T
+  : unknown extends T
+    ? [T] extends [unknown]
+      ? Fallback
+      : T
+    : T;
+
 declare class Scope {}
 
 export type ReadonlyAsyncControlScope<Value = any, Error = any> = Scope &
