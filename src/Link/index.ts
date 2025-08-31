@@ -4,11 +4,14 @@ import {
   type MouseEvent,
   type ReactNode,
 } from 'react';
-import type { RouteBase } from '../createRouter';
-import { ROUTE_METHODS, ROUTE_PARAMS } from '../utils/constants';
+
+import { ROOT, ROUTE_METHODS, ROUTE_PARAMS } from '../utils/constants';
+import type { NavigationTarget, RouteData } from '../createRouter/types';
+import alwaysNoop from '../utils/alwaysNoop';
+import noop from 'lodash.noop';
 
 export type LinkProps = {
-  to: RouteBase<true>;
+  to: NavigationTarget<true>;
   onClick?(e: MouseEvent<HTMLAnchorElement, any>): void;
   render(
     href: string,
@@ -18,6 +21,29 @@ export type LinkProps = {
   ignoreBlock?: boolean;
   scrollToTop?: boolean;
   scrollRestoration?: boolean;
+};
+
+const useParams = (route: RouteData) => {
+  const control = route._params!;
+
+  if ('_subscribeWithError' in control) {
+    const errorControl = control._errorControl[ROOT];
+
+    if (errorControl._value !== undefined) {
+      throw errorControl._value;
+    }
+
+    useSyncExternalStore(
+      control._subscribeWithError,
+      () => (errorControl._valueToggler << 1) | control._valueToggler
+    );
+  } else {
+    useSyncExternalStore(control._subscribe, () => control._valueToggler);
+  }
+};
+
+const useNoop = () => {
+  useSyncExternalStore(alwaysNoop, noop);
 };
 
 const Link: FC<LinkProps> = ({
@@ -32,7 +58,7 @@ const Link: FC<LinkProps> = ({
   scrollRestoration,
 }) =>
   render(
-    _useHref(params),
+    _useHref(params, useParams, useNoop),
     params ||
       onClick ||
       ignoreBlock ||

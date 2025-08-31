@@ -33,7 +33,7 @@ export interface InternalControl<T = any> {
 export interface InternalAsyncControl extends InternalControl {
   readonly [ROOT]: this;
   readonly _awaitOnly?: true;
-  readonly _errorControl: Omit<ReadonlyControl, typeof CONTROL_MARKER> & {
+  readonly _errorControl: Omit<Control, typeof CONTROL_MARKER> & {
     [ROOT]: { readonly _parent: InternalAsyncControl };
   };
   readonly _isLoadedControl: Omit<
