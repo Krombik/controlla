@@ -1,8 +1,8 @@
-import type { RouteBase } from '../createRouter';
+import { NavigationTarget } from '../types';
 import { ROUTE_METHODS, ROUTE_PARAMS } from '../utils/constants';
 
 const navigate = (
-  to: RouteBase<true>,
+  to: NavigationTarget<true>,
   replace?: boolean,
   ignoreBlock?: boolean,
   scrollToTop?: boolean,

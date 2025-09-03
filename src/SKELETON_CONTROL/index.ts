@@ -64,7 +64,7 @@ const utils = {
     } as Partial<
       InternalAsyncControl[typeof ROOT]['_errorControl'][typeof ROOT]
     >,
-  },
+  } as Partial<InternalAsyncControl[typeof ROOT]['_errorControl']>,
   _isLoadedControl: {
     [ROOT]: {
       _get: alwaysFalse,

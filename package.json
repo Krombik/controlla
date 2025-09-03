@@ -1,6 +1,6 @@
 {
   "name": "react-state-forge",
-  "version": "0.0.1-alpha.41",
+  "version": "0.0.1-alpha.44",
   "description": "",
   "author": "Krombik",
   "license": "MIT",
@@ -18,9 +18,9 @@
     "node": ">=10"
   },
   "scripts": {
-    "build": "tsup",
-    "watch": "tsup --watch",
-    "release": "tsup && npm publish ./build"
+    "build": "NODE_OPTIONS='--max-old-space-size=16384' tsup",
+    "watch": "NODE_OPTIONS='--max-old-space-size=16384' tsup --watch",
+    "release": "NODE_OPTIONS='--max-old-space-size=16384' tsup && npm publish ./build"
   },
   "peerDependencies": {
     "@types/react": ">=16.8.0",
@@ -36,9 +36,9 @@
     "@types/lodash.noop": "^3.0.9",
     "@types/node": "^22.7.4",
     "@types/react": "^19.1.7",
-    "prettier": "^3.5.3",
+    "prettier": "^3.6.2",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3"
+    "typescript": "^5.9.2"
   },
   "keywords": [],
   "sideEffects": false,

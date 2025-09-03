@@ -1,39 +1,32 @@
 import {
   type ComponentType,
-  type FC,
   type PropsWithChildren,
+  type ReactElement,
   useSyncExternalStore,
 } from 'react';
 
-import type { Route } from '../createRouter/types';
+import type { RouteIsPage } from '../types';
 import noop from 'lodash.noop';
 import { jsx } from 'react/jsx-runtime';
 import { EMPTY_ARR, EMPTY_OBJECT } from '../utils/constants';
 import { postBatchCallbacksPush, scheduleBatch } from '../utils/batching';
 import concat from '../utils/concat';
 
-type Page = {
-  route: Route;
-  Component: ComponentType;
-  Container?: undefined;
-  children?: undefined;
-};
+export type Page = [route: RouteIsPage<true>, Component: ComponentType];
 
-type Container = {
-  Container: ComponentType<PropsWithChildren>;
-  children: Array<Page | Container>;
-  route?: undefined;
-  Component?: undefined;
-};
+export type Container = [
+  Container: ComponentType<PropsWithChildren>,
+  children: Array<Page | Container>,
+];
 
 const handleRouter = (
   level: number,
   routes: Array<Page | Container>,
   components: ComponentType[],
   setComponentsArr: Array<(Component: ComponentType) => void>,
-  routers: FC[]
+  routers: Array<() => ReactElement>
 ) => {
-  let Router: FC;
+  let Router: () => ReactElement;
 
   if (level < setComponentsArr.length) {
     Router = routers[level];
@@ -61,8 +54,8 @@ const handleRouter = (
     Router = () =>
       jsx(useSyncExternalStore(subscribe, getComponent), EMPTY_OBJECT);
 
-    setComponentsArr.push((component) => {
-      CurrentComponent = component;
+    setComponentsArr.push((Component) => {
+      CurrentComponent = Component;
 
       onValueChange();
     });
@@ -71,35 +64,35 @@ const handleRouter = (
   }
 
   for (let i = 0; i < routes.length; i++) {
-    const { Component, Container, children, route } = routes[i];
+    const [arg1, arg2] = routes[i];
 
-    if (route) {
+    if (Array.isArray(arg2)) {
+      const Router = handleRouter(
+        level + 1,
+        arg2,
+        concat(components, () =>
+          jsx(arg1 as ComponentType, { children: jsx(Router, EMPTY_OBJECT) })
+        ),
+        setComponentsArr,
+        routers
+      );
+    } else {
       const l = components.length;
 
       const last = setComponentsArr[l];
 
-      route._register(
+      (arg1 as RouteIsPage<true>)._register(
         l
           ? () => {
               for (let i = 0; i < l; i++) {
                 setComponentsArr[i](components[i]);
               }
 
-              last(Component);
+              last(arg2);
             }
           : () => {
-              last(Component);
+              last(arg2);
             }
-      );
-    } else {
-      const Router = handleRouter(
-        level + 1,
-        children,
-        concat(components, () =>
-          jsx(Container, { children: jsx(Router, EMPTY_OBJECT) })
-        ),
-        setComponentsArr,
-        routers
       );
     }
   }

@@ -2,7 +2,10 @@ import identity from 'lodash.identity';
 import { ROOT } from '../utils/constants';
 import alwaysTrue from '../utils/alwaysTrue';
 import alwaysFalse from '../utils/alwaysFalse';
-import type {
+import {
+  AsyncControl,
+  HandleUnknown,
+  IsUnion,
   HandleParse,
   HandleStringify,
   ParamOptions,
@@ -12,8 +15,7 @@ import type {
   CreatePath,
   OneOfOptions,
   ArrayOptions,
-} from './types';
-import { AsyncControl, HandleUnknown, IsUnion } from '../types';
+} from '../types';
 
 const parseArray = (value: string) => value.split('/');
 
@@ -251,7 +253,7 @@ export const query = ((
               >
             ? [
                 (
-                  | V
+                  | HandleUnknown<V, string>
                   | (O extends true
                       ? P[key] extends { defaultValue: infer K }
                         ? Extract<K extends () => infer K ? K : K, undefined>
@@ -469,7 +471,7 @@ export const param = ((
               >
             ? [
                 (
-                  | V
+                  | HandleUnknown<V, string>
                   | (O extends true
                       ? P[key] extends { defaultValue: infer K }
                         ? Extract<K extends () => infer K ? K : K, undefined>
@@ -612,7 +614,7 @@ export const createAsyncPath: {
   ): any =>
     handlePath(path, source);
 
-const createPath: CreatePath = (
+export const createPath: CreatePath = (
   ...path: Array<
     | string
     | PathParam<Record<string, any>>
@@ -620,5 +622,3 @@ const createPath: CreatePath = (
     | QueryParamWithReplace<Record<string, any>>
   >
 ): any => handlePath(path);
-
-export default createPath;

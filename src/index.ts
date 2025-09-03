@@ -49,7 +49,19 @@ export { default as SuspenseOnlyController } from './SuspenseOnlyController';
 export { default as SuspenseOnlyAllController } from './SuspenseOnlyAllController';
 
 export { default as createRouter } from './createRouter';
-export { default as Router } from './Router';
+export {
+  createPath,
+  createAsyncPath,
+  array,
+  oneOf,
+  param,
+  query,
+} from './createPath';
+export { default as NOT_FOUND } from './NOT_FOUND';
+export { default as withNotFound } from './withNotFound';
+export { default as createRouterView } from './createRouterView';
+export { default as onMatched } from './onMatched';
+export { default as paramsOf } from './paramsOf';
 export { default as navigate } from './navigate';
 export { default as Link } from './Link';
 export { default as Redirect } from './Redirect';
@@ -80,5 +92,7 @@ export type {
   ReadonlyAsyncControlScope,
   ReadonlyControl,
   ReadonlyControlScope,
+  NavigationTarget,
+  ParamsOf,
   // PaginatedStorage,
 } from './types';

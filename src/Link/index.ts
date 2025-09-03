@@ -6,7 +6,7 @@ import {
 } from 'react';
 
 import { ROOT, ROUTE_METHODS, ROUTE_PARAMS } from '../utils/constants';
-import type { NavigationTarget, RouteData } from '../createRouter/types';
+import type { NavigationTarget, RouteData } from '../types';
 import alwaysNoop from '../utils/alwaysNoop';
 import noop from 'lodash.noop';
 

@@ -1,6 +1,6 @@
 import identity from 'lodash.identity';
-import createPath from '../createPath';
-import type { AnyPaths, Path, PathParam } from '../createPath/types';
+import { createPath } from '../createPath';
+import type { AnyPaths, Path, PathParam, UnionToIntersection } from '../types';
 import NOT_FOUND from '../NOT_FOUND';
 
 const NAME = 'notFoundPath';
@@ -23,9 +23,12 @@ const restPath = ((parsers, stringifies, pathParams, path) => {
 
 const withNotFound = <Paths extends AnyPaths>(
   paths: Paths
-): Paths & { [NOT_FOUND]: Path<never, { [NAME]: string }> } => ({
-  ...paths,
-  [NOT_FOUND]: createPath(restPath),
-});
+): UnionToIntersection<Paths> & {
+  [NOT_FOUND]: Path<never, { [NAME]: string }>;
+} =>
+  ({
+    ...paths,
+    [NOT_FOUND]: createPath(restPath),
+  }) as any;
 
 export default withNotFound;
