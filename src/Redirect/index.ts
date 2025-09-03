@@ -1,9 +1,9 @@
 import { type FC, useEffect } from 'react';
-import type { RouteBase } from '../createRouter';
 import navigate from '../navigate';
+import { NavigationTarget } from '../types';
 
 export type RedirectProps = {
-  to: RouteBase<true>;
+  to: NavigationTarget<true>;
   push?: boolean;
 };
 

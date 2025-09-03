@@ -5,6 +5,17 @@ import type {
   InternalAsyncControl,
   InternalControl,
   UnionToIntersection,
+  ParamsUpdatedData,
+  ProcessParams,
+  Navigation,
+  NavigationTarget,
+  RouteData,
+  RouteMethods,
+  RouteParamsData,
+  Router,
+  NavigationState,
+  Route,
+  AnyPaths,
 } from '../types';
 import createControlScope from '../createControlScope';
 import noop from 'lodash.noop';
@@ -15,6 +26,7 @@ import {
   ROUTE_PARAMS,
   EMPTY_OBJECT,
   EMPTY_STRING,
+  EMPTY_ARR,
 } from '../utils/constants';
 import concat from '../utils/concat';
 import createScope from '../utils/createScope';
@@ -22,20 +34,8 @@ import getAsyncControl from '../utils/getAsyncControl';
 import { set } from '../utils/control/scope';
 import load from '../load';
 import alwaysFalse from '../utils/alwaysFalse';
-import type {
-  ParamsUpdatedData,
-  ProcessParams,
-  Navigation,
-  NavigationTarget,
-  RouteData,
-  RouteMethods,
-  RouteParams,
-  Router,
-  NavigationState,
-  Route,
-} from './types';
-import type { AnyPaths } from '../createPath/types';
 import NOT_FOUND from '../NOT_FOUND';
+import prepend from '../utils/prepend';
 
 type HistoryState = { idx?: number; scroll?: [x: number, y: number] };
 
@@ -45,7 +45,7 @@ const getEmptyString = () => EMPTY_STRING;
 
 const handleHref = (
   routes: RouteData[],
-  updatedParams?: RouteParams[],
+  updatedParams?: RouteParamsData[],
   maxControls?: number,
   isMutableOrUseParams?: true | ((route: RouteData) => void),
   useNoop?: () => void
@@ -212,6 +212,7 @@ const createRouter = <Paths extends AnyPaths>(
     findCurrentRouteArr: Array<(path: string, search: string) => boolean>,
     dataQueue: RouteData[][],
     data: RouteData[],
+    controls: ControlScope[],
     parentRegexStr: string,
     paramsCount: number,
     withPathParams: boolean
@@ -301,6 +302,10 @@ const createRouter = <Paths extends AnyPaths>(
 
       const paramsRoot = paramsControl && paramsControl[ROOT];
 
+      const currControls = paramsControl
+        ? prepend(controls, paramsControl)
+        : controls;
+
       const regexStr =
         parentRegexStr + (pathParamsCount ? `(${_regexStr})` : _regexStr);
 
@@ -385,6 +390,8 @@ const createRouter = <Paths extends AnyPaths>(
         _isMatched: isMatchedRoot,
         _params: paramsRoot,
         _source,
+        _load: noop,
+        _unload: noop,
       };
 
       const _withPathParams = withPathParams || !!pathParamsCount;
@@ -398,6 +405,26 @@ const createRouter = <Paths extends AnyPaths>(
         params?: null | ProcessParams<Record<string, any>>,
         stringifiedPrams?: Record<string, string>
       ) => NavigationTarget<boolean>;
+
+      isMatchedControl[ROUTE_METHODS] = (load) => {
+        routeData._load = function () {
+          const res = load(...currControls);
+
+          if (res) {
+            this._unload = function () {
+              for (let i = 0; i < res.length; i++) {
+                res[i]();
+              }
+
+              this._unload = noop;
+            };
+          }
+        };
+
+        if (routeData._isMatched._value) {
+          routeData._load();
+        }
+      };
 
       if (
         (pathParamsCount || queryParamsCount) &&
@@ -420,6 +447,7 @@ const createRouter = <Paths extends AnyPaths>(
           findCurrentRouteArr,
           dataQueue,
           routesData,
+          currControls,
           regexStr,
           _paramsCount,
           _withPathParams
@@ -504,7 +532,7 @@ const createRouter = <Paths extends AnyPaths>(
       } else {
         const regex = new RegExp(`^${regexStr || '/'}$`);
 
-        const testRegex = regex[withPathParams ? 'exec' : 'test'].bind(regex);
+        const testRegex = regex[_withPathParams ? 'exec' : 'test'].bind(regex);
 
         const routeIndex = dataQueue.length;
 
@@ -690,7 +718,7 @@ const createRouter = <Paths extends AnyPaths>(
                             continue;
                           }
 
-                          return false;
+                          return true;
                         }
 
                         if (paramsWasReplaced) {
@@ -795,7 +823,7 @@ const createRouter = <Paths extends AnyPaths>(
                                   history.state,
                                   '',
                                   handleHref(
-                                    routesData,
+                                    routesQueue[currentRouteIndex],
                                     [{ _params: params, _route: route }],
                                     0,
                                     true
@@ -862,10 +890,14 @@ const createRouter = <Paths extends AnyPaths>(
           if (currRoute != nextRoute) {
             if (nextRoute) {
               nextRoute._isMatched._set(true);
+
+              nextRoute._load();
             }
 
             if (currRoute) {
               currRoute._isMatched._set(false);
+
+              currRoute._unload();
 
               if (currRoute._params) {
                 currRoute._params._value = undefined;
@@ -888,7 +920,7 @@ const createRouter = <Paths extends AnyPaths>(
     routes: RouteData[],
     setComponents: () => void,
     event: ReactMouseEvent<HTMLAnchorElement, any> | null,
-    params: RouteParams[] | undefined,
+    params: RouteParamsData[] | undefined,
     replace: boolean | undefined,
     ignoreBlock: boolean | undefined,
     enableScrollToTop: boolean | undefined,
@@ -984,8 +1016,6 @@ const createRouter = <Paths extends AnyPaths>(
   const findCurrentRouteArr: Array<(path: string, search: string) => boolean> =
     [];
 
-  const { pathname, search } = location;
-
   const isLeaveControl: InternalControl<boolean> =
     createSimpleControl<boolean>(false)[ROOT];
 
@@ -1002,6 +1032,8 @@ const createRouter = <Paths extends AnyPaths>(
   const navigations: Record<string, Navigation<AnyPaths, any>> = {};
 
   const routes: Route<any, any, any> = {} as any;
+
+  let { pathname, search } = location;
 
   let delta = 0;
 
@@ -1105,11 +1137,13 @@ const createRouter = <Paths extends AnyPaths>(
       const { pathname, search } = location;
 
       for (
-        let i = 0;
+        var i = 0;
         i < findCurrentRouteArr.length &&
         findCurrentRouteArr[i](pathname, search);
         i++
       ) {}
+
+      currentRouteIndex = i;
     }
   };
 
@@ -1119,39 +1153,18 @@ const createRouter = <Paths extends AnyPaths>(
     paths,
     findCurrentRouteArr,
     routesQueue,
-    [],
+    EMPTY_ARR,
+    EMPTY_ARR,
     '',
     0,
     false
   );
 
-  // const routes5 = options.getRoutes((): any => {
-  //   return {
-  //     to(options) {
-  //       const { load: _load } = options;
+  if (pathname.length > 1 && pathname.at(-1) == '/') {
+    pathname = pathname.slice(0, -1);
 
-  //       const isMatchedControl = createSimpleControl(false);
-
-  //       const isMatchedRoot = isMatchedControl[ROOT];
-
-  //       if (_load) {
-  //         let unloads: Array<() => void> = EMPTY_ARR;
-
-  //         isMatchedRoot._subscribe((isMatched: boolean) => {
-  //           if (isMatched) {
-  //             unloads = _load() || EMPTY_ARR;
-  //           } else {
-  //             for (let i = 0; i < unloads.length; i++) {
-  //               unloads[i]();
-  //             }
-
-  //             unloads = EMPTY_ARR;
-  //           }
-  //         });
-  //       }
-  //     },
-  //   };
-  // });
+    history.replaceState(state, '', pathname + search);
+  }
 
   if (!state || state.idx == null) {
     history.replaceState(
@@ -1165,10 +1178,13 @@ const createRouter = <Paths extends AnyPaths>(
   }
 
   for (
-    let i = 0;
-    i < findCurrentRouteArr.length && findCurrentRouteArr[i](pathname, search);
-    i++
+    var routeIndex = 0;
+    routeIndex < findCurrentRouteArr.length &&
+    findCurrentRouteArr[routeIndex](pathname, search);
+    routeIndex++
   ) {}
+
+  currentRouteIndex = routeIndex;
 
   window.addEventListener('popstate', popStateListener);
 

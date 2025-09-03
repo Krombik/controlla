@@ -71,7 +71,7 @@ export default defineConfig((prevOptions) => ({
   watch: prevOptions.watch,
   outDir,
   minify: false,
-  entry: ['src/index.ts', `src/!(utils|types)/**/*.(ts|tsx)`],
+  entry: ['src/index.ts', `src/!(utils|types)/index.(ts|tsx)`],
   splitting: true,
   sourcemap: true,
   clean: true,
