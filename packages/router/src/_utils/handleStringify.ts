@@ -1,0 +1,29 @@
+import identity from 'lodash.identity';
+import type { HandleStringify } from '#_types';
+import nonUndefinedIdentity from '#utils/nonUndefinedIdentity';
+
+const handleStringify = (
+  stringify: ((value: any) => string) | undefined,
+  optional: boolean | undefined,
+  defaultValue: undefined | unknown | (() => unknown)
+): HandleStringify => {
+  if (optional) {
+    const getDefaultValue =
+      defaultValue !== undefined &&
+      (typeof defaultValue != 'function' ? () => defaultValue : defaultValue);
+
+    return stringify
+      ? getDefaultValue
+        ? (value) => stringify(value !== undefined ? value : getDefaultValue())
+        : (value) => (value !== undefined ? stringify(value) : value)
+      : getDefaultValue
+        ? (value) => (value !== undefined ? value : getDefaultValue())
+        : identity;
+  }
+
+  return stringify
+    ? (value, key) => stringify(nonUndefinedIdentity(value, key))
+    : nonUndefinedIdentity;
+};
+
+export default handleStringify;
