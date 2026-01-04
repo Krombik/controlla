@@ -1,0 +1,50 @@
+{
+  "name": "@react-control/router",
+  "version": "0.0.1-alpha.44",
+  "description": "",
+  "author": "Krombik",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Krombik/react-state-forge.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Krombik/react-state-forge/issues"
+  },
+  "homepage": "https://github.com/Krombik/react-state-forge#readme",
+  "type": "module",
+  "source": "src/index.ts",
+  "engines": {
+    "node": ">=10"
+  },
+  "scripts": {
+    "build": "tsup",
+    "watch": "tsup --watch",
+    "release": "tsup && npm publish ./build"
+  },
+  "peerDependencies": {
+    "@react-control/core": "workspace:*",
+    "@types/react": ">=17.0.0",
+    "react": ">=17.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@types/react": {
+      "optional": true
+    }
+  },
+  "keywords": [],
+  "sideEffects": false,
+  "dependencies": {
+    "lodash.identity": "catalog:",
+    "lodash.noop": "catalog:"
+  },
+  "devDependencies": {
+    "@react-control/core": "workspace:*"
+  },
+  "imports": {
+    "#utils/*": "./src/_utils/*.ts",
+    "#@/*": "./src/*/index.ts",
+    "#types": "./src/types.ts",
+    "#_types": "./src/_types.ts"
+  }
+}

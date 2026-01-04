@@ -1,0 +1,71 @@
+import type { InternalControl } from '#_types';
+import executeSetters from '#utils/executeSetters';
+import scheduleMicrotask from '#utils/scheduleMicrotask';
+
+const beforeBatchCallbacks: Array<() => void> = [];
+
+const postBatchCallbacks: Array<() => void> = [];
+
+let batchMap = new Map<InternalControl, any>();
+
+let batchInPending = true;
+
+/** @internal */
+export const scheduleBatch = () => {
+  if (batchInPending) {
+    batchInPending = false;
+
+    scheduleMicrotask(() => {
+      for (let i = 0; i < beforeBatchCallbacks.length; i++) {
+        beforeBatchCallbacks[i]();
+      }
+
+      beforeBatchCallbacks.length = 0;
+
+      const currMap = batchMap;
+
+      batchMap = new Map();
+
+      const it = currMap.keys();
+
+      const next = it.next.bind(it);
+
+      for (let i = currMap.size; i--; ) {
+        const control: InternalControl = next().value;
+
+        control._valueToggler = (control._valueToggler ^ 1) as 0 | 1;
+
+        if (control._callbacks.size) {
+          executeSetters(control._callbacks, currMap.get(control));
+        }
+      }
+
+      for (let i = 0; i < postBatchCallbacks.length; i++) {
+        postBatchCallbacks[i]();
+      }
+
+      postBatchCallbacks.length = 0;
+
+      batchInPending = true;
+
+      if (beforeBatchCallbacks.length || batchMap.size) {
+        scheduleBatch();
+      }
+    });
+  }
+};
+
+/** @internal */
+export const addToBatch = (control: InternalControl, value: any) => {
+  batchMap.set(control, value);
+
+  scheduleBatch();
+};
+
+/** @internal */
+export const beforeBatchCallbacksPush =
+  beforeBatchCallbacks.push.bind(beforeBatchCallbacks);
+
+/** @internal */
+export const postBatchCallbacksPush =
+  postBatchCallbacks.push.bind(postBatchCallbacks);

@@ -1,51 +1,22 @@
 {
-  "name": "react-state-forge",
-  "version": "0.0.1-alpha.44",
-  "description": "",
-  "author": "Krombik",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/Krombik/react-state-forge.git"
-  },
-  "bugs": {
-    "url": "https://github.com/Krombik/react-state-forge/issues"
-  },
-  "homepage": "https://github.com/Krombik/react-state-forge#readme",
-  "type": "module",
-  "source": "src/index.ts",
-  "engines": {
-    "node": ">=10"
-  },
+  "private": true,
   "scripts": {
-    "build": "NODE_OPTIONS='--max-old-space-size=16384' tsup",
-    "watch": "NODE_OPTIONS='--max-old-space-size=16384' tsup --watch",
-    "release": "NODE_OPTIONS='--max-old-space-size=16384' tsup && npm publish ./build"
-  },
-  "peerDependencies": {
-    "@types/react": ">=16.8.0",
-    "react": ">=16.8.0"
-  },
-  "peerDependenciesMeta": {
-    "@types/react": {
-      "optional": true
-    }
+    "build": "pnpm -r build",
+    "watch": "pnpm -r --parallel dev"
   },
   "devDependencies": {
     "@types/lodash.identity": "^3.0.9",
     "@types/lodash.noop": "^3.0.9",
     "@types/node": "^22.7.4",
     "@types/react": "^19.1.7",
+    "eslint": "^9.39.2",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-import-resolver-typescript": "^4.4.4",
     "prettier": "^3.6.2",
     "tsup": "^8.5.0",
-    "typescript": "^5.9.2"
+    "typescript-eslint": "^8.51.0",
+    "typescript": "^5.9.2",
+    "yaml": "^2.8.2"
   },
-  "keywords": [],
-  "sideEffects": false,
-  "dependencies": {
-    "keyweaver": "^1.0.3",
-    "lodash.identity": "^3.0.0",
-    "lodash.noop": "^3.0.1",
-    "react-helpful-utils": "^1.0.6"
-  }
+  "sideEffects": false
 }
