@@ -1,6 +1,5 @@
 import noop from 'lodash.noop';
 import type { PollableMethods, InternalAsyncControl } from '#_types';
-import becomingOnline from '#utils/becomingOnline';
 import type createLoader from '#utils/createLoader';
 import { ROOT } from '#shared/constants';
 import type { AsyncControl, PollableControlOptions } from '#types';
@@ -136,7 +135,6 @@ export const handlePolling: Parameters<
           Promise.all([
             loadingProcess._sleepPromise,
             loadingProcess._pausePromise,
-            becomingOnline(),
           ]),
           cancelPromise,
         ]))

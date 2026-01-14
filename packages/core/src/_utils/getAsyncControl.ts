@@ -1,4 +1,3 @@
-import noop from 'lodash.noop';
 import type {
   ValueChangeCallbacks,
   Mutable,
@@ -42,8 +41,6 @@ function set(
   const prevRootValue = self._value;
 
   self._commonSet(value, path);
-
-  self._tickEnd();
 
   const newRootValue = self._value;
 
@@ -169,8 +166,6 @@ const getAsyncControl = (
           }
         : null,
       _keys,
-      _tickEnd: _tickEnd || noop,
-      _tickStart: _tickStart || noop,
       _get: get,
       _callbacks: controlCallbacks,
       _children: undefined,
@@ -183,7 +178,7 @@ const getAsyncControl = (
       _loadingProcess: undefined!,
       _subscribeWithError: alwaysNoop,
       _subscribeWithLoad: _load && alwaysNoop,
-      _valueToggler: 0,
+      _valueToggler: true,
       _unobserve: undefined,
     },
     options.value,
@@ -216,7 +211,7 @@ const getAsyncControl = (
       _parent: control,
       _value: undefined,
       _callbacks: errorCallbacks,
-      _valueToggler: 0,
+      _valueToggler: true,
     },
   } as InternalAsyncControl['_errorControl'];
 

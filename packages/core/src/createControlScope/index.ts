@@ -41,7 +41,7 @@ const createControlScope: {
       _set: set,
       _subscribe: createSubscribe(callbacks),
       _children: undefined,
-      _valueToggler: 0,
+      _valueToggler: true,
       _unobserve: undefined,
     },
     value,

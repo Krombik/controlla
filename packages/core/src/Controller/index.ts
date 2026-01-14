@@ -51,7 +51,8 @@ const Controller = (({ render, control }: Props<ReadonlyAsyncControl>) => {
 
   useSyncExternalStore(
     utils._subscribeWithError,
-    () => (errorControl._valueToggler << 1) | utils._valueToggler
+    () =>
+      ((errorControl._valueToggler as any) << 1) | (utils._valueToggler as any)
   );
 
   return render(utils._get(), isLoadedControl._value, errorControl._value);

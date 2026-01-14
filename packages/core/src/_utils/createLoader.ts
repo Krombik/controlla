@@ -5,7 +5,6 @@ import type {
   LoadableControlOptions,
   RequestableControlOptions,
 } from '#types';
-import becomingOnline from '#utils/becomingOnline';
 import { RESOLVED_PROMISE } from '#utils/constants';
 
 const createLoader = <U extends Record<string, any> = never>(
@@ -47,10 +46,6 @@ const createLoader = <U extends Record<string, any> = never>(
             },
             (err) => {
               if (isRunning) {
-                if (!navigator.onLine) {
-                  return becomingOnline().then(retriableFetcher);
-                }
-
                 if (shouldRetryOnError) {
                   const delay = shouldRetryOnError(err, attempt);
 
@@ -74,8 +69,6 @@ const createLoader = <U extends Record<string, any> = never>(
       async () => {
         if (isRunning) {
           self._isFetchInProgress = true;
-
-          self._tickStart();
         }
 
         const res = await retriableFetcher();
