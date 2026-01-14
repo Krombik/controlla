@@ -78,7 +78,8 @@ const use: {
 
       useSyncExternalStore(utils._subscribeWithError, () =>
         withValueWatching
-          ? (errorControl._valueToggler << 1) | utils._valueToggler
+          ? ((errorControl._valueToggler as any) << 1) |
+            (utils._valueToggler as any)
           : (((errorControl._value === undefined) as any) << 1) |
             ((root._value !== undefined) as any)
       );

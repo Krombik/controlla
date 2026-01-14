@@ -23,9 +23,20 @@ export type Falsy = Nil | false | 0 | '';
 export type ValueChangeCallbacks = Set<(value: any) => void>;
 
 /** @internal */
-export type ScopeCallbackMap = Partial<
-  Pick<InternalControl, '_callbacks' | '_children'>
+export type ScopeCallbackMap = Pick<
+  InternalControl,
+  '_callbacks' | '_children' | '_valueToggler'
 >;
+
+/** @internal */
+export type PatchNode = {
+  _set: boolean;
+  _isObject: boolean;
+  _value: any;
+  _prevValue: any;
+  readonly _children: Map<string, PatchNode>;
+  readonly _childrenKeys: string[];
+};
 
 /** @internal */
 export interface InternalControl<T = any> {
@@ -34,12 +45,14 @@ export interface InternalControl<T = any> {
   _subscribe(cb: (value: any) => void): () => void;
   _get(): any;
   _set(value?: T, path?: readonly string[]): void;
+  readonly _patchNode: PatchNode;
+  _stale: boolean;
   readonly _path?: readonly string[];
   readonly _callbacks: ValueChangeCallbacks;
   _children?: Map<string, ScopeCallbackMap>;
   /** storage of proxies */
   _storage?: Map<string, InternalControl>;
-  _valueToggler: 0 | 1;
+  _valueToggler: boolean;
   _unobserve: (() => void) | undefined;
 }
 
@@ -80,8 +93,6 @@ export interface InternalAsyncControl extends InternalControl {
   } | null;
   _isFetchInProgress: boolean;
   readonly _keys?: any[];
-  _tickStart(): void;
-  _tickEnd(): void;
   _subscribeWithLoad?(cb: () => void): () => void;
   _subscribeWithError(cb: () => void): () => void;
   _load?(...args: any[]): (() => void) | void;

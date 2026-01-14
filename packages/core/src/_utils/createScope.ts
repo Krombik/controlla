@@ -45,7 +45,7 @@ const childHandler: ProxyHandler<InternalControl | InternalAsyncControl> = {
 
       (control as Mutable<typeof control>)._callbacks = callbacks;
 
-      control._valueToggler = 0;
+      control._valueToggler = true;
 
       if ('_load' in root) {
         (control as InternalAsyncControl)._subscribeWithError =
@@ -92,7 +92,7 @@ const childHandler: ProxyHandler<InternalControl | InternalAsyncControl> = {
 
 const rootHandler: ProxyHandler<InternalControl | InternalAsyncControl> = {
   get(control, prop: string | typeof ROOT) {
-    if (prop == ROOT) {
+    if (prop === ROOT) {
       return control;
     }
 

@@ -37,7 +37,9 @@ const useParams = (route: RouteData) => {
 
     useSyncExternalStore(
       control._subscribeWithError,
-      () => (errorControl._valueToggler << 1) | control._valueToggler
+      () =>
+        ((errorControl._valueToggler as any) << 1) |
+        (control._valueToggler as any)
     );
   } else {
     useSyncExternalStore(control._subscribe, () => control._valueToggler);

@@ -1,5 +1,10 @@
 import noop from 'lodash.noop';
-import type { ScopeCallbackMap, InternalControl } from '#_types';
+import {
+  type ScopeCallbackMap,
+  type InternalControl,
+  type PatchNode,
+  PatchNodeStatus,
+} from '#_types';
 import { addToBatch } from '#shared/batching';
 import processControlChanges from '#utils/processControlChanges';
 

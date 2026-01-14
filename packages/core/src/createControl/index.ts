@@ -23,7 +23,7 @@ const createControl = ((
         _callbacks: callbacks,
         _set: set,
         _subscribe: createSubscribe(callbacks),
-        _valueToggler: 0,
+        _valueToggler: true,
         _unobserve: undefined,
       },
       value,

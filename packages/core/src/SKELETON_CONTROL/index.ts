@@ -57,7 +57,7 @@ const utils = {
       _set: noop,
       _subscribe: alwaysNoop,
       _value: undefined,
-      _valueToggler: 0,
+      _valueToggler: true,
     } as Partial<
       InternalAsyncControl[typeof ROOT]['_errorControl'][typeof ROOT]
     >,
@@ -68,11 +68,11 @@ const utils = {
       _set: noop,
       _subscribe: alwaysNoop,
       _value: false,
-      _valueToggler: 0,
+      _valueToggler: true,
     } as Partial<InternalControl>,
   } as Partial<InternalAsyncControl[typeof ROOT]['_isLoadedControl']>,
   _subscribeWithError: alwaysNoop,
-  _valueToggler: 0,
+  _valueToggler: true,
 } as Partial<SkeletonControl> as SkeletonControl;
 
 (utils as Mutable<typeof utils>)[ROOT] = utils;
@@ -94,7 +94,7 @@ const utils = {
  */
 const SKELETON_CONTROL: LoadableControl<any, any, any> = new Proxy(utils, {
   get(target, key, proxy) {
-    return key == ROOT ? target : proxy;
+    return key === ROOT ? target : proxy;
   },
 }) as any;
 

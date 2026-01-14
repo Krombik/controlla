@@ -15,6 +15,7 @@ const createSimpleControl = <T>(value?: T) => {
       _callbacks: callbacks,
       _set: set,
       _subscribe: createSubscribe(callbacks),
+      _valueToggler: true,
     },
   } as Control<T>;
 };
