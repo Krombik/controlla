@@ -1,20 +1,9 @@
 import noop from 'lodash.noop';
-import type { InternalAsyncControl, InternalControl, Mutable } from '#_types';
+import type { SkeletonControl, Mutable, AsyncControlRoot } from '#_types';
 import alwaysFalse from '#shared/alwaysFalse';
-import type { ContextType } from 'react';
-import type SuspenseContext from '#utils/SuspenseContext';
-import type ErrorBoundaryContext from '#utils/ErrorBoundaryContext';
 import alwaysNoop from '#shared/alwaysNoop';
 import { ROOT } from '#shared/constants';
 import type { LoadableControl } from '#types';
-
-/** @internal */
-export type SkeletonControl = {
-  _fakeSuspense(
-    suspenseCtx: ContextType<typeof SuspenseContext>,
-    errorBoundaryCtx: ContextType<typeof ErrorBoundaryContext>
-  ): Promise<any>;
-} & InternalAsyncControl;
 
 const NOOP_PROMISE_DESCRIPTOR: PropertyDescriptor = {
   value() {
@@ -26,7 +15,7 @@ const utils = {
   _fakeSuspense(suspenseCtx, errorBoundaryCtx) {
     if (suspenseCtx) {
       return new Promise<void>((res) => {
-        suspenseCtx.set({} as any, res);
+        suspenseCtx.push(res);
 
         if (errorBoundaryCtx) {
           errorBoundaryCtx.add(res);
@@ -36,32 +25,26 @@ const utils = {
 
     throw new Error('No Suspense Wrapper');
   },
-  _promise: {
-    _promise: Object.create(Promise.prototype, {
-      then: NOOP_PROMISE_DESCRIPTOR,
-      catch: NOOP_PROMISE_DESCRIPTOR,
-      finally: NOOP_PROMISE_DESCRIPTOR,
-    }),
-  } as InternalAsyncControl['_promise'],
-  _slowLoading: {
-    _callbacks: { add: noop, delete: noop },
-  } as InternalAsyncControl['_slowLoading'],
+  _promise: Object.create(Promise.prototype, {
+    then: NOOP_PROMISE_DESCRIPTOR,
+    catch: NOOP_PROMISE_DESCRIPTOR,
+    finally: NOOP_PROMISE_DESCRIPTOR,
+  }),
+  _slowLoading: null,
   _value: undefined,
   _subscribe: alwaysNoop,
   _get: noop,
-  _set: noop,
-  [ROOT]: undefined!,
+  _enqueueSet: noop,
+  _root: undefined!,
   _errorControl: {
     [ROOT]: {
       _get: noop,
-      _set: noop,
+      _enqueueSet: noop,
       _subscribe: alwaysNoop,
       _value: undefined,
       _valueToggler: true,
-    } as Partial<
-      InternalAsyncControl[typeof ROOT]['_errorControl'][typeof ROOT]
-    >,
-  } as Partial<InternalAsyncControl[typeof ROOT]['_errorControl']>,
+    } as Partial<AsyncControlRoot['_errorControl'][typeof ROOT]>,
+  } as AsyncControlRoot['_errorControl'],
   _isLoadedControl: {
     [ROOT]: {
       _get: alwaysFalse,
@@ -69,13 +52,12 @@ const utils = {
       _subscribe: alwaysNoop,
       _value: false,
       _valueToggler: true,
-    } as Partial<InternalControl>,
-  } as Partial<InternalAsyncControl[typeof ROOT]['_isLoadedControl']>,
-  _subscribeWithError: alwaysNoop,
+    },
+  },
   _valueToggler: true,
 } as Partial<SkeletonControl> as SkeletonControl;
 
-(utils as Mutable<typeof utils>)[ROOT] = utils;
+(utils as Mutable<typeof utils>)._root = utils;
 
 /**
  * A special control that remains permanently in a pending control.

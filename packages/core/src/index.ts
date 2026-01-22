@@ -1,14 +1,9 @@
-export { default as createControlScope } from '#@/createControlScope';
 export { default as createControl } from '#@/createControl';
-export { default as createAsyncControlScope } from '#@/createAsyncControlScope';
 export { default as createAsyncControl } from '#@/createAsyncControl';
-export { default as createRequestableControlScope } from '#@/createRequestableControlScope';
 export { default as createRequestableControl } from '#@/createRequestableControl';
-export { default as createPollableControlScope } from '#@/createPollableControlScope';
 export { default as createPollableControl } from '#@/createPollableControl';
 
 export { default as useControl } from '#@/useControl';
-export { default as useControlScope } from '#@/useControlScope';
 
 export { default as createStorage } from '#@/createStorage';
 

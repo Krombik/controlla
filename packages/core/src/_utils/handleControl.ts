@@ -1,7 +1,7 @@
-import type { InternalAsyncControl, InternalControl } from '#_types';
+import type { ControlRoot } from '#_types';
 import type { SyncExternalStorage } from '#types';
 
-const handleControl = <S extends InternalControl | InternalAsyncControl>(
+const handleControl = <S extends ControlRoot>(
   control: S,
   value: unknown | (() => unknown) | undefined,
   syncExternalStorage: SyncExternalStorage | undefined,
@@ -24,7 +24,7 @@ const handleControl = <S extends InternalControl | InternalAsyncControl>(
 
     if (observe) {
       control._unobserve = observe((newValue) => {
-        control._set(newValue);
+        control._enqueueSet(newValue);
       });
     }
 
@@ -32,6 +32,10 @@ const handleControl = <S extends InternalControl | InternalAsyncControl>(
   } else if (typeof value == 'function') {
     value = value(keys);
   }
+
+  control._patchNode._value = value;
+
+  control._patchNode._prevValue = value;
 
   control._value = value;
 

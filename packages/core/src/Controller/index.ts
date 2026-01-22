@@ -20,16 +20,13 @@ const Controller = (({ render, control }: Props<ReadonlyAsyncControl>) => {
 
   const l = render.length;
 
-  if (l < 2) {
-    useSyncExternalStore(
-      utils._subscribeWithLoad || utils._subscribe,
-      () => utils._valueToggler
-    );
+  useSyncExternalStore(utils._subscribe, () => utils._valueToggler);
 
+  if (l < 2) {
     return (render as Function)(utils._get());
   }
 
-  const root = utils[ROOT];
+  const root = utils._root;
 
   const isLoadedControl = root._isLoadedControl[ROOT];
 
@@ -39,20 +36,14 @@ const Controller = (({ render, control }: Props<ReadonlyAsyncControl>) => {
   );
 
   if (l < 3) {
-    useSyncExternalStore(
-      utils._subscribeWithLoad || utils._subscribe,
-      () => utils._valueToggler
-    );
-
     return (render as Function)(utils._get(), isLoadedControl._value);
   }
 
   const errorControl = root._errorControl[ROOT];
 
   useSyncExternalStore(
-    utils._subscribeWithError,
-    () =>
-      ((errorControl._valueToggler as any) << 1) | (utils._valueToggler as any)
+    errorControl._subscribe,
+    () => errorControl._valueToggler
   );
 
   return render(utils._get(), isLoadedControl._value, errorControl._value);

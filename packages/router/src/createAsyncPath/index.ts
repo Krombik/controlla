@@ -6,7 +6,7 @@ import type {
   PathParam,
   QueryParamWithReplace,
 } from '#_types';
-import createAsyncControlScope from '@react-control/core/createAsyncControlScope';
+import createAsyncControl from '@react-control/core/createAsyncControlScope';
 import load from '@react-control/core/load';
 import { ROOT } from '@react-control/core/_shared/constants';
 
@@ -25,7 +25,7 @@ const createAsyncPath: {
     handlePath(
       path,
       () =>
-        createAsyncControlScope(
+        createAsyncControl(
           source[ROOT]._load &&
             ({ load: () => load(source as LoadableControl) } as any)
         ),

@@ -2,8 +2,9 @@ import type { Primitive, PrimitiveOrNested } from 'keyweaver';
 
 import type { ROOT } from '#shared/constants';
 import type {
-  InternalAsyncControl,
-  InternalControl,
+  AsyncControlRoot,
+  ControlChild,
+  ControlRoot,
   Nil,
   PartialTuple,
   PollableMethods,
@@ -25,7 +26,7 @@ declare const LOADING_PROCESS_MARKER: unique symbol;
 
 export type ReadonlyControl<Value = any> = {
   /** @internal */
-  [ROOT]: InternalControl;
+  [ROOT]: ControlChild | ControlRoot;
   [CONTROL_MARKER]: Value;
 };
 
@@ -48,7 +49,7 @@ export type Control<Value = any> = ReadonlyControl<Value> & {
 
 type AsyncControlBase<Error> = {
   /** @internal */
-  readonly [ROOT]: InternalAsyncControl;
+  readonly [ROOT]: AsyncControlRoot;
   [ERROR_MARKER]: Error;
 };
 
@@ -176,28 +177,19 @@ export type LoadableControlOptions<
 
 export type RequestableControlOptions<
   T,
-  E = any,
   Keys extends PrimitiveOrNested[] = never,
-> = Omit<LoadableControlOptions<T, E, never, Keys>, 'load' | 'isLoaded'> & {
+> = Omit<LoadableControlOptions<T, any, never, Keys>, 'load' | 'isLoaded'> & {
   /**
    * A function that starts the loading process for the control and returns a promise
    * that resolves with the loaded value.
    */
   fetch(...keys: [Keys] extends [never] ? [] : Keys): Promise<T>;
-  /**
-   * A function that determines whether the loading process should be retried after an error occurs.
-   * @param err - The error encountered during the loading attempt.
-   * @param attempt - The number of loading attempts made so far.
-   * @returns The delay in milliseconds before retrying, or `0` to stop retrying.
-   */
-  shouldRetryOnError?(err: E, attempt: number): number;
 };
 
 export type PollableControlOptions<
   T = any,
-  E = any,
   Keys extends PrimitiveOrNested[] = never,
-> = RequestableControlOptions<T, E, Keys> &
+> = RequestableControlOptions<T, Keys> &
   Pick<AsyncControlOptions<T>, 'isLoaded'> & {
     /** The interval in milliseconds at which the control should poll for new data. */
     interval: number;

@@ -16,30 +16,15 @@ const awaitOnly = <S extends ReadonlyAsyncControl>(
     : S extends ReadonlyAsyncControl<any, infer E>
       ? ReadonlyAsyncControl<void, E>
       : never => {
-  const utils = control[ROOT];
-
-  const root = utils[ROOT];
+  const root = control[ROOT]._root;
 
   return {
-    [ROOT]:
-      root != utils
-        ? {
-            [ROOT]: root,
-            _get: noop,
-            _subscribe: utils._subscribe,
-            _subscribeWithError: utils._subscribeWithError,
-            _subscribeWithLoad: utils._subscribeWithLoad,
-            _path: utils._path,
-            _awaitOnly: true,
-          }
-        : {
-            [ROOT]: utils,
-            _get: noop,
-            _subscribe: utils._subscribe,
-            _subscribeWithError: utils._subscribeWithError,
-            _subscribeWithLoad: utils._subscribeWithLoad,
-            _awaitOnly: true,
-          },
+    [ROOT]: {
+      _root: root,
+      _get: noop,
+      _subscribe: root._subscribe,
+      _watchValueChanges: false,
+    },
   } as LoadableControl<any, any, any> as any;
 };
 

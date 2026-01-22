@@ -9,7 +9,7 @@ const setValue = <S extends Control>(
 ) => {
   const utils = control[ROOT];
 
-  (utils[ROOT] || utils)._set(
+  utils._root._enqueueSet(
     typeof value != 'function' ? value : value(utils._get()),
     utils._path
   );

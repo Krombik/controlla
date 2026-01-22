@@ -1,20 +1,21 @@
-import type { ValueChangeCallbacks } from '#_types';
+import type { OnValueChange } from '#_types';
 import { ROOT } from '#shared/constants';
-import createSubscribe from '#utils/createSubscribe';
-import { get, set } from '#utils/control/common';
+import rootGet from '#utils/rootGet';
 import type { Control } from '#types';
+import { createSubscriber, enqueuePrimitiveSet } from '#utils/batching';
+import alwaysNoop from '#shared/alwaysNoop';
 
 /** @internal */
 const createSimpleControl = <T>(value?: T) => {
-  const callbacks: ValueChangeCallbacks = new Set();
+  const callbacks: OnValueChange[] = [];
 
   return {
     [ROOT]: {
       _value: value,
-      _get: get,
+      _get: rootGet,
       _callbacks: callbacks,
-      _set: set,
-      _subscribe: createSubscribe(callbacks),
+      _enqueueSet: enqueuePrimitiveSet,
+      _subscribe: createSubscriber(callbacks, alwaysNoop),
       _valueToggler: true,
     },
   } as Control<T>;

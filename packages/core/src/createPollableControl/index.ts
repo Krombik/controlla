@@ -1,39 +1,32 @@
 import type {
   PollableControlOptions,
-  LoadableControl,
-  PollableControl,
+  PollableControlScope,
   SyncExternalStorage,
 } from '#types';
-import { ROOT } from '#shared/constants';
 import createLoader from '#utils/createLoader';
+import createScope from '#utils/createScope';
 import getAsyncControl from '#utils/getAsyncControl';
 import { handlePolling, PollingControl } from '#utils/handlePolling';
 
-import { set } from '#utils/control/common';
-
-const createPollableControl = ((
-  options: PollableControlOptions<any, any, any[]>,
-  syncExternalStorage?: SyncExternalStorage,
-  keys?: any[],
-  tickStart?: () => void,
-  tickEnd?: () => void
-) => ({
-  [ROOT]: getAsyncControl(
-    set,
-    options,
-    createLoader(handlePolling, options),
-    keys,
-    syncExternalStorage,
-    PollingControl,
-    tickStart,
-    tickEnd
-  ),
-})) as {
-  /** Creates a {@link LoadableControl loadable control} with polling capabilities. */
+const createPollableControl: {
+  /** Creates a controllable loadable nested control with polling capabilities. */
   <T, E = any>(
-    options: PollableControlOptions<T, E>,
+    options: PollableControlOptions<T>,
     syncExternalStorage?: SyncExternalStorage<T | undefined>
-  ): PollableControl<T, E>;
-};
+  ): PollableControlScope<T, E>;
+} = (
+  options: PollableControlOptions<any, any[]>,
+  syncExternalStorage?: SyncExternalStorage,
+  keys?: any[]
+) =>
+  createScope(
+    getAsyncControl(
+      options,
+      createLoader(handlePolling, options.fetch),
+      keys,
+      syncExternalStorage,
+      PollingControl
+    )
+  );
 
 export default createPollableControl;

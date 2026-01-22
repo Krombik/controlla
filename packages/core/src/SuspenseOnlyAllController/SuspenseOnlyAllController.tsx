@@ -8,33 +8,40 @@ import type { ReadonlyAsyncControl } from '#types';
 
 type Props<S extends Array<ReadonlyAsyncControl | Falsy>> =
   PropsWithChildren & {
-    control: S;
-    /** A function or element to render if any of the {@link Props.control control} fail. */
+    controls: S;
+    /** A function or element to render if any of the {@link Props.controls control} fail. */
     renderIfError?: ((errors: ExtractErrors<S>) => ReactNode) | ReactNode;
   } & Pick<SuspenseProps, 'fallback'>;
 
-const Controller: FC<Props<any[]>> = ({ control, renderIfError, children }) => {
-  control = control.map((control) => control && awaitOnly(control));
+const Controller: FC<Props<any[]>> = ({
+  controls,
+  renderIfError,
+  children,
+  fallback,
+}) => {
+  controls = controls.map((control) => control && awaitOnly(control));
 
   if (renderIfError === undefined) {
-    useAll(control);
+    useAll(controls);
 
     return children;
   }
 
-  const errors = useAll(control, true)[1];
+  const errors = useAll(controls, true)[1];
 
   return errors.every((item) => item === undefined)
     ? children
-    : typeof renderIfError == 'function'
-      ? renderIfError(errors)
-      : renderIfError;
+    : renderIfError === true
+      ? fallback
+      : typeof renderIfError != 'function'
+        ? renderIfError
+        : renderIfError(errors);
 };
 
 /**
- * A controller component for rendering multiple {@link Props.control controls} using `awaitOnly` to avoid unnecessary re-renders.
- * It utilizes the {@link useAll} hook under the hood to monitor the resolution or failure of all provided {@link Props.control controls}.
- * This component integrates with the {@link Suspense} component, deferring rendering until all {@link Props.control controls} are ready or an error occurs.
+ * A controller component for rendering multiple {@link Props.controls controls} using `awaitOnly` to avoid unnecessary re-renders.
+ * It utilizes the {@link useAll} hook under the hood to monitor the resolution or failure of all provided {@link Props.controls controls}.
+ * This component integrates with the {@link Suspense} component, deferring rendering until all {@link Props.controls controls} are ready or an error occurs.
  *
  * @example
  * ```jsx

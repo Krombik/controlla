@@ -28,6 +28,7 @@ const Controller: FC<Props<any[]>> = ({
   controls,
   renderIfError,
   container,
+  fallback,
 }) => {
   if (renderIfError === undefined) {
     return handleContainerChildren(container, render(useAll(controls)));
@@ -39,9 +40,11 @@ const Controller: FC<Props<any[]>> = ({
     container,
     errors.every((item) => item === undefined)
       ? render(values)
-      : typeof renderIfError == 'function'
-        ? renderIfError(errors, values)
-        : renderIfError
+      : renderIfError === true
+        ? fallback
+        : typeof renderIfError != 'function'
+          ? renderIfError
+          : renderIfError(errors, values)
   );
 };
 

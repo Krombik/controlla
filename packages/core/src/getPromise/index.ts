@@ -16,36 +16,9 @@ import { ROOT } from '#shared/constants';
 const getPromise = <T>(control: ReadonlyAsyncControl<T>): Promise<T> => {
   const utils = control[ROOT];
 
-  const root = utils[ROOT];
-
-  const data = root._promise;
-
-  let promise: Promise<any>;
-
-  if (data) {
-    promise = data._promise;
-  } else if (root._isLoadedControl[ROOT]._value) {
-    promise =
-      root._value !== undefined
-        ? Promise.resolve(root._value)
-        : Promise.reject(root._errorControl[ROOT]._value);
-  } else {
-    let _resolve!: (value: any) => void, _reject!: (error: any) => void;
-
-    promise = new Promise<any>((res, rej) => {
-      _resolve = res;
-
-      _reject = rej;
-    });
-
-    root._promise = {
-      _promise: promise,
-      _reject,
-      _resolve,
-    };
-  }
-
-  return utils._path ? promise.then(() => utils._get()) : promise;
+  return utils._path
+    ? utils._root._promise.then(() => utils._get())
+    : utils._root._promise;
 };
 
 export default getPromise;
