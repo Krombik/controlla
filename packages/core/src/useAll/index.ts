@@ -3,7 +3,7 @@ import type {
   Falsy,
   ExtractValues,
   ExtractErrors,
-  InternalAsyncControl,
+  AsyncControlRoot,
 } from '#_types';
 import noop from 'lodash.noop';
 import ErrorBoundaryContext from '#utils/ErrorBoundaryContext';
@@ -92,7 +92,7 @@ const useAll = <
     if (control) {
       const utils = control[ROOT];
 
-      const root = utils[ROOT];
+      const root = utils._root;
 
       const errorControl = root._errorControl[ROOT];
 
@@ -105,29 +105,28 @@ const useAll = <
       }
 
       if (root._value !== undefined || isError) {
-        const withValueWatching = !utils._awaitOnly;
-
-        useSyncExternalStore(utils._subscribeWithError, () =>
-          withValueWatching
-            ? ((errorControl._valueToggler as any) << 1) |
-              (utils._valueToggler as any)
-            : (((errorControl._value === undefined) as any) << 1) |
-              ((root._value !== undefined) as any)
+        useSyncExternalStore(utils._subscribe, () =>
+          utils._watchValueChanges
+            ? utils._valueToggler
+            : utils._root._value !== undefined
         );
 
-        if (withValueWatching) {
-          values[i] = utils._get();
-        }
+        useSyncExternalStore(
+          errorControl._subscribe,
+          () => errorControl._valueToggler
+        );
+
+        values[i] = utils._get();
 
         errors[i] = err;
       } else {
-        const unloadedControls: InternalAsyncControl[] = [root];
+        const unloadedControls: AsyncControlRoot[] = [root];
 
         while (++i < l) {
           const control = controls[i];
 
           if (control) {
-            const root = control[ROOT][ROOT];
+            const root = control[ROOT]._root;
 
             const err = root._errorControl[ROOT]._value;
 
@@ -139,6 +138,8 @@ const useAll = <
               throw err;
             }
           }
+
+          useSyncExternalStore(alwaysNoop, noop);
 
           useSyncExternalStore(alwaysNoop, noop);
         }
@@ -166,6 +167,8 @@ const useAll = <
         });
       }
     } else {
+      useSyncExternalStore(alwaysNoop, noop);
+
       useSyncExternalStore(alwaysNoop, noop);
     }
   }

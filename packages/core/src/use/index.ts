@@ -61,7 +61,7 @@ const use: {
   if (control) {
     const utils = control[ROOT];
 
-    const root = utils[ROOT];
+    const root = utils._root;
 
     const errorControl = root._errorControl[ROOT];
 
@@ -74,25 +74,30 @@ const use: {
     }
 
     if (root._value !== undefined || isError) {
-      const withValueWatching = !utils._awaitOnly;
-
-      useSyncExternalStore(utils._subscribeWithError, () =>
-        withValueWatching
-          ? ((errorControl._valueToggler as any) << 1) |
-            (utils._valueToggler as any)
-          : (((errorControl._value === undefined) as any) << 1) |
-            ((root._value !== undefined) as any)
+      useSyncExternalStore(utils._subscribe, () =>
+        utils._watchValueChanges
+          ? utils._valueToggler
+          : utils._root._value !== undefined
       );
 
-      const value = withValueWatching ? utils._get() : undefined;
+      useSyncExternalStore(
+        errorControl._subscribe,
+        () => errorControl._valueToggler
+      );
+
+      const value = utils._get();
 
       return safeReturn ? [value, err] : value;
     }
 
     useSyncExternalStore(alwaysNoop, noop);
 
+    useSyncExternalStore(alwaysNoop, noop);
+
     throw handleSuspense(root, errorBoundaryCtx, suspenseCtx);
   }
+
+  useSyncExternalStore(alwaysNoop, noop);
 
   useSyncExternalStore(alwaysNoop, noop);
 };

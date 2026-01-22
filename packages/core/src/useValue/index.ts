@@ -9,10 +9,7 @@ const useValue = ((control: AnyAsyncControl | Falsy) => {
   if (control) {
     const utils = control[ROOT];
 
-    useSyncExternalStore(
-      utils._subscribeWithLoad || utils._subscribe,
-      () => utils._valueToggler
-    );
+    useSyncExternalStore(utils._subscribe, () => utils._valueToggler);
 
     return utils._get();
   }

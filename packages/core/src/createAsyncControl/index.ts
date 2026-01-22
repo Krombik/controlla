@@ -1,36 +1,20 @@
 import type {
-  AsyncControl,
+  AsyncControlScope,
   AsyncControlOptions,
-  LoadableControl,
+  LoadableControlScope,
   LoadableControlOptions,
   SyncExternalStorage,
 } from '#types';
-import { ROOT } from '#shared/constants';
-
+import createScope from '#utils/createScope';
 import getAsyncControl from '#utils/getAsyncControl';
 
-import { set } from '#utils/control/common';
-
-const createAsyncControl = ((
-  options: LoadableControlOptions<any, any, any>,
-  syncExternalStorage?: SyncExternalStorage,
-  keys?: any[]
-) => ({
-  [ROOT]: getAsyncControl(
-    set,
-    options || {},
-    options && options.load,
-    keys,
-    syncExternalStorage,
-    options && options.LoadingProcess
-  ),
-})) as {
+const createAsyncControl: {
   /**
-   * Creates a {@link LoadableControl loadable control} with basic loading capabilities.
+   * Creates a {@link LoadableControlScope loadable nested control} with basic loading capabilities.
    *
-   * @example
+   * * @example
    * ```js
-   * const loadableControl = createAsyncControl({
+   * const loadableControl = createAsyncNestedControl({
    *   load: () => {} // loading logic
    * });
    * ```
@@ -38,19 +22,34 @@ const createAsyncControl = ((
   <T, E = any, LoadingProcess = never>(
     options: LoadableControlOptions<T, E, LoadingProcess>,
     syncExternalStorage?: SyncExternalStorage<T | undefined>
-  ): LoadableControl<T, E, LoadingProcess>;
+  ): LoadableControlScope<T, E>;
   /**
-   * Creates a {@link AsyncControl basic asynchronous control}
+   * Creates a {@link AsyncControlScope basic asynchronous nested control}
    *
    * @example
    * ```js
-   * const asyncControl = createAsyncControl();
+   * const asyncControl = createAsyncNestedControl();
    * ```
    */
   <T, E = any>(
     options?: AsyncControlOptions<T>,
     syncExternalStorage?: SyncExternalStorage<T | undefined>
-  ): AsyncControl<T, E>;
-};
+  ): AsyncControlScope<T, E>;
+} = (
+  options: LoadableControlOptions<any, any, any, any[]>,
+  syncExternalStorage?: SyncExternalStorage,
+  keys?: any[]
+) =>
+  createScope(
+    options
+      ? getAsyncControl(
+          options,
+          options.load,
+          keys,
+          syncExternalStorage,
+          options.LoadingProcess
+        )
+      : getAsyncControl({}, undefined, keys, syncExternalStorage)
+  );
 
 export default createAsyncControl;

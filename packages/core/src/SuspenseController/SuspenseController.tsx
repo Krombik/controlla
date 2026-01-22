@@ -25,6 +25,7 @@ const Controller: FC<Props<ReadonlyAsyncControl>> = ({
   control,
   renderIfError,
   container,
+  fallback,
 }) => {
   if (renderIfError === undefined) {
     return handleContainerChildren(container, render(use(control)));
@@ -36,9 +37,11 @@ const Controller: FC<Props<ReadonlyAsyncControl>> = ({
     container,
     err === undefined
       ? render(value)
-      : typeof renderIfError == 'function'
-        ? renderIfError(err)
-        : renderIfError
+      : renderIfError === true
+        ? fallback
+        : typeof renderIfError != 'function'
+          ? renderIfError
+          : renderIfError(err)
   );
 };
 

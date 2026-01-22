@@ -1,24 +1,17 @@
 import { ROOT } from '#shared/constants';
-import type { InternalAsyncControl } from '#_types';
-import type {
-  LoadableControl,
-  LoadableControlOptions,
-  RequestableControlOptions,
-} from '#types';
-import { RESOLVED_PROMISE } from '#utils/constants';
+import type { AsyncControlRoot } from '#_types';
+import type { LoadableControl, LoadableControlOptions } from '#types';
 
 const createLoader = <U extends Record<string, any> = never>(
   handleLoad: (
-    cancelPromise: Promise<void>,
     fetch: () => Promise<true | void>,
-    self: InternalAsyncControl
-  ) => void | Promise<void>,
-  { fetch, shouldRetryOnError }: RequestableControlOptions<any, any, any[]>
+    cancelPromise: Promise<void>,
+    self: AsyncControlRoot
+  ) => Promise<true | void>,
+  fetch: (...args: any[]) => Promise<any>
 ) =>
   function (this: LoadableControl<any, any, U>, ...args: any[]) {
-    const self = this as Partial<InternalAsyncControl> as InternalAsyncControl;
-
-    let attempt = 0;
+    const self = this[ROOT];
 
     let isRunning = true;
 
@@ -32,51 +25,29 @@ const createLoader = <U extends Record<string, any> = never>(
       };
     });
 
-    const retriableFetcher = (): Promise<true | void> =>
-      isRunning
-        ? fetch(...args).then(
-            (value) => {
-              attempt = 0;
-
-              if (isRunning) {
-                self._set(value);
-
-                return true;
-              }
-            },
-            (err) => {
-              if (isRunning) {
-                if (shouldRetryOnError) {
-                  const delay = shouldRetryOnError(err, attempt);
-
-                  if (delay) {
-                    attempt++;
-
-                    return new Promise((res) => {
-                      setTimeout(res, delay);
-                    }).then(retriableFetcher);
-                  }
-                }
-
-                self._errorControl[ROOT]._set(err);
-              }
-            }
-          )
-        : RESOLVED_PROMISE;
-
     handleLoad(
-      cancelPromise,
       async () => {
         if (isRunning) {
           self._isFetchInProgress = true;
+
+          try {
+            const value = await fetch(...args);
+
+            if (isRunning) {
+              self._enqueueSet(value);
+
+              return true;
+            }
+          } catch (err) {
+            if (isRunning) {
+              self._errorControl[ROOT]._enqueueSet(err);
+            }
+          } finally {
+            self._isFetchInProgress = false;
+          }
         }
-
-        const res = await retriableFetcher();
-
-        self._isFetchInProgress = false;
-
-        return res;
       },
+      cancelPromise,
       self
     );
 

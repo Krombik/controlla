@@ -1,7 +1,8 @@
 import noop from 'lodash.noop';
 import type { ReadonlyAsyncControl, ReadonlyControl } from '#types';
-import { postBatchCallbacksPush } from '#shared/batching';
+import { addAfterFlushHook } from '#utils/batching';
 import { ROOT } from '#shared/constants';
+import { OnValueChange } from '#_types';
 
 const subscribe = ((
   control: ReadonlyControl | ReadonlyControl[],
@@ -28,7 +29,7 @@ const subscribe = ((
           if (isAvailable) {
             isAvailable = false;
 
-            postBatchCallbacksPush(() => {
+            addAfterFlushHook(() => {
               onChange(values);
 
               isAvailable = true;
@@ -41,7 +42,7 @@ const subscribe = ((
         if (isAvailable) {
           isAvailable = false;
 
-          postBatchCallbacksPush(() => {
+          addAfterFlushHook(() => {
             onChange();
 
             isAvailable = true;
@@ -63,7 +64,7 @@ const subscribe = ((
     };
   }
 
-  return control[ROOT]._subscribe(onChange);
+  return control[ROOT]._subscribe(onChange, true);
 }) as {
   /**
    * Registers a callback to be invoked when the value of a single {@link control} changes.
@@ -75,7 +76,7 @@ const subscribe = ((
    */
   <T>(
     control: ReadonlyAsyncControl<T>,
-    onChange: (value: T | undefined) => void
+    onChanged: OnValueChange<T | undefined>
   ): () => void;
   /**
    * Registers a callback to be invoked when the value of a single {@link control} changes.
@@ -85,7 +86,7 @@ const subscribe = ((
    * @returns a function to unsubscribe from the value change event.
    *
    */
-  <T>(control: ReadonlyControl<T>, onChange: (value: T) => void): () => void;
+  <T>(control: ReadonlyControl<T>, onChanged: OnValueChange<T>): () => void;
   /**
    * Registers a callback to be invoked when the values of multiple {@link controls} change.
    *

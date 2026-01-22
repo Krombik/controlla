@@ -1,7 +1,5 @@
 import toKey, { type PrimitiveOrNested } from 'keyweaver';
 import type {
-  AsyncControl,
-  LoadableControl,
   Control,
   Storage,
   AsyncControlOptions,
@@ -9,157 +7,73 @@ import type {
   PollableControlOptions,
   LoadableControlOptions,
   PollableControlScope,
-  PollableControl,
   LoadableControlScope,
   AsyncControlScope,
   ControlScope,
   SyncExternalStorage,
 } from '#types';
-import type { InternalControl, WithInitModule } from '#_types';
+import type { ControlRoot, WithInitModule } from '#_types';
 import type createControl from '#@/createControl';
 import type createAsyncControl from '#@/createAsyncControl';
-import type createControlScope from '#@/createControlScope';
-import type createAsyncControlScope from '#@/createAsyncControlScope';
 import type createRequestableControl from '#@/createRequestableControl';
-import type createRequestableControlScope from '#@/createRequestableControlScope';
 import type createPollableControl from '#@/createPollableControl';
-import type createPollableControlScope from '#@/createPollableControlScope';
 import { ROOT } from '#shared/constants';
-
-type ControlCreator = typeof createControl | typeof createControlScope;
-
-type GetControlArgs<
-  CreateControl extends ControlCreator,
-  T,
-  Keys extends PrimitiveOrNested[],
-  ParentKeys extends PrimitiveOrNested[] = [],
-> = WithInitModule<
-  T,
-  [
-    createControl: CreateControl,
-    defaultValue?: T | ((keys: [...ParentKeys, ...Keys]) => T),
-  ]
->;
-
-type AsyncControlCreator =
-  | typeof createAsyncControl
-  | typeof createAsyncControlScope;
-
-type AsyncGetControlArgs<
-  CreateControl extends AsyncControlCreator,
-  T,
-  Keys extends PrimitiveOrNested[],
-  ParentKeys extends PrimitiveOrNested[] = [],
-> = WithInitModule<
-  T | undefined,
-  [
-    createControl: CreateControl,
-    options?: AsyncControlOptions<T, [...ParentKeys, ...Keys]>,
-  ]
->;
-
-type LoadableControlArgs<
-  CreateControl extends AsyncControlCreator,
-  T,
-  E,
-  Control,
-  Keys extends PrimitiveOrNested[],
-  ParentKeys extends PrimitiveOrNested[] = [],
-> = WithInitModule<
-  T | undefined,
-  [
-    createControl: CreateControl,
-    options: LoadableControlOptions<T, E, Control, [...ParentKeys, ...Keys]>,
-  ]
->;
-
-type RequestableControlCreator =
-  | typeof createRequestableControl
-  | typeof createRequestableControlScope;
-
-type RequestableControlArgs<
-  CreateControl extends RequestableControlCreator,
-  T,
-  E,
-  Keys extends PrimitiveOrNested[],
-  ParentKeys extends PrimitiveOrNested[] = [],
-> = WithInitModule<
-  T | undefined,
-  [
-    createControl: CreateControl,
-    options: RequestableControlOptions<T, E, [...ParentKeys, ...Keys]>,
-  ]
->;
-
-type PollableControlCreator =
-  | typeof createPollableControl
-  | typeof createPollableControlScope;
-
-type PollableControlArgs<
-  CreateControl extends PollableControlCreator,
-  T,
-  E,
-  Keys extends PrimitiveOrNested[],
-  ParentKeys extends PrimitiveOrNested[] = [],
-> = WithInitModule<
-  T | undefined,
-  [
-    createControl: CreateControl,
-    options: PollableControlOptions<T, E, [...ParentKeys, ...Keys]>,
-  ]
->;
 
 interface CreateStorage {
   <T, Keys extends PrimitiveOrNested[], E = any, Control = never>(
-    ...args: LoadableControlArgs<
-      typeof createAsyncControlScope,
-      T,
-      E,
-      Control,
-      Keys
+    ...args: WithInitModule<
+      T | undefined,
+      [
+        createAsyncControl: typeof createAsyncControl,
+        options: LoadableControlOptions<T, E, Control, Keys>,
+      ]
     >
   ): Storage<LoadableControlScope<T, E, Control>, Keys>;
-  <T, Keys extends PrimitiveOrNested[], E = any, Control = never>(
-    ...args: LoadableControlArgs<typeof createAsyncControl, T, E, Control, Keys>
-  ): Storage<LoadableControl<T, E, Control>, Keys>;
 
   <T, Keys extends PrimitiveOrNested[], E = any>(
-    ...args: PollableControlArgs<typeof createPollableControlScope, T, E, Keys>
+    ...args: WithInitModule<
+      T | undefined,
+      [
+        createPollableControl: typeof createPollableControl,
+        options: PollableControlOptions<T, Keys>,
+      ]
+    >
   ): Storage<PollableControlScope<T, E>, Keys>;
-  <T, Keys extends PrimitiveOrNested[], E = any>(
-    ...args: PollableControlArgs<typeof createPollableControl, T, E, Keys>
-  ): Storage<PollableControl<T, E>, Keys>;
 
   <T, Keys extends PrimitiveOrNested[], E = any>(
-    ...args: AsyncGetControlArgs<typeof createAsyncControlScope, T, Keys>
+    ...args: WithInitModule<
+      T | undefined,
+      [
+        createAsyncControl: typeof createAsyncControl,
+        options?: AsyncControlOptions<T, Keys>,
+      ]
+    >
   ): Storage<AsyncControlScope<T, E>, Keys>;
-  <T, Keys extends PrimitiveOrNested[], E = any>(
-    ...args: AsyncGetControlArgs<typeof createAsyncControl, T, Keys>
-  ): Storage<AsyncControl<T, E>, Keys>;
 
   <T, Keys extends PrimitiveOrNested[], E = any>(
-    ...args: RequestableControlArgs<
-      typeof createRequestableControlScope,
-      T,
-      E,
-      Keys
+    ...args: WithInitModule<
+      T | undefined,
+      [
+        createRequestableControl: typeof createRequestableControl,
+        options: RequestableControlOptions<T, Keys>,
+      ]
     >
   ): Storage<LoadableControlScope<T, E>, Keys>;
-  <T, Keys extends PrimitiveOrNested[], E = any>(
-    ...args: RequestableControlArgs<typeof createRequestableControl, T, E, Keys>
-  ): Storage<LoadableControl<T, E>, Keys>;
 
   <T, Keys extends PrimitiveOrNested[]>(
-    ...args: GetControlArgs<typeof createControlScope, T, Keys>
-  ): Storage<ControlScope<T>, Keys>;
-  <T, Keys extends PrimitiveOrNested[]>(
-    ...args: GetControlArgs<typeof createControl, T, Keys>
+    ...args: WithInitModule<
+      T,
+      [
+        createControl: typeof createControl,
+        defaultValue?: T | ((keys: Keys) => T),
+      ]
+    >
   ): Storage<ControlScope<T>, Keys>;
 }
 
 const handleChildren = (
   item: Map<any, any> | Control,
-  name: Extract<keyof InternalControl, '_set' | '_unobserve'>
+  name: Extract<keyof ControlRoot, '_enqueueSet' | '_unobserve'>
 ) => {
   if (item instanceof Map) {
     const queue: Map<any, any>[] = [item];
@@ -187,16 +101,16 @@ const handleChildren = (
             push(next().value);
           }
         } else {
-          first[ROOT][name]!();
+          first[ROOT]._root[name]!();
 
           while (--i) {
-            (next().value as Control)[ROOT][name]!();
+            (next().value as Control)[ROOT]._root[name]!();
           }
         }
       }
     }
   } else {
-    item[ROOT][name]!();
+    item[ROOT]._root[name]!();
   }
 };
 
@@ -259,7 +173,7 @@ function clear(this: Storage<any, any>, ...keys: PrimitiveOrNested[]) {
     item = item.get(key)!;
   }
 
-  handleChildren(item, /* @__KEY__ */ '_set');
+  handleChildren(item, /* @__KEY__ */ '_enqueueSet');
 }
 
 function has(this: Storage<any, any>, ...keys: PrimitiveOrNested[]) {

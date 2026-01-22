@@ -1,14 +1,13 @@
-import type { InternalAsyncControl } from '#_types';
-import executeSetters from '#utils/executeSetters';
+import type { AsyncControlRoot } from '#_types';
 
-export const handleUnload = (data: InternalAsyncControl) => {
+export const handleUnload = (data: AsyncControlRoot) => {
   if (data._unload) {
     data._unload = data._unload();
   }
 };
 
 export const handleSlowLoading = (
-  slowLoading: InternalAsyncControl['_slowLoading'],
+  slowLoading: AsyncControlRoot['_slowLoading'],
   isLoaded: boolean
 ) => {
   if (slowLoading) {
@@ -17,7 +16,11 @@ export const handleSlowLoading = (
     slowLoading._timeoutId = isLoaded
       ? undefined
       : setTimeout(() => {
-          executeSetters(slowLoading._callbacks);
+          const callbacks = slowLoading._callbacks;
+
+          for (let i = 0; i < callbacks.length; i++) {
+            callbacks[i]();
+          }
         }, slowLoading._timeout);
   }
 };

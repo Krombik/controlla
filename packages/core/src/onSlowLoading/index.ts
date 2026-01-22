@@ -27,18 +27,36 @@ import { ROOT } from '#shared/constants';
  * ```
  */
 const onSlowLoading = (control: ReadonlyAsyncControl, cb: () => void) => {
-  const slowLoading = control[ROOT][ROOT]._slowLoading;
+  const slowLoading = control[ROOT]._root._slowLoading;
 
   if (!slowLoading) {
     throw new Error('slow loading timeout was not provided');
   }
 
-  const set = slowLoading._callbacks;
+  const callbacks = slowLoading._callbacks;
 
-  set.add(cb);
+  const indexMap = slowLoading._indexMap;
+
+  if (!indexMap.has(cb)) {
+    indexMap.set(cb, callbacks.length);
+
+    callbacks.push(cb);
+  }
 
   return () => {
-    set.delete(cb);
+    if (indexMap.has(cb)) {
+      const last = callbacks.pop()!;
+
+      if (last != cb) {
+        const index = indexMap.get(cb)!;
+
+        callbacks[index] = last;
+
+        indexMap.set(last, index)!;
+      }
+
+      indexMap.delete(cb);
+    }
   };
 };
 

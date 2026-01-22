@@ -1,14 +1,21 @@
 import type { PrimitiveOrNested } from 'keyweaver';
 import type { ROOT } from '#shared/constants';
-import type { ComponentType, JSX, PropsWithChildren } from 'react';
+import type {
+  ComponentType,
+  ContextType,
+  JSX,
+  PropsWithChildren,
+  useSyncExternalStore,
+} from 'react';
 import type {
   AsyncControl,
   Control,
   LoadableControl,
   ReadonlyAsyncControl,
-  ReadonlyControl,
   SyncExternalStorage,
 } from '#types';
+import type SuspenseContext from '#utils/SuspenseContext';
+import type ErrorBoundaryContext from '#utils/ErrorBoundaryContext';
 
 /** @internal */
 export type Mutable<T> = {
@@ -19,14 +26,7 @@ export type Nil = null | undefined;
 
 export type Falsy = Nil | false | 0 | '';
 
-/** @internal */
-export type ValueChangeCallbacks = Set<(value: any) => void>;
-
-/** @internal */
-export type ScopeCallbackMap = Pick<
-  InternalControl,
-  '_callbacks' | '_children' | '_valueToggler'
->;
+export type OnValueChange<T = any> = (newValue: T, prevValue: T) => void;
 
 /** @internal */
 export type PatchNode = {
@@ -38,49 +38,71 @@ export type PatchNode = {
   readonly _childrenKeys: string[];
 };
 
-/** @internal */
-export interface InternalControl<T = any> {
-  readonly [ROOT]?: this;
-  _value: T;
-  _subscribe(cb: (value: any) => void): () => void;
+interface SharedUtils {
+  _subscribe(
+    cb: (value: any, prevValue: any) => void,
+    withoutLoad?: boolean
+  ): () => void;
   _get(): any;
-  _set(value?: T, path?: readonly string[]): void;
-  readonly _patchNode: PatchNode;
-  _stale: boolean;
-  readonly _path?: readonly string[];
-  readonly _callbacks: ValueChangeCallbacks;
-  _children?: Map<string, ScopeCallbackMap>;
-  /** storage of proxies */
-  _storage?: Map<string, InternalControl>;
+  readonly _callbacks: OnValueChange[];
+  /** toggler for {@link useSyncExternalStore} */
   _valueToggler: boolean;
-  _unobserve: (() => void) | undefined;
+}
+
+export interface SharedPrimitiveControl extends SharedUtils {
+  _value: any;
+}
+
+export interface EnqueueblePrimitive extends SharedPrimitiveControl {
+  _nextValue: any;
+  _stale: boolean;
+}
+
+export interface ErrorUtils extends EnqueueblePrimitive {
+  readonly _root: ErrorUtils;
+  readonly _parent: AsyncControlRoot;
+  _enqueueSet(value?: any): void;
+}
+
+export interface ControlBase<T = any> extends SharedUtils {
+  readonly _root: ControlRoot<T>;
+  _children: Map<string, ControlChild> | undefined;
+  /** storage of proxies */
+  _storage: Map<string, ControlChild> | undefined;
 }
 
 /** @internal */
-export interface InternalAsyncControl extends InternalControl {
-  readonly [ROOT]: this;
-  readonly _awaitOnly?: true;
-  readonly _errorControl: Control & {
-    [ROOT]: { readonly _parent: InternalAsyncControl };
+export interface ControlChild<T = any> extends ControlBase<T> {
+  readonly _path: readonly string[];
+}
+
+export interface ControlRoot<T = any> extends ControlBase<T> {
+  readonly _path: undefined;
+  _value: T;
+  _enqueueSet(value?: T, path?: readonly string[]): void;
+  readonly _patchNode: PatchNode;
+  _stale: boolean;
+  _unobserve: (() => void) | undefined;
+}
+
+export interface AsyncControlRoot<T = any> extends ControlRoot<T> {
+  readonly _root: AsyncControlRoot<T>;
+  readonly _watchValueChanges: boolean;
+  readonly _errorControl: {
+    [ROOT]: ErrorUtils;
   };
-  readonly _isLoadedControl: ReadonlyControl<boolean>;
-  _commonSet: InternalControl['_set'];
-  _set(value: any, path?: readonly string[], isError?: boolean): void;
-  _isLoaded(value: any, prevValue: any, attempt: number | undefined): boolean;
+  readonly _isLoadedControl: { [ROOT]: SharedPrimitiveControl };
   readonly _slowLoading: {
     readonly _timeout: number;
     _timeoutId: ReturnType<typeof setTimeout> | undefined;
-    readonly _callbacks: Set<() => void>;
+    readonly _callbacks: Array<() => void>;
+    readonly _indexMap: Map<() => void, number>;
   } | null;
   _counter: number;
+  _isUnloadNotSchedule: boolean;
   _isLoadable: boolean;
-  _promise: {
-    readonly _promise: Promise<any>;
-    _resolve(value: any): void;
-    _reject(error: any): void;
-  } | null;
+  _promise: Promise<any>;
   _unload: (() => void) | void | undefined;
-  _attempt: number | undefined;
   readonly _reloadIfStale: {
     readonly _timeout: number;
     _timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -92,10 +114,7 @@ export interface InternalAsyncControl extends InternalControl {
     _focusListener: (() => void) | undefined;
   } | null;
   _isFetchInProgress: boolean;
-  readonly _keys?: any[];
-  _subscribeWithLoad?(cb: () => void): () => void;
-  _subscribeWithError(cb: () => void): () => void;
-  _load?(...args: any[]): (() => void) | void;
+  _load(reload?: boolean): () => void;
   readonly _loadingProcess: any;
 }
 
@@ -171,3 +190,11 @@ export type WithInitModule<T, Args extends any[]> = [
 export type ContainerType =
   | ComponentType<PropsWithChildren>
   | keyof JSX.IntrinsicElements;
+
+/** @internal */
+export type SkeletonControl = {
+  _fakeSuspense(
+    suspenseCtx: ContextType<typeof SuspenseContext>,
+    errorBoundaryCtx: ContextType<typeof ErrorBoundaryContext>
+  ): Promise<any>;
+} & ControlRoot;

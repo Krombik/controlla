@@ -9,10 +9,7 @@ import type { RouteIsPage } from '#_types';
 import noop from 'lodash.noop';
 import { jsx } from 'react/jsx-runtime';
 import { EMPTY_ARR, EMPTY_OBJECT } from '#utils/constants';
-import {
-  postBatchCallbacksPush,
-  scheduleBatch,
-} from '@react-control/core/_shared/batching';
+import batchedPostUpdates from '@react-control/core/_shared/batchedPostUpdates';
 import concat from '@react-control/core/_shared/concat';
 
 export type Page = [route: RouteIsPage<true>, Component: ComponentType];
@@ -40,11 +37,9 @@ const handleRouter = (
 
     const subscribe = (_onValueChange: () => void) => {
       onValueChange = () => {
-        postBatchCallbacksPush(() => {
-          _onValueChange();
+        batchedPostUpdates(() => {
+          _onValueChange;
         });
-
-        scheduleBatch();
       };
 
       return () => {

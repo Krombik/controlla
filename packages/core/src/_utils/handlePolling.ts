@@ -1,5 +1,5 @@
 import noop from 'lodash.noop';
-import type { PollableMethods, InternalAsyncControl } from '#_types';
+import type { PollableMethods, AsyncControlRoot } from '#_types';
 import type createLoader from '#utils/createLoader';
 import { ROOT } from '#shared/constants';
 import type { AsyncControl, PollableControlOptions } from '#types';
@@ -12,7 +12,7 @@ export class PollingControl implements PollableMethods {
   _sleepPromise: Promise<void> | void | false = undefined;
   _resume: () => void = noop;
   reset: () => void = noop;
-  readonly _root: InternalAsyncControl;
+  readonly _root: AsyncControlRoot;
 
   constructor(options: PollableControlOptions, control: AsyncControl) {
     const { hiddenInterval } = options;
@@ -125,7 +125,7 @@ function smartSleep(this: PollingControl) {
 
 export const handlePolling: Parameters<
   typeof createLoader<PollingControl>
->[0] = async (cancelPromise, load, self) => {
+>[0] = async (load, cancelPromise, self) => {
   const loadingProcess: PollingControl = self._loadingProcess;
 
   do {
@@ -143,7 +143,7 @@ export const handlePolling: Parameters<
 
         return;
       }
-    } while (loadingProcess._pausePromise || !navigator.onLine);
+    } while (loadingProcess._pausePromise);
   } while (
     await load().then((res) => {
       loadingProcess._sleepPromise = res && loadingProcess._sleep();
