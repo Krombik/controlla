@@ -1,4 +1,4 @@
-import alwaysFalse from '@react-control/core/_shared/alwaysFalse';
+import returnFalse from '@react-control/core/_shared/alwaysFalse';
 import handleParse from '#utils/handleParse';
 import handleStringify from '#utils/handleStringify';
 import type {
@@ -12,7 +12,7 @@ const query = ((
   params: Record<string, ParamOptions<unknown, unknown, boolean> | boolean>
 ) => {
   let deprecatedQuery: (searchParams: Record<string, string>) => boolean =
-    alwaysFalse;
+    returnFalse;
 
   const handleQuery = ((parsers, stringifies, queryParams) => {
     type Options = ParamOptions<unknown, true>;

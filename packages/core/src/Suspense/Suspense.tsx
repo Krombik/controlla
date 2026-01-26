@@ -8,11 +8,11 @@ import {
   useEffect,
   useRef,
 } from 'react';
-import SuspenseContext from '#utils/SuspenseContext';
-import ErrorBoundaryContext from '#utils/ErrorBoundaryContext';
+import SuspenseContext from '#internal/SuspenseContext';
+import ErrorBoundaryContext from '#internal/ErrorBoundaryContext';
 import noop from 'lodash.noop';
-import scheduleMicrotask from '#utils/scheduleMicrotask';
-import alwaysNoop from '#shared/alwaysNoop';
+import scheduleMicrotask from '#internal/scheduleMicrotask';
+import alwaysNoop from '#shared-internal/alwaysNoop';
 
 type Ctx = NonNullable<ContextType<typeof SuspenseContext>>;
 

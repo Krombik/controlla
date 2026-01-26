@@ -6,9 +6,9 @@ import {
 } from 'react';
 
 import type { RouteData } from '#_types';
-import alwaysNoop from '@react-control/core/_shared/alwaysNoop';
+import returnNoop from '@react-control/core/_shared/returnNoop';
 import noop from 'lodash.noop';
-import { ROOT } from '@react-control/core/_shared/constants';
+import { INTERNALS } from '@react-control/core/_shared/constants';
 import { ROUTE_METHODS, ROUTE_PARAMS } from '#utils/constants';
 import type { NavigationTarget } from '#types';
 
@@ -29,7 +29,7 @@ const useParams = (route: RouteData) => {
   const control = route._params!;
 
   if ('_subscribeWithError' in control) {
-    const errorControl = control._errorControl[ROOT];
+    const errorControl = control._errorControl[INTERNALS];
 
     if (errorControl._value !== undefined) {
       throw errorControl._value;
@@ -47,7 +47,7 @@ const useParams = (route: RouteData) => {
 };
 
 const useNoop = () => {
-  useSyncExternalStore(alwaysNoop, noop);
+  useSyncExternalStore(returnNoop, noop);
 };
 
 const Link: FC<LinkProps> = ({

@@ -1,15 +1,19 @@
 import { useSyncExternalStore } from 'react';
-import type { AnyAsyncControl, Falsy } from '#_types';
+import type { Falsy } from '#internal/types';
 import noop from 'lodash.noop';
-import alwaysNoop from '#shared/alwaysNoop';
-import { ROOT } from '#shared/constants';
-import type { ReadonlyAsyncControl, ReadonlyControl } from '#types';
+import alwaysNoop from '#shared-internal/alwaysNoop';
+import { INTERNALS } from '#shared-internal/constants';
+import type {
+  AsyncControl,
+  ReadonlyAsyncControl,
+  ReadonlyControl,
+} from '#types';
 
-const useValue = ((control: AnyAsyncControl | Falsy) => {
+const useValue = ((control: AsyncControl | Falsy) => {
   if (control) {
-    const utils = control[ROOT];
+    const utils = control[INTERNALS];
 
-    useSyncExternalStore(utils._subscribe, () => utils._valueToggler);
+    useSyncExternalStore(utils._subscribe, () => utils._versionToggle);
 
     return utils._get();
   }

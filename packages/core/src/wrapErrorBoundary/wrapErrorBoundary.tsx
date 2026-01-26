@@ -1,5 +1,5 @@
 import type { Component, ContextType } from 'react';
-import ErrorBoundaryContext from '#utils/ErrorBoundaryContext';
+import ErrorBoundaryContext from '#internal/ErrorBoundaryContext';
 import noop from 'lodash.noop';
 
 const ORIGINAL_RENDER = Symbol();

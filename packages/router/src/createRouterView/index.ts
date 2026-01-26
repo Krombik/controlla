@@ -10,7 +10,7 @@ import noop from 'lodash.noop';
 import { jsx } from 'react/jsx-runtime';
 import { EMPTY_ARR, EMPTY_OBJECT } from '#utils/constants';
 import batchedPostUpdates from '@react-control/core/_shared/batchedPostUpdates';
-import concat from '@react-control/core/_shared/concat';
+import append from '@react-control/core/_shared/concat';
 
 export type Page = [route: RouteIsPage<true>, Component: ComponentType];
 
@@ -68,7 +68,7 @@ const handleRouter = (
       const Router = handleRouter(
         level + 1,
         arg2,
-        concat(components, () =>
+        append(components, () =>
           jsx(arg1 as ComponentType, { children: jsx(Router, EMPTY_OBJECT) })
         ),
         setComponentsArr,

@@ -1,5 +1,5 @@
 import type { AsyncControl, Control } from '#types';
-import { ROOT } from '#shared/constants';
+import { INTERNALS } from '#shared-internal/constants';
 
 const setValue = <S extends Control>(
   control: S,
@@ -7,7 +7,7 @@ const setValue = <S extends Control>(
     ? K | ((prevValue: K | (S extends AsyncControl ? undefined : never)) => K)
     : never
 ) => {
-  const utils = control[ROOT];
+  const utils = control[INTERNALS];
 
   utils._root._enqueueSet(
     typeof value != 'function' ? value : value(utils._get()),

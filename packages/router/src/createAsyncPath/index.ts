@@ -8,7 +8,7 @@ import type {
 } from '#_types';
 import createAsyncControl from '@react-control/core/createAsyncControlScope';
 import load from '@react-control/core/load';
-import { ROOT } from '@react-control/core/_shared/constants';
+import { INTERNALS } from '@react-control/core/_shared/constants';
 
 const createAsyncPath: {
   <S>(source: AsyncControl<S>): CreatePath<S>;
@@ -26,7 +26,7 @@ const createAsyncPath: {
       path,
       () =>
         createAsyncControl(
-          source[ROOT]._load &&
+          source[INTERNALS]._load &&
             ({ load: () => load(source as LoadableControl) } as any)
         ),
       source

@@ -3,10 +3,10 @@ import type {
   PollableControlScope,
   SyncExternalStorage,
 } from '#types';
-import createLoader from '#utils/createLoader';
-import createScope from '#utils/createScope';
-import getAsyncControl from '#utils/getAsyncControl';
-import { handlePolling, PollingControl } from '#utils/handlePolling';
+import createLoadRunner from '#internal/createLoadRunner';
+import createScope from '#internal/createScope';
+import createAsyncRoot from '#internal/createAsyncRoot';
+import { polling, PollingProcess } from '#internal/polling';
 
 const createPollableControl: {
   /** Creates a controllable loadable nested control with polling capabilities. */
@@ -20,12 +20,12 @@ const createPollableControl: {
   keys?: any[]
 ) =>
   createScope(
-    getAsyncControl(
+    createAsyncRoot(
       options,
-      createLoader(handlePolling, options.fetch),
+      createLoadRunner(polling, options.fetch),
       keys,
       syncExternalStorage,
-      PollingControl
+      PollingProcess
     )
   );
 

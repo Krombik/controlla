@@ -3,10 +3,10 @@ import type {
   LoadableControlScope,
   SyncExternalStorage,
 } from '#types';
-import createLoader from '#utils/createLoader';
-import createScope from '#utils/createScope';
-import getAsyncControl from '#utils/getAsyncControl';
-import { handleFetch } from '#utils/handleFetch';
+import createLoadRunner from '#internal/createLoadRunner';
+import createScope from '#internal/createScope';
+import createAsyncRoot from '#internal/createAsyncRoot';
+import { loadOnce } from '#internal/loadOnce';
 
 const createRequestableControl: {
   /**
@@ -24,9 +24,9 @@ const createRequestableControl: {
   keys?: any[]
 ) =>
   createScope(
-    getAsyncControl(
+    createAsyncRoot(
       options,
-      createLoader(handleFetch, options.fetch),
+      createLoadRunner(loadOnce, options.fetch),
       keys,
       syncExternalStorage
     )
