@@ -1,6 +1,6 @@
 import noop from 'lodash.noop';
-import alwaysFalse from '@react-control/core/_shared/alwaysFalse';
-import { ROOT } from '@react-control/core/_shared/constants';
+import returnFalse from '@react-control/core/_shared/alwaysFalse';
+import { INTERNALS } from '@react-control/core/_shared/constants';
 import type {
   HandleParse,
   HandleStringify,
@@ -51,7 +51,7 @@ const handlePath = (
   let regexStr = '';
 
   let replaceDeprecatedQueryParams: Path['_replaceDeprecatedQueryParams'] =
-    alwaysFalse;
+    returnFalse;
 
   if (l > -2) {
     if (l > -1) {
@@ -113,7 +113,7 @@ const handlePath = (
     _pathParams: pathParams,
     _queryParams: queryParams,
     _path,
-    _source: source && source[ROOT],
+    _source: source && source[INTERNALS],
     _createControlScope: createControlScope,
   } as Path;
 };

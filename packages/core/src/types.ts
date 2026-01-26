@@ -1,22 +1,22 @@
 import type { Primitive, PrimitiveOrNested } from 'keyweaver';
 
-import type { ROOT } from '#shared/constants';
+import type { INTERNALS } from '#shared-internal/constants';
 import type {
-  AsyncControlRoot,
-  ControlChild,
-  ControlRoot,
+  AsyncRootNode,
+  ChildControlNode,
+  RootControlNode,
   Nil,
   PartialTuple,
   PollableMethods,
   ScopeMarker,
-  StorageItem,
-  StorageMarker,
+  StorageItem as RegistryItem,
+  StorageMarker as RegistryMarker,
   ToIndex,
-} from '#_types';
+} from '#internal/types';
 
 declare const CONTROL_MARKER: unique symbol;
 
-declare const SETABLE_MARKER: unique symbol;
+declare const SETTABLE_MARKER: unique symbol;
 
 declare const ERROR_MARKER: unique symbol;
 
@@ -26,7 +26,7 @@ declare const LOADING_PROCESS_MARKER: unique symbol;
 
 export type ReadonlyControl<Value = any> = {
   /** @internal */
-  [ROOT]: ControlChild | ControlRoot;
+  [INTERNALS]: ChildControlNode | RootControlNode;
   [CONTROL_MARKER]: Value;
 };
 
@@ -44,12 +44,12 @@ export type ReadonlyAsyncControl<
  * ```
  */
 export type Control<Value = any> = ReadonlyControl<Value> & {
-  [SETABLE_MARKER]: true;
+  [SETTABLE_MARKER]: true;
 };
 
 type AsyncControlBase<Error> = {
   /** @internal */
-  readonly [ROOT]: AsyncControlRoot;
+  readonly [INTERNALS]: AsyncRootNode;
   [ERROR_MARKER]: Error;
 };
 
@@ -204,10 +204,10 @@ export type PollableControlOptions<
  * Represents a structured control storage system that allows retrieval and deletion
  * of control entries using specified keys.
  */
-export type Storage<
-  T extends StorageItem,
+export type Registry<
+  T extends RegistryItem,
   Keys extends PrimitiveOrNested[],
-> = StorageMarker<Keys, T> & {
+> = RegistryMarker<Keys, T> & {
   /**
    * Retrieves a control within the storage using the provided keys.
    *
@@ -224,7 +224,8 @@ export type Storage<
    * **Warning**: This only removes the control entry from
    * the storage but does not clear or reset the control itself.
    */
-  delete(...keys: Keys | PartialTuple<Keys> | []): boolean;
+  delete(...keys: Keys | PartialTuple<Keys>): boolean;
+  clear(): void;
   /** @internal */
   readonly _storage: Map<any, any>;
   /** @internal */
@@ -235,7 +236,7 @@ export type Storage<
   readonly _syncExternalStorage: SyncExternalStorage | undefined;
 } & (T extends AsyncControl
     ? {
-        clear(...keys: Keys | PartialTuple<Keys> | []): void;
+        invalidate(...keys: Keys | PartialTuple<Keys> | []): void;
       }
     : {});
 

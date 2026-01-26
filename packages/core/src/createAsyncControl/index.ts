@@ -5,8 +5,8 @@ import type {
   LoadableControlOptions,
   SyncExternalStorage,
 } from '#types';
-import createScope from '#utils/createScope';
-import getAsyncControl from '#utils/getAsyncControl';
+import createScope from '#internal/createScope';
+import createAsyncRoot from '#internal/createAsyncRoot';
 
 const createAsyncControl: {
   /**
@@ -42,14 +42,14 @@ const createAsyncControl: {
 ) =>
   createScope(
     options
-      ? getAsyncControl(
+      ? createAsyncRoot(
           options,
           options.load,
           keys,
           syncExternalStorage,
           options.LoadingProcess
         )
-      : getAsyncControl({}, undefined, keys, syncExternalStorage)
+      : createAsyncRoot({}, undefined, keys, syncExternalStorage)
   );
 
 export default createAsyncControl;

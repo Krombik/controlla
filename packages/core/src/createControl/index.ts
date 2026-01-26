@@ -1,11 +1,11 @@
-import type { Mutable, ControlRoot, OnValueChange } from '#_types';
-import handleControl from '#utils/handleControl';
-import createScope from '#utils/createScope';
-import rootGet from '#utils/rootGet';
+import type { Mutable, RootControlNode, ChangeListener } from '#internal/types';
+import initControl from '#internal/initControl';
+import createScope from '#internal/createScope';
+import readRootValue from '#internal/readRootValue';
 import type { ControlScope, SyncExternalStorage } from '#types';
-import basicEnqueueSet from '#utils/basicEnqueueSet';
-import { createSubscriber } from '#utils/batching';
-import alwaysNoop from '#shared/alwaysNoop';
+import basicEnqueueSet from '#internal/basicEnqueueSet';
+import { createSubscriber } from '#internal/flushQueue';
+import alwaysNoop from '#shared-internal/alwaysNoop';
 
 /**
  * Creates a {@link ControlScope control scope} for managing complex control structures.
@@ -30,25 +30,25 @@ const createControl: {
   syncExternalStorage?: SyncExternalStorage,
   keys?: any[]
 ) => {
-  const callbacks: OnValueChange[] = [];
+  const callbacks: ChangeListener[] = [];
 
-  const control = handleControl<ControlRoot>(
+  const control = initControl<RootControlNode>(
     {
       _value: undefined,
       _root: undefined!,
-      _get: rootGet,
-      _callbacks: callbacks,
+      _get: readRootValue,
+      _listeners: callbacks,
       _enqueueSet: basicEnqueueSet,
       _subscribe: createSubscriber(callbacks, alwaysNoop),
       _children: undefined,
-      _valueToggler: true,
+      _versionToggle: true,
       _unobserve: undefined,
       _patchNode: {
         _children: new Map(),
-        _childrenKeys: [],
+        _patchedKeys: [],
         _isObject: true,
         _prevValue: undefined,
-        _set: false,
+        _hasValuePatch: false,
         _value: undefined,
       },
       _path: undefined,

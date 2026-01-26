@@ -1,5 +1,5 @@
 import type { ReadonlyAsyncControl } from '#types';
-import { ROOT } from '#shared/constants';
+import { INTERNALS } from '#shared-internal/constants';
 
 /**
  * Registers a callback to be invoked when the given {@link control} triggers a slow loading timeout.
@@ -27,15 +27,15 @@ import { ROOT } from '#shared/constants';
  * ```
  */
 const onSlowLoading = (control: ReadonlyAsyncControl, cb: () => void) => {
-  const slowLoading = control[ROOT]._root._slowLoading;
+  const slowLoading = control[INTERNALS]._root._slowLoadMonitor;
 
   if (!slowLoading) {
     throw new Error('slow loading timeout was not provided');
   }
 
-  const callbacks = slowLoading._callbacks;
+  const callbacks = slowLoading._listeners;
 
-  const indexMap = slowLoading._indexMap;
+  const indexMap = slowLoading._listenerIndex;
 
   if (!indexMap.has(cb)) {
     indexMap.set(cb, callbacks.length);

@@ -1,7 +1,7 @@
-import alwaysTrue from '@react-control/core/_shared/alwaysTrue';
 import toKey from 'keyweaver';
 import type { SyncExternalStorage } from '@react-control/core/types';
 import type { PersistStorage } from '#types';
+import alwaysTrue from '@react-control/core/shared-internal/alwaysTrue';
 
 type Converter<T> = {
   parse(value: string): T;

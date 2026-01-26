@@ -22,12 +22,12 @@ import {
   EMPTY_ARR,
 } from '#utils/constants';
 import createSimpleControl from '@react-control/core/_shared/createSimpleControl';
-import concat from '@react-control/core/_shared/concat';
+import append from '@react-control/core/_shared/concat';
 
-import alwaysFalse from '@react-control/core/_shared/alwaysFalse';
+import returnFalse from '@react-control/core/_shared/alwaysFalse';
 import NOT_FOUND from '#@/NOT_FOUND';
 import prepend from '#utils/prepend';
-import { ROOT } from '@react-control/core/_shared/constants';
+import { INTERNALS } from '@react-control/core/_shared/constants';
 import type {
   AsyncControlScope,
   ControlScope,
@@ -287,12 +287,12 @@ const createRouter = <Paths extends AnyPaths>(
         any
       >;
 
-      const isMatchedRoot = isMatchedControl[ROOT];
+      const isMatchedRoot = isMatchedControl[INTERNALS];
 
       const paramsControl: ControlScope<any> | AsyncControlScope<any> | null =
         pathParamsCount || queryParamsCount ? _createControlScope() : null;
 
-      const paramsRoot = paramsControl && paramsControl[ROOT];
+      const paramsRoot = paramsControl && paramsControl[INTERNALS];
 
       const currControls = paramsControl
         ? prepend(controls, paramsControl)
@@ -374,10 +374,10 @@ const createRouter = <Paths extends AnyPaths>(
           : getEmptyString,
         _extractPathParams: pathParamsCount
           ? extractParams.bind(_pathParams)
-          : alwaysFalse,
+          : returnFalse,
         _extractQueryParams: queryParamsCount
           ? extractParams.bind(_queryParams)
-          : alwaysFalse,
+          : returnFalse,
         _replaceDeprecatedQueryParams,
         _isMatched: isMatchedRoot,
         _params: paramsRoot,
@@ -388,7 +388,7 @@ const createRouter = <Paths extends AnyPaths>(
 
       const _withPathParams = withPathParams || !!pathParamsCount;
 
-      const routesData = concat(data, routeData);
+      const routesData = append(data, routeData);
 
       let _paramsCount = paramsCount;
 
@@ -488,7 +488,7 @@ const createRouter = <Paths extends AnyPaths>(
                     [ROUTE_METHODS]: methods,
                     [ROUTE_PARAMS]:
                       ROUTE_PARAMS in this
-                        ? concat(this[ROUTE_PARAMS]!, {
+                        ? append(this[ROUTE_PARAMS]!, {
                             _params: params,
                             _stringifiedParams: stringifiedPrams,
                             _route: routeData,
@@ -584,7 +584,7 @@ const createRouter = <Paths extends AnyPaths>(
                       [ROUTE_METHODS]: methods,
                       [ROUTE_PARAMS]:
                         ROUTE_PARAMS in this
-                          ? concat(this[ROUTE_PARAMS]!, {
+                          ? append(this[ROUTE_PARAMS]!, {
                               _params: params,
                               _stringifiedParams: stringifiedPrams,
                               _route: routeData,
@@ -668,7 +668,7 @@ const createRouter = <Paths extends AnyPaths>(
 
                       if (
                         !source ||
-                        source[ROOT]._isLoadedControl[ROOT]._value
+                        source[INTERNALS]._isLoadedControl[INTERNALS]._value
                       ) {
                         const value = source && source._get();
 
@@ -705,7 +705,7 @@ const createRouter = <Paths extends AnyPaths>(
                           if (source) {
                             (
                               paramsControl as InternalAsyncControl
-                            )._errorControl[ROOT]._set(err);
+                            )._errorControl[INTERNALS]._set(err);
 
                             continue;
                           }
@@ -766,67 +766,65 @@ const createRouter = <Paths extends AnyPaths>(
                           }
                         );
 
-                        const unlistenSource = source[ROOT]._subscribeWithError(
-                          () => {
-                            unlistenAll();
+                        const unlistenSource = source[
+                          INTERNALS
+                        ]._subscribeWithError(() => {
+                          unlistenAll();
 
-                            if (route._isMatched._value) {
-                              const value = source._get();
+                          if (route._isMatched._value) {
+                            const value = source._get();
 
-                              const params = {};
+                            const params = {};
 
-                              let paramsWasReplaced =
-                                route._replaceDeprecatedQueryParams(
-                                  searchParams
-                                );
+                            let paramsWasReplaced =
+                              route._replaceDeprecatedQueryParams(searchParams);
 
-                              try {
-                                if (
-                                  route._extractPathParams(
-                                    params,
-                                    EMPTY_OBJECT,
-                                    pathParams,
-                                    value
-                                  )
-                                ) {
-                                  paramsWasReplaced = true;
-                                }
-
-                                if (
-                                  route._extractQueryParams(
-                                    params,
-                                    EMPTY_OBJECT,
-                                    searchParams,
-                                    value
-                                  )
-                                ) {
-                                  paramsWasReplaced = true;
-                                }
-                              } catch (err) {
-                                (
-                                  paramsControl as InternalAsyncControl
-                                )._errorControl[ROOT]._set(err);
-
-                                return;
+                            try {
+                              if (
+                                route._extractPathParams(
+                                  params,
+                                  EMPTY_OBJECT,
+                                  pathParams,
+                                  value
+                                )
+                              ) {
+                                paramsWasReplaced = true;
                               }
 
-                              if (paramsWasReplaced) {
-                                history.replaceState(
-                                  history.state,
-                                  '',
-                                  handleHref(
-                                    routesQueue[currentRouteIndex],
-                                    [{ _params: params, _route: route }],
-                                    0,
-                                    true
-                                  )
-                                );
-                              } else {
-                                paramsControl._set(params);
+                              if (
+                                route._extractQueryParams(
+                                  params,
+                                  EMPTY_OBJECT,
+                                  searchParams,
+                                  value
+                                )
+                              ) {
+                                paramsWasReplaced = true;
                               }
+                            } catch (err) {
+                              (
+                                paramsControl as InternalAsyncControl
+                              )._errorControl[INTERNALS]._set(err);
+
+                              return;
+                            }
+
+                            if (paramsWasReplaced) {
+                              history.replaceState(
+                                history.state,
+                                '',
+                                handleHref(
+                                  routesQueue[currentRouteIndex],
+                                  [{ _params: params, _route: route }],
+                                  0,
+                                  true
+                                )
+                              );
+                            } else {
+                              paramsControl._set(params);
                             }
                           }
-                        );
+                        });
                       }
                     }
 
@@ -1009,7 +1007,7 @@ const createRouter = <Paths extends AnyPaths>(
     [];
 
   const isLeaveControl: InternalControl<boolean> =
-    createSimpleControl<boolean>(false)[ROOT];
+    createSimpleControl<boolean>(false)[INTERNALS];
 
   const navigationControlState = createSimpleControl<NavigationState>({
     action: 'none',
@@ -1017,7 +1015,7 @@ const createRouter = <Paths extends AnyPaths>(
   });
 
   const navigationStateRoot: InternalControl<NavigationState> =
-    navigationControlState[ROOT];
+    navigationControlState[INTERNALS];
 
   const state = history.state as HistoryState | null;
 
@@ -1198,7 +1196,7 @@ const createRouter = <Paths extends AnyPaths>(
         window.removeEventListener('beforeunload', beforeUnloadListener);
       },
       isPendingNavigation: {
-        [ROOT]: isLeaveControl,
+        [INTERNALS]: isLeaveControl,
         allow() {
           isLeaveControl._set(false);
 

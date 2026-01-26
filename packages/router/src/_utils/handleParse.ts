@@ -1,7 +1,7 @@
 import identity from 'lodash.identity';
 import nonUndefinedIdentity from '#utils/nonUndefinedIdentity';
 import simpleParse from '#utils/simpleParse';
-import alwaysTrue from '@react-control/core/_shared/alwaysTrue';
+import returnTrue from '@react-control/core/_shared/alwaysTrue';
 import type { HandleParse } from '#_types';
 
 const handleParse = (
@@ -24,7 +24,7 @@ const handleParse = (
 
   parse ||= identity;
 
-  isValid ||= alwaysTrue;
+  isValid ||= returnTrue;
 
   const getFallbackValue = (
     typeof fallbackValue != 'function'
