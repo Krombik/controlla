@@ -1,9 +1,5 @@
 import createScope from '#internal/createScope';
-import {
-  addAfterFlushHook,
-  createSubscriber,
-  enqueueDerivedSet,
-} from '#internal/flushQueue';
+import { getLane, getCurrentLane, scheduleFlush } from '#internal/flushQueue';
 import readRootValue from '#internal/readRootValue';
 import {
   AsyncRootNode,
@@ -15,6 +11,26 @@ import {
 import alwaysNoop from '#shared-internal/alwaysNoop';
 import { INTERNALS } from '#shared-internal/constants';
 import identity from 'lodash.identity';
+import runPatching from '#internal/runPatching';
+import type { Scheduler } from '#types';
+import useVersionedSync from '#internal/useVersionedSync';
+import createSubscriber from '#internal/createSubscriber';
+import { commitSet } from './commitPatchNode';
+
+function enqueueDerivedSet(
+  this: RootControlNode,
+  nextValue: any,
+  scheduler: Scheduler,
+  path?: readonly string[]
+) {
+  const lane = getLane(scheduler);
+
+  lane._afterFlushHooks.push(() => {
+    runPatching(lane, this, nextValue, path);
+  });
+
+  scheduleFlush(lane, scheduler);
+}
 
 const makeDerivedControl = (params: any[]) => {
   const controlCount = params.length - 1;
@@ -30,43 +46,50 @@ const makeDerivedControl = (params: any[]) => {
   if (controlCount > 1) {
     const unsubscribers = Array<() => void>(controlCount);
 
-    const seenAttachLoads = new Set<() => () => void>();
+    const seenLoadableRoots = new Set<AsyncRootNode>();
 
-    const attachLoads: Array<() => () => void> = [];
+    const loadableRoots: Array<AsyncRootNode> = [];
 
     const values = Array(controlCount);
-
-    const flushDerivedUpdate = () => {
-      controlRoot._enqueueSet(combine(...values));
-
-      canSchedule = true;
-    };
 
     let canSchedule = true;
 
     for (let i = 0; i < controlCount; i++) {
+      const scopedIndex = i;
+
       const control: ChildControlNode = params[i][INTERNALS];
 
+      const root = control._root as AsyncRootNode;
+
       if (
-        control._root &&
-        (control._root as AsyncRootNode)._attachLoad !== alwaysNoop
+        root &&
+        '_attachLoad' in root &&
+        root._attachLoad != alwaysNoop &&
+        !seenLoadableRoots.has(root)
       ) {
-        const load = (control._root as AsyncRootNode)._attachLoad;
+        seenLoadableRoots.add(root);
 
-        if (!seenAttachLoads.has(load)) {
-          seenAttachLoads.add(load);
-
-          attachLoads.push(load);
-        }
+        loadableRoots.push(root);
       }
 
       unsubscribers[i] = control._subscribe((newValue) => {
-        values[i] = newValue;
+        values[scopedIndex] = newValue;
 
         if (canSchedule) {
           canSchedule = false;
 
-          addAfterFlushHook(flushDerivedUpdate);
+          const currentLane = getCurrentLane()!;
+
+          currentLane._afterFlushHooks.push(() => {
+            runPatching(
+              currentLane,
+              controlRoot,
+              combine(...values),
+              undefined
+            );
+
+            canSchedule = true;
+          });
         }
       }, true);
 
@@ -75,7 +98,7 @@ const makeDerivedControl = (params: any[]) => {
 
     const combine: (...values: any[]) => any = params[controlCount];
 
-    const loaderCount = attachLoads.length;
+    const loaderCount = loadableRoots.length;
 
     initialValue = combine(...values);
 
@@ -86,34 +109,43 @@ const makeDerivedControl = (params: any[]) => {
     };
 
     if (loaderCount) {
-      attachLoad =
-        loaderCount == 1
-          ? attachLoads[0]
-          : () => {
-              const unloads = Array(loaderCount);
+      if (loaderCount == 1) {
+        const root = loadableRoots[0];
 
-              for (let i = 0; i < loaderCount; i++) {
-                unloads[i] = attachLoads[i]();
-              }
+        attachLoad = () => root._attachLoad();
+      } else {
+        attachLoad = () => {
+          const unloads = Array<() => void>(loaderCount);
 
-              return () => {
-                for (let i = 0; i < loaderCount; i++) {
-                  unloads[i]();
-                }
-              };
-            };
+          for (let i = 0; i < loaderCount; i++) {
+            unloads[i] = loadableRoots[i]._attachLoad();
+          }
+
+          return () => {
+            for (let i = 0; i < loaderCount; i++) {
+              unloads[i]();
+            }
+          };
+        };
+      }
     }
   } else {
     const control: ChildControlNode = params[0][INTERNALS];
 
     const mapValue = controlCount ? params[1] : identity;
 
-    if (control._root) {
-      attachLoad = (control._root as AsyncRootNode)._attachLoad;
+    const root = control._root as AsyncRootNode;
+
+    if (root && '_attachLoad' in root && root._attachLoad != alwaysNoop) {
+      attachLoad = () => root._attachLoad();
     }
 
     detachSubscriptions = control._subscribe((nextValue) => {
-      controlRoot._enqueueSet(mapValue(nextValue));
+      const currentLane = getCurrentLane()!;
+
+      currentLane._afterFlushHooks.push(() => {
+        runPatching(currentLane, controlRoot, mapValue(nextValue), undefined);
+      });
     }, true);
 
     initialValue = mapValue(control._get());
@@ -124,22 +156,18 @@ const makeDerivedControl = (params: any[]) => {
     _enqueueSet: enqueueDerivedSet,
     _get: readRootValue,
     _listeners: listeners,
-    _patchNode: {
-      _children: new Map(),
-      _hasValuePatch: false,
-      _isObject: true,
-      _patchedKeys: [],
-      _prevValue: initialValue,
-      _value: initialValue,
-    },
     _path: undefined,
     _root: undefined!,
-    _stale: true,
     _storage: undefined,
-    _subscribe: createSubscriber(listeners, attachLoad || alwaysNoop),
-    _unobserve: detachSubscriptions,
+    _subscribe: createSubscriber(
+      listeners,
+      attachLoad && { _attachLoad: attachLoad }
+    ),
+    _useCleanup: detachSubscriptions,
     _value: initialValue,
-    _versionToggle: true,
+    _version: 0,
+    _useSubscribeWithLoad: useVersionedSync,
+    _commitSet: commitSet,
   };
 
   (controlRoot as Mutable<typeof controlRoot>)._root = controlRoot;

@@ -1,5 +1,6 @@
 import type { RootControlNode } from '#internal/types';
 import type { SyncExternalStorage } from '#types';
+import scheduleMicrotask from './scheduleMicrotask';
 
 const initControl = <S extends RootControlNode>(
   control: S,
@@ -23,19 +24,19 @@ const initControl = <S extends RootControlNode>(
     }
 
     if (observe) {
-      control._unobserve = observe((newValue) => {
-        control._enqueueSet(newValue);
+      const cleanup = observe((newValue) => {
+        control._enqueueSet(newValue, scheduleMicrotask);
       });
+
+      control._useCleanup = (useEffect) => {
+        useEffect(() => cleanup, [cleanup]);
+      };
     }
 
-    control._subscribe(set);
+    control._subscribe(set, true);
   } else if (typeof value == 'function') {
     value = value(keys);
   }
-
-  control._patchNode._value = value;
-
-  control._patchNode._prevValue = value;
 
   control._value = value;
 

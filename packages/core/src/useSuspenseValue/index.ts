@@ -63,9 +63,8 @@ const useSuspenseValue: {
 
     const root = utils._root;
 
-    const errorControl = root._errorControl[INTERNALS];
-
-    const err = errorControl._value;
+    const err =
+      root._errorControl[INTERNALS]._useSubscribeWithLoad(useSyncExternalStore);
 
     const isError = err !== undefined;
 
@@ -74,19 +73,10 @@ const useSuspenseValue: {
     }
 
     if (root._value !== undefined || isError) {
-      useSyncExternalStore(utils._subscribe, () => utils._versionToggle);
-
-      useSyncExternalStore(
-        errorControl._subscribe,
-        () => errorControl._versionToggle
-      );
-
-      const value = utils._get();
+      const value = utils._useSubscribeWithLoad(useSyncExternalStore);
 
       return safeReturn ? [value, err] : value;
     }
-
-    useSyncExternalStore(alwaysNoop, noop);
 
     useSyncExternalStore(alwaysNoop, noop);
 

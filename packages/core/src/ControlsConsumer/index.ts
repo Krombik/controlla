@@ -34,20 +34,14 @@ const ControlsConsumer: {
     const control = controls[i];
 
     if (control) {
-      const internals = control[INTERNALS];
-
-      useSyncExternalStore(
-        internals._subscribe,
-        () => internals._versionToggle
-      );
-
-      values[i] = internals._get();
+      values[i] =
+        control[INTERNALS]._useSubscribeWithLoad(useSyncExternalStore);
     } else {
       useSyncExternalStore(alwaysNoop, noop);
     }
   }
 
-  return props.render(values);
+  return props.render(...values);
 };
 
 export default ControlsConsumer;

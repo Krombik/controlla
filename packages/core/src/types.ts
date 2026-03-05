@@ -249,3 +249,5 @@ export type SyncExternalStorage<T = any> = {
   /** @internal */
   _observable?: true;
 };
+
+export type Scheduler = (cb: () => void) => any;

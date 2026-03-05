@@ -6,7 +6,8 @@ import type {
 import createLoadRunner from '#internal/createLoadRunner';
 import createScope from '#internal/createScope';
 import createAsyncRoot from '#internal/createAsyncRoot';
-import { loadOnce } from '#internal/loadOnce';
+
+const loadOnce: Parameters<typeof createLoadRunner>[0] = (load) => load();
 
 const createRequestableControl: {
   /**

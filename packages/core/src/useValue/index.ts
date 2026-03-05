@@ -9,17 +9,10 @@ import type {
   ReadonlyControl,
 } from '#types';
 
-const useValue = ((control: AsyncControl | Falsy) => {
-  if (control) {
-    const utils = control[INTERNALS];
-
-    useSyncExternalStore(utils._subscribe, () => utils._versionToggle);
-
-    return utils._get();
-  }
-
-  useSyncExternalStore(alwaysNoop, noop);
-}) as {
+const useValue = ((control: AsyncControl | Falsy) =>
+  control
+    ? control[INTERNALS]._useSubscribeWithLoad(useSyncExternalStore)
+    : useSyncExternalStore(alwaysNoop, noop)) as {
   /**
    * A hook to retrieve the current value from the provided {@link control}.
    * It ensures that the component re-renders whenever the {@link control} value changes.

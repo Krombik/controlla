@@ -27,7 +27,7 @@ const suspendOnControl = (
     }
   }
 
-  return root._loadPromise;
+  return root._promise._promise;
 };
 
 export default suspendOnControl;

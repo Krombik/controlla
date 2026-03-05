@@ -17,8 +17,8 @@ const getPromise = <T>(control: ReadonlyAsyncControl<T>): Promise<T> => {
   const utils = control[INTERNALS];
 
   return utils._path
-    ? utils._root._loadPromise.then(() => utils._get())
-    : utils._root._loadPromise;
+    ? utils._root._promise._promise.then(() => utils._get())
+    : utils._root._promise._promise;
 };
 
 export default getPromise;

@@ -37,9 +37,7 @@ const ControlConsumer = ((
 ) => {
   const utils = props.control[INTERNALS];
 
-  const value = utils._get();
-
-  useSyncExternalStore(utils._subscribe, () => utils._versionToggle);
+  const value = utils._useSubscribeWithLoad(useSyncExternalStore);
 
   if ('render' in props) {
     const render = props.render!;
@@ -52,25 +50,16 @@ const ControlConsumer = ((
 
     const root = utils._root as AsyncRootNode;
 
-    const loadingControl = root._loadingControl[INTERNALS];
-
-    const loading = useSyncExternalStore(
-      loadingControl._subscribe,
-      () => loadingControl._versionToggle
+    return (render as Function)(
+      value,
+      root._loadingControl[INTERNALS]._useSubscribeWithLoad(
+        useSyncExternalStore
+      ),
+      l > 2 &&
+        root._errorControl[INTERNALS]._useSubscribeWithLoad(
+          useSyncExternalStore
+        )
     );
-
-    if (l < 3) {
-      return (render as Function)(value, loading);
-    }
-
-    const errorControl = root._errorControl[INTERNALS];
-
-    useSyncExternalStore(
-      errorControl._subscribe,
-      () => errorControl._versionToggle
-    );
-
-    return render(value, loading, errorControl._value);
   }
 
   if ('children' in props) {

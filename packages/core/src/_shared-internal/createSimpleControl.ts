@@ -16,7 +16,7 @@ const createSimpleControl = <T>(value?: T) => {
       _listeners: callbacks,
       _enqueueSet: enqueuePrimitiveSet,
       _subscribe: createSubscriber(callbacks, alwaysNoop),
-      _versionToggle: true,
+      _version: true,
     },
   } as Control<T>;
 };

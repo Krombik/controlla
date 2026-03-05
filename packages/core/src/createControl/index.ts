@@ -2,10 +2,26 @@ import type { Mutable, RootControlNode, ChangeListener } from '#internal/types';
 import initControl from '#internal/initControl';
 import createScope from '#internal/createScope';
 import readRootValue from '#internal/readRootValue';
-import type { ControlScope, SyncExternalStorage } from '#types';
-import basicEnqueueSet from '#internal/basicEnqueueSet';
-import { createSubscriber } from '#internal/flushQueue';
-import alwaysNoop from '#shared-internal/alwaysNoop';
+import type { ControlScope, Scheduler, SyncExternalStorage } from '#types';
+import createSubscriber from '#internal/createSubscriber';
+import noop from 'lodash.noop';
+import useVersionedSync from '#internal/useVersionedSync';
+import { getLane, scheduleFlush } from '#internal/flushQueue';
+import runPatching from '#internal/runPatching';
+import { commitSet } from '#internal/commitPatchNode';
+
+function enqueueSet(
+  this: RootControlNode,
+  value: any,
+  scheduler: Scheduler,
+  path: string[] | undefined
+) {
+  const lane = getLane(scheduler);
+
+  runPatching(lane, this, value, path);
+
+  scheduleFlush(lane, scheduler);
+}
 
 /**
  * Creates a {@link ControlScope control scope} for managing complex control structures.
@@ -38,22 +54,15 @@ const createControl: {
       _root: undefined!,
       _get: readRootValue,
       _listeners: callbacks,
-      _enqueueSet: basicEnqueueSet,
-      _subscribe: createSubscriber(callbacks, alwaysNoop),
+      _enqueueSet: enqueueSet,
+      _subscribe: createSubscriber(callbacks),
       _children: undefined,
-      _versionToggle: true,
-      _unobserve: undefined,
-      _patchNode: {
-        _children: new Map(),
-        _patchedKeys: [],
-        _isObject: true,
-        _prevValue: undefined,
-        _hasValuePatch: false,
-        _value: undefined,
-      },
+      _version: 0,
+      _useSubscribeWithLoad: useVersionedSync,
+      _useCleanup: noop,
       _path: undefined,
-      _stale: true,
       _storage: undefined,
+      _commitSet: commitSet,
     },
     value,
     syncExternalStorage,
