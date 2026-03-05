@@ -94,9 +94,10 @@ const useSuspenseValues = <
 
       const root = utils._root;
 
-      const errorControl = root._errorControl[INTERNALS];
-
-      const err = errorControl._value;
+      const err =
+        root._errorControl[INTERNALS]._useSubscribeWithLoad(
+          useSyncExternalStore
+        );
 
       const isError = err !== undefined;
 
@@ -105,17 +106,12 @@ const useSuspenseValues = <
       }
 
       if (root._value !== undefined || isError) {
-        useSyncExternalStore(utils._subscribe, () => utils._versionToggle);
-
-        useSyncExternalStore(
-          errorControl._subscribe,
-          () => errorControl._versionToggle
-        );
-
-        values[i] = utils._get();
+        values[i] = utils._useSubscribeWithLoad(useSyncExternalStore);
 
         errors[i] = err;
       } else {
+        useSyncExternalStore(alwaysNoop, noop);
+
         const unloadedControls: AsyncRootNode[] = [root];
 
         while (++i < l) {

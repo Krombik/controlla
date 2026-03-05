@@ -5,17 +5,27 @@ import type {
   ContextType,
   JSX,
   PropsWithChildren,
-  useSyncExternalStore,
+  useEffect as _useEffect,
+  useSyncExternalStore as _useSyncExternalStore,
 } from 'react';
 import type {
   AsyncControl,
   Control,
   LoadableControl,
   ReadonlyAsyncControl,
+  Scheduler,
   SyncExternalStorage,
 } from '#types';
 import type SuspenseContext from '#internal/SuspenseContext';
 import type ErrorBoundaryContext from '#internal/ErrorBoundaryContext';
+
+export type Lane = {
+  _canScheduleFlush: boolean;
+  readonly _patchByControl: Map<RootControlNode, PatchTreeNode> &
+    Map<PrimitiveControlInternals, any>;
+  readonly _afterFlushHooks: Array<() => void>;
+  readonly _pendingControls: Array<RootControlNode | PrimitiveControlInternals>;
+};
 
 /** @internal */
 export type Mutable<T> = {
@@ -31,38 +41,40 @@ export type ChangeListener<T = any> = (newValue: T, prevValue: T) => void;
 /** @internal */
 export type PatchTreeNode = {
   _hasValuePatch: boolean;
-  _isObject: boolean;
   _value: any;
-  _prevValue: any;
   readonly _children: Map<string, PatchTreeNode>;
   readonly _patchedKeys: string[];
 };
 
 export interface ControlInternals {
-  _subscribe(
-    cb: (value: any, prevValue: any) => void,
-    withoutLoad?: boolean
-  ): () => void;
+  _subscribe(cb: ChangeListener, withoutLoad?: boolean): () => void;
   _get(): any;
   readonly _listeners: ChangeListener[];
-  /** toggler for {@link useSyncExternalStore} */
-  _versionToggle: boolean;
+  _useSubscribeWithLoad(
+    useSyncExternalStore: typeof _useSyncExternalStore
+  ): any;
 }
 
-export interface EnqueueablePrimitiveControlInternals extends ControlInternals {
+export interface ReadonlyPrimitiveControlInternals extends ControlInternals {
   _value: any;
-  _nextValue: any;
-  _stale: boolean;
 }
 
-export interface ErrorControlInternals extends EnqueueablePrimitiveControlInternals {
+interface Settable {
+  _enqueueSet(value: any, scheduler: Scheduler | undefined): void;
+  _commitSet(value: any): void;
+}
+
+export interface PrimitiveControlInternals
+  extends ReadonlyPrimitiveControlInternals, Settable {}
+
+export interface ErrorControlInternals extends PrimitiveControlInternals {
   readonly _root: ErrorControlInternals;
   readonly _parent: AsyncRootNode;
-  _enqueueSet(value?: any): void;
 }
 
 export interface ControlNode<T = any> extends ControlInternals {
   readonly _root: RootControlNode<T>;
+  _version: number;
   _children: Map<string, ChildControlNode> | undefined;
   /** storage of proxies */
   _storage: Map<string, ChildControlNode> | undefined;
@@ -73,13 +85,11 @@ export interface ChildControlNode<T = any> extends ControlNode<T> {
   readonly _path: readonly string[];
 }
 
-export interface RootControlNode<T = any> extends ControlNode<T> {
+export interface RootControlNode<T = any> extends ControlNode<T>, Settable {
   readonly _path: undefined;
   _value: T;
-  _enqueueSet(value?: T, path?: readonly string[]): void;
-  readonly _patchNode: PatchTreeNode;
-  _stale: boolean;
-  _unobserve: (() => void) | undefined;
+  _enqueueSet(value: T, scheduler: Scheduler, path?: readonly string[]): void;
+  _useCleanup(useEffect: typeof _useEffect): void;
 }
 
 export interface AsyncRootNode<T = any> extends RootControlNode<T> {
@@ -88,10 +98,11 @@ export interface AsyncRootNode<T = any> extends RootControlNode<T> {
     [INTERNALS]: ErrorControlInternals;
   };
   readonly _loadingControl: {
-    [INTERNALS]: ControlInternals;
+    [INTERNALS]: ReadonlyPrimitiveControlInternals;
   };
   readonly _readyControl: {
-    [INTERNALS]: Pick<AsyncRootNode, '_root'> & ControlInternals;
+    [INTERNALS]: Pick<AsyncRootNode, '_root'> &
+      ReadonlyPrimitiveControlInternals;
   };
   readonly _slowLoadMonitor: {
     readonly _timeoutMs: number;
@@ -102,7 +113,12 @@ export interface AsyncRootNode<T = any> extends RootControlNode<T> {
   _activeLoadCount: number;
   _canScheduleUnload: boolean;
   _canLoad: boolean;
-  _loadPromise: Promise<any>;
+  _attempt: number;
+  _promise: {
+    _promise: Promise<any>;
+    _resolve(value: any): void;
+    _reject(err: any): void;
+  };
   _cleanup: (() => void) | void | undefined;
   readonly _reloadIfStale: {
     readonly _timeoutMs: number;
@@ -115,6 +131,8 @@ export interface AsyncRootNode<T = any> extends RootControlNode<T> {
     _visibilityChangeListener: (() => void) | undefined;
   } | null;
   _isFetchInProgress: boolean;
+  _isLoaded(nextValue: any, prevValue: any, attempt: number): boolean;
+  _load: (...args: any[]) => (() => void) | void;
   _attachLoad(reload?: boolean): () => void;
   readonly _loadProcess: any;
 }

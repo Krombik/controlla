@@ -6,7 +6,8 @@ import type {
 import alwaysNoop from '#shared-internal/alwaysNoop';
 import append from '#shared-internal/append';
 import { INTERNALS } from '#shared-internal/constants';
-import { createSubscriber } from '#internal/flushQueue';
+import createSubscriber from '#internal/createSubscriber';
+import useVersionedSync from './useVersionedSync';
 
 function get(this: ChildControlNode) {
   const self = this;
@@ -34,7 +35,9 @@ const childHandler: ProxyHandler<ChildControlNode> = {
       if (control._subscribe == alwaysNoop) {
         control._subscribe = createSubscriber(
           control._listeners,
-          (control._root as AsyncRootNode)._attachLoad || alwaysNoop
+          '_attachLoad' in control._root
+            ? (control._root as AsyncRootNode)
+            : undefined
         );
       }
 
@@ -61,7 +64,8 @@ const childHandler: ProxyHandler<ChildControlNode> = {
       _storage: undefined,
       _get: get,
       _subscribe: alwaysNoop,
-      _versionToggle: true,
+      _version: 0,
+      _useSubscribeWithLoad: useVersionedSync,
     };
 
     const next = new Proxy(nextControl, childHandler);
@@ -100,7 +104,8 @@ const rootHandler: ProxyHandler<RootControlNode> = {
       _storage: undefined,
       _get: get,
       _subscribe: alwaysNoop,
-      _versionToggle: true,
+      _version: 0,
+      _useSubscribeWithLoad: useVersionedSync,
     };
 
     const next = new Proxy(nextControl, childHandler);

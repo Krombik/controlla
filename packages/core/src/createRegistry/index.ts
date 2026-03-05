@@ -92,7 +92,7 @@ function _delete(this: Registry<any, any>, ...keys: PrimitiveOrNested[]) {
     item.has(key)
   ) {
     handleChildren(item.get(key)!, (control) => {
-      control[INTERNALS]._root._unobserve!();
+      control[INTERNALS]._root._useCleanup!((effect) => effect()!());
     });
   }
 

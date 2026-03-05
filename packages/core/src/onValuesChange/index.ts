@@ -1,6 +1,6 @@
 import noop from 'lodash.noop';
 import type { ReadonlyAsyncControl, ReadonlyControl } from '#types';
-import { addAfterFlushHook } from '#internal/flushQueue';
+import { getCurrentLane } from '#internal/flushQueue';
 import { INTERNALS } from '#shared-internal/constants';
 
 const onValuesChange = ((
@@ -29,7 +29,7 @@ const onValuesChange = ((
 
           const prevValues = callbackArity == 2 && nextValues.slice();
 
-          addAfterFlushHook(() => {
+          getCurrentLane()!._afterFlushHooks.push(() => {
             onChange(nextValues, prevValues as any);
 
             canSchedule = true;
@@ -37,14 +37,14 @@ const onValuesChange = ((
         }
 
         nextValues[i] = nextValue;
-      });
+      }, true);
     }
   } else {
     const scheduleCallback = () => {
       if (canSchedule) {
         canSchedule = false;
 
-        addAfterFlushHook(() => {
+        getCurrentLane()!._afterFlushHooks.push(() => {
           onChange();
 
           canSchedule = true;
@@ -53,7 +53,10 @@ const onValuesChange = ((
     };
 
     for (let i = 0; i < count; i++) {
-      unlisteners[i] = controls[i][INTERNALS]._subscribe(scheduleCallback);
+      unlisteners[i] = controls[i][INTERNALS]._subscribe(
+        scheduleCallback,
+        true
+      );
     }
   }
 

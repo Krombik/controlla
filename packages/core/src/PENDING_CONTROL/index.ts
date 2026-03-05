@@ -22,7 +22,7 @@ const errorControl = {
   _enqueueSet: noop,
   _subscribe: alwaysNoop,
   _value: undefined,
-  _versionToggle: true,
+  _version: true,
 } as Partial<ErrorControlInternals> as ErrorControlInternals;
 
 const utils = {
@@ -39,7 +39,7 @@ const utils = {
 
     throw new Error('No Suspense Wrapper');
   },
-  _loadPromise: Object.create(Promise.prototype, {
+  _promise: Object.create(Promise.prototype, {
     then: NOOP_PROMISE_DESCRIPTOR,
     catch: NOOP_PROMISE_DESCRIPTOR,
     finally: NOOP_PROMISE_DESCRIPTOR,
@@ -61,7 +61,7 @@ const utils = {
     } as Partial<AsyncRootNode['_loadingControl'][typeof INTERNALS]>,
   },
   _readyControl: undefined!,
-  _versionToggle: true,
+  _version: true,
 } as Partial<PendingControl> as PendingControl;
 
 (utils as Mutable<typeof utils>)._root = utils;
@@ -73,7 +73,7 @@ const utils = {
     _get: noop,
     _root: utils,
     _subscribe: alwaysNoop,
-    _versionToggle: undefined!,
+    _version: undefined!,
   } as Partial<AsyncRootNode['_readyControl'][typeof INTERNALS]>,
 } as AsyncRootNode['_readyControl'];
 
