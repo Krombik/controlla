@@ -1,17 +1,17 @@
 import { INTERNALS } from '#shared-internal/constants';
-import type { AsyncRootNode } from '#internal/types';
+import type { AsyncControlInternals } from '#internal/types';
 import type { LoadableControl, LoadableControlOptions } from '#types';
 
 const createLoadRunner = <U extends Record<string, any> = never>(
   loadHandler: (
     fetch: () => Promise<true | void>,
     cancelPromise: Promise<void>,
-    self: AsyncRootNode
+    self: AsyncControlInternals
   ) => Promise<true | void>,
   fetch: (...args: any[]) => Promise<any>
 ) =>
   function (this: LoadableControl<any, any, U>, ...args: any[]) {
-    const self = this[INTERNALS];
+    const self = this[INTERNALS] as AsyncControlInternals;
 
     let isRunning = true;
 
@@ -28,8 +28,6 @@ const createLoadRunner = <U extends Record<string, any> = never>(
     loadHandler(
       async () => {
         if (isRunning) {
-          self._isFetchInProgress = true;
-
           try {
             const value = await fetch(...args);
 
@@ -42,8 +40,6 @@ const createLoadRunner = <U extends Record<string, any> = never>(
             if (isRunning) {
               self._errorControl[INTERNALS]._enqueueSet(err);
             }
-          } finally {
-            self._isFetchInProgress = false;
           }
         }
       },

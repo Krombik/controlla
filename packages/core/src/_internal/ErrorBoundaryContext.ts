@@ -1,5 +1,8 @@
-import { createContext } from 'react';
+import { ContextType, createContext } from 'react';
+import type SuspenseContext from '#internal/SuspenseContext';
 
-const ErrorBoundaryContext = createContext<Set<() => void> | null>(null);
+const ErrorBoundaryContext = createContext<Set<
+  ContextType<typeof SuspenseContext>
+> | null>(null);
 
 export default ErrorBoundaryContext;

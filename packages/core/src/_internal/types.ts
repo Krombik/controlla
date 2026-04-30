@@ -9,22 +9,23 @@ import type {
   useSyncExternalStore as _useSyncExternalStore,
 } from 'react';
 import type {
-  AsyncControl,
+  AsyncSource,
   Control,
-  LoadableControl,
   ReadonlyAsyncControl,
-  Scheduler,
   SyncExternalStorage,
 } from '#types';
 import type SuspenseContext from '#internal/SuspenseContext';
-import type ErrorBoundaryContext from '#internal/ErrorBoundaryContext';
 
 export type Lane = {
   _canScheduleFlush: boolean;
-  readonly _patchByControl: Map<RootControlNode, PatchTreeNode> &
+  _minPendingLevel: number;
+  _maxPendingLevel: number;
+  readonly _patchByControl: Map<ControlInternals, PatchTreeNode> &
     Map<PrimitiveControlInternals, any>;
-  readonly _afterFlushHooks: Array<() => void>;
-  readonly _pendingControls: Array<RootControlNode | PrimitiveControlInternals>;
+  readonly _beforeFlushHooks: Array<() => void>;
+  readonly _pendingControlLevels: Array<
+    ControlInternals | PrimitiveControlInternals
+  >[];
 };
 
 /** @internal */
@@ -46,96 +47,140 @@ export type PatchTreeNode = {
   readonly _patchedKeys: string[];
 };
 
-export interface ControlInternals {
-  _subscribe(cb: ChangeListener, withoutLoad?: boolean): () => void;
+/**
+ * INVARIANT: `_listeners === EMPTY_ARR` iff `_indexMap == null`.
+ * Mutate only via flushQueue's addListener / removeListener.
+ */
+export type Listeners<T extends Function> = {
+  _indexMap: Map<T, number> | undefined;
+  readonly _listeners: T[];
+};
+
+export type Notifier = {
+  _notify(lane: Lane, item: any, value: any, prevValue: any): void;
+  readonly _ref: WeakRef<any>;
+  readonly _index: number;
+  _current: Notifier[];
+};
+
+export interface ControlInternalsBase extends Listeners<ChangeListener> {
   _get(): any;
-  readonly _listeners: ChangeListener[];
-  _useSubscribeWithLoad(
-    useSyncExternalStore: typeof _useSyncExternalStore
-  ): any;
+  readonly _path: readonly string[] | undefined;
+  readonly _dependents: Notifier[];
 }
 
-export interface ReadonlyPrimitiveControlInternals extends ControlInternals {
-  _value: any;
+interface Attachers {
+  _attach(
+    control: Listeners<ChangeListener> | undefined,
+    listener: ChangeListener | undefined,
+    isLoad: boolean
+  ): void;
+  _detach(
+    control: Listeners<ChangeListener> | undefined,
+    listener: ChangeListener | undefined,
+    isLoad: boolean
+  ): void;
 }
+
+export interface RootBase extends Attachers {
+  _value: any;
+  readonly [INTERNALS]: this;
+  readonly _level: number;
+  readonly _load: unknown;
+}
+
+export type ReadonlyPrimitiveControlInternals = ControlInternalsBase & RootBase;
 
 interface Settable {
-  _enqueueSet(value: any, scheduler: Scheduler | undefined): void;
-  _commitSet(value: any): void;
+  _enqueueSet(value: any, lane: Lane, path?: readonly string[]): void;
+  _commitSet(value: any, lane: Lane): void;
 }
 
-export interface PrimitiveControlInternals
-  extends ReadonlyPrimitiveControlInternals, Settable {}
+export type WithExternalStorage = {
+  readonly _externalStorage?: ReturnType<SyncExternalStorage>;
+};
 
-export interface ErrorControlInternals extends PrimitiveControlInternals {
-  readonly _root: ErrorControlInternals;
-  readonly _parent: AsyncRootNode;
-}
+export type PrimitiveControlInternals = ReadonlyPrimitiveControlInternals &
+  Settable &
+  WithExternalStorage;
 
-export interface ControlNode<T = any> extends ControlInternals {
-  readonly _root: RootControlNode<T>;
-  _version: number;
-  _children: Map<string, ChildControlNode> | undefined;
+export type ErrorControlInternals<Parent> = ReadonlyPrimitiveControlInternals &
+  Settable & {
+    readonly _parent: Parent;
+  };
+
+export interface ControlInternals
+  extends ControlInternalsBase, RootBase, Settable, WithExternalStorage {
+  _children:
+    | Map<
+        string,
+        Pick<
+          this,
+          | '_children'
+          | '_storage'
+          | typeof INTERNALS
+          | keyof ControlInternalsBase
+        > & {
+          readonly _data?: {
+            readonly _selfNotifier: Notifier;
+            _prevValue: any;
+            _value: any;
+          };
+        }
+      >
+    | undefined;
   /** storage of proxies */
-  _storage: Map<string, ChildControlNode> | undefined;
+  _storage: Map<string, any> | undefined;
 }
 
-/** @internal */
-export interface ChildControlNode<T = any> extends ControlNode<T> {
-  readonly _path: readonly string[];
-}
+export type ControlInternalsChild = ChildControlNode<ControlInternals>;
 
-export interface RootControlNode<T = any> extends ControlNode<T>, Settable {
-  readonly _path: undefined;
-  _value: T;
-  _enqueueSet(value: T, scheduler: Scheduler, path?: readonly string[]): void;
-  _useCleanup(useEffect: typeof _useEffect): void;
-}
-
-export interface AsyncRootNode<T = any> extends RootControlNode<T> {
-  readonly _root: AsyncRootNode<T>;
+export type AsyncThings<Parent> = {
   readonly _errorControl: {
-    [INTERNALS]: ErrorControlInternals;
+    [INTERNALS]: ErrorControlInternals<Parent>;
   };
   readonly _loadingControl: {
-    [INTERNALS]: ReadonlyPrimitiveControlInternals;
+    [INTERNALS]: Omit<ReadonlyPrimitiveControlInternals, keyof Attachers>;
   };
   readonly _readyControl: {
-    [INTERNALS]: Pick<AsyncRootNode, '_root'> &
-      ReadonlyPrimitiveControlInternals;
+    [INTERNALS]: Omit<ReadonlyPrimitiveControlInternals, keyof Attachers>;
   };
-  readonly _slowLoadMonitor: {
-    readonly _timeoutMs: number;
-    _timerId: ReturnType<typeof setTimeout> | undefined;
-    readonly _listeners: Array<() => void>;
-    readonly _listenerIndex: Map<() => void, number>;
-  } | null;
-  _activeLoadCount: number;
-  _canScheduleUnload: boolean;
-  _canLoad: boolean;
-  _attempt: number;
-  _promise: {
-    _promise: Promise<any>;
-    _resolve(value: any): void;
-    _reject(err: any): void;
-  };
-  _cleanup: (() => void) | void | undefined;
-  readonly _reloadIfStale: {
-    readonly _timeoutMs: number;
-    _timerId: ReturnType<typeof setTimeout> | undefined;
-  } | null;
-  readonly _reloadOnFocus: {
-    readonly _timeoutMs: number;
-    _timerId: ReturnType<typeof setTimeout> | undefined;
-    _canLoad: boolean;
-    _visibilityChangeListener: (() => void) | undefined;
-  } | null;
-  _isFetchInProgress: boolean;
+  _promise:
+    | {
+        readonly _promise: Promise<any>;
+        _resolve(value: any): void;
+        _reject(err: any): void;
+      }
+    | undefined;
+  readonly _load: unknown;
+};
+
+export interface AsyncControlInternals
+  extends ControlInternals, AsyncThings<AsyncControlInternals> {
   _isLoaded(nextValue: any, prevValue: any, attempt: number): boolean;
-  _load: (...args: any[]) => (() => void) | void;
-  _attachLoad(reload?: boolean): () => void;
-  readonly _loadProcess: any;
+  _attempt: number;
+  readonly _load:
+    | {
+        _activeCount: number;
+        _canScheduleUnload: boolean;
+        _cleanup: (() => void) | void | undefined;
+        _loadedAt: number;
+        readonly _keys?: any[];
+        readonly _source: AsyncSource<any, any, any>;
+        readonly _slowLoadMonitor:
+          | ({
+              _timerId: ReturnType<typeof setTimeout> | undefined;
+            } & Listeners<() => void>)
+          | null;
+      }
+    | undefined;
 }
+
+export type AsyncControlInternalsChild =
+  ChildControlNode<AsyncControlInternals>;
+
+export type ChildControlNode<T extends ControlInternals> =
+  NonNullable<T['_children']> extends Map<string, infer K> ? K : never;
 
 declare const SCOPE_MARKER: unique symbol;
 
@@ -148,12 +193,6 @@ type StringToNumber<T> = T extends `${infer K extends number}` ? K : never;
 export type ToIndex<T> = [Exclude<T, keyof []>] extends [never]
   ? number
   : StringToNumber<T>;
-
-/** @internal */
-export type AnyAsyncControl<Value = any, Error = any> =
-  | AsyncControl<Value, Error>
-  | LoadableControl<Value, Error>
-  | LoadableControl<Value, Error, any>;
 
 export type ExtractValues<
   T extends Array<ReadonlyAsyncControl | Falsy>,
@@ -209,9 +248,15 @@ export type ContainerComponent =
 /** @internal */
 export type PendingControl = {
   _fakeSuspense(
-    suspenseCtx: ContextType<typeof SuspenseContext>,
-    errorBoundaryCtx: ContextType<typeof ErrorBoundaryContext>
+    suspenseCtx: NonNullable<ContextType<typeof SuspenseContext>>
   ): Promise<any>;
-} & AsyncRootNode;
+} & AsyncControlInternals;
 
 export type RenderablePrimitives = string | number | null | undefined;
+
+export const enum ControlType {
+  UNDEFINED = 0,
+  SYNC = 1,
+  ASYNC = 2,
+  LOADABLE = 3,
+}

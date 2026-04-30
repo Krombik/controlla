@@ -1,8 +1,10 @@
-import { type ReactNode, useSyncExternalStore } from 'react';
+import { type ReactNode, useLayoutEffect, useReducer } from 'react';
 import type { ReadonlyAsyncControl, ReadonlyControl } from '#types';
 import type useValue from '#@/useValue';
 import { INTERNALS } from '#shared-internal/constants';
-import { AsyncRootNode, RenderablePrimitives } from '#internal/types';
+import { AsyncControlInternals, RenderablePrimitives } from '#internal/types';
+import forceRerenderReducer from '#internal/forceRerenderReducer';
+import useInternalsValue from '#internal/useInternalsValue';
 
 type RenderProps<S extends ReadonlyControl> = {
   control: S;
@@ -35,31 +37,81 @@ const ControlConsumer = ((
     | TruthyGateProps
     | PrimitiveDisplayProps
 ) => {
-  const utils = props.control[INTERNALS];
+  const forceRerender = useReducer(forceRerenderReducer, 0)[1];
 
-  const value = utils._useSubscribeWithLoad(useSyncExternalStore);
+  const internals = props.control[INTERNALS];
 
-  if ('render' in props) {
-    const render = props.render!;
+  const l = 'render' in props ? (props.render!.length as 1 | 2 | 3) : 0;
 
-    const l = render.length;
+  let value: any;
 
-    if (l < 2) {
-      return (render as Function)(value);
+  if (l < 2) {
+    value = useInternalsValue(internals, forceRerender);
+
+    if (l) {
+      return (props.render! as Function)(value);
+    }
+  } else {
+    const root = internals[INTERNALS] as AsyncControlInternals;
+
+    const loadingInternals = root._loadingControl[INTERNALS];
+
+    const isLoading = loadingInternals._value;
+
+    value = internals._get();
+
+    if (l == 2) {
+      useLayoutEffect(() => {
+        root._attach(internals, forceRerender, true);
+
+        root._attach(loadingInternals, forceRerender, false);
+
+        if (
+          value !== internals._get() ||
+          isLoading != loadingInternals._value
+        ) {
+          forceRerender();
+        }
+
+        return () => {
+          root._detach(internals, forceRerender, true);
+
+          root._detach(loadingInternals, forceRerender, false);
+        };
+      }, [internals]);
+
+      return (props.render! as Function)(value, isLoading);
     }
 
-    const root = utils._root as AsyncRootNode;
+    const errInternals = root._errorControl[INTERNALS];
 
-    return (render as Function)(
-      value,
-      root._loadingControl[INTERNALS]._useSubscribeWithLoad(
-        useSyncExternalStore
-      ),
-      l > 2 &&
-        root._errorControl[INTERNALS]._useSubscribeWithLoad(
-          useSyncExternalStore
-        )
-    );
+    const err = errInternals._value;
+
+    useLayoutEffect(() => {
+      root._attach(internals, forceRerender, true);
+
+      root._attach(loadingInternals, forceRerender, false);
+
+      errInternals._attach(errInternals, forceRerender, false);
+
+      if (
+        value !== internals._get() ||
+        isLoading != loadingInternals._value ||
+        err !== errInternals._value
+      ) {
+        forceRerender();
+      }
+
+      return () => {
+        root._detach(internals, forceRerender, true);
+
+        root._detach(loadingInternals, forceRerender, false);
+
+        errInternals._detach(errInternals, forceRerender, false);
+      };
+    }, [internals]);
+
+    return props.render!(value, isLoading, err);
   }
 
   if ('children' in props) {

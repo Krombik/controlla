@@ -1,7 +1,20 @@
 import { INTERNALS } from '#shared-internal/constants';
-import type { LoadableControl } from '#types';
+import type { ReadonlyControl } from '#types';
 
-const load = (control: LoadableControl<any, any, any>, reload?: boolean) =>
-  control[INTERNALS]._root._attachLoad(reload);
+const load = (control: ReadonlyControl) => {
+  let isCallable = true;
+
+  const root = control[INTERNALS][INTERNALS];
+
+  root._attach(undefined, undefined, true);
+
+  return () => {
+    if (isCallable) {
+      isCallable = false;
+
+      root._detach(undefined, undefined, true);
+    }
+  };
+};
 
 export default load;

@@ -1,26 +1,44 @@
-import type { Mutable, RootControlNode, ChangeListener } from '#internal/types';
-import initControl from '#internal/initControl';
+import type { ControlInternals, Lane, PatchTreeNode } from '#internal/types';
 import createScope from '#internal/createScope';
+import type { ControlScope, SyncExternalStorage } from '#types';
+import { commitPatchNode, UNCHANGED } from '#internal/commitPatchNode';
+import initControl from '#internal/initControl';
 import readRootValue from '#internal/readRootValue';
-import type { ControlScope, Scheduler, SyncExternalStorage } from '#types';
-import createSubscriber from '#internal/createSubscriber';
-import noop from 'lodash.noop';
-import useVersionedSync from '#internal/useVersionedSync';
-import { getLane, scheduleFlush } from '#internal/flushQueue';
+import { EMPTY_ARR } from '#internal/constants';
+import notify from '#internal/notify';
+import { INTERNALS } from '#shared-internal/constants';
 import runPatching from '#internal/runPatching';
-import { commitSet } from '#internal/commitPatchNode';
+import { attach, detach } from '#internal/syncLifecycle';
 
 function enqueueSet(
-  this: RootControlNode,
+  this: ControlInternals,
   value: any,
-  scheduler: Scheduler,
+  lane: Lane,
   path: string[] | undefined
 ) {
-  const lane = getLane(scheduler);
-
   runPatching(lane, this, value, path);
+}
 
-  scheduleFlush(lane, scheduler);
+function commitSet(
+  this: ControlInternals,
+  patchNode: PatchTreeNode,
+  lane: Lane
+) {
+  const root = this;
+
+  const prevValue = root._value;
+
+  const nextValue = commitPatchNode(patchNode, prevValue, root, lane);
+
+  if (nextValue !== UNCHANGED) {
+    root._value = nextValue;
+
+    notify(root._listeners, root._dependents, lane, nextValue, prevValue);
+
+    if (root._externalStorage) {
+      root._externalStorage.set(nextValue);
+    }
+  }
 }
 
 /**
@@ -45,33 +63,31 @@ const createControl: {
   value?: unknown | (() => unknown),
   syncExternalStorage?: SyncExternalStorage,
   keys?: any[]
-) => {
-  const callbacks: ChangeListener[] = [];
-
-  const control = initControl<RootControlNode>(
-    {
-      _value: undefined,
-      _root: undefined!,
-      _get: readRootValue,
-      _listeners: callbacks,
-      _enqueueSet: enqueueSet,
-      _subscribe: createSubscriber(callbacks),
-      _children: undefined,
-      _version: 0,
-      _useSubscribeWithLoad: useVersionedSync,
-      _useCleanup: noop,
-      _path: undefined,
-      _storage: undefined,
-      _commitSet: commitSet,
-    },
-    value,
-    syncExternalStorage,
-    keys
+) =>
+  createScope(
+    initControl<ControlInternals>(
+      {
+        [INTERNALS]: undefined!,
+        _get: readRootValue,
+        _listeners: EMPTY_ARR,
+        _indexMap: undefined,
+        _dependents: EMPTY_ARR,
+        _path: undefined,
+        _children: undefined,
+        _storage: undefined,
+        _level: 0,
+        _value: undefined,
+        _attach: attach,
+        _detach: detach,
+        _load: undefined,
+        _commitSet: commitSet,
+        _enqueueSet: enqueueSet,
+        _externalStorage: undefined,
+      },
+      value,
+      syncExternalStorage,
+      keys
+    )
   );
-
-  (control as Mutable<typeof control>)._root = control;
-
-  return createScope(control);
-};
 
 export default createControl;

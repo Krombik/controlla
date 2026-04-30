@@ -1,6 +1,6 @@
-import type { RootControlNode } from '#internal/types';
+import type { RootBase } from '#internal/types';
 
-function readRootValue(this: RootControlNode) {
+function readRootValue(this: RootBase) {
   return this._value;
 }
 

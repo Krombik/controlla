@@ -1,33 +1,33 @@
 import type { ContextType } from 'react';
-import type { AsyncRootNode, PendingControl } from '#internal/types';
+import type { AsyncControlInternals, PendingControl } from '#internal/types';
 import type ErrorBoundaryContext from '#internal/ErrorBoundaryContext';
 import type SuspenseContext from '#internal/SuspenseContext';
-import alwaysNoop from '#shared-internal/alwaysNoop';
+import selectPromise from '#internal/selectPromise';
 
 const suspendOnControl = (
-  root: AsyncRootNode | PendingControl,
+  root: AsyncControlInternals | PendingControl,
   errorBoundaryCtx: ContextType<typeof ErrorBoundaryContext>,
   suspenseCtx: ContextType<typeof SuspenseContext>
 ) => {
-  if ('_fakeSuspense' in root) {
-    return root._fakeSuspense(suspenseCtx, errorBoundaryCtx);
-  }
-
-  if (root._attachLoad != alwaysNoop) {
+  if (root._load || '_fakeSuspense' in root) {
     if (!suspenseCtx) {
       throw new Error('No Suspense Wrapper');
     }
 
-    const unload = root._attachLoad();
-
-    suspenseCtx.push(unload);
-
     if (errorBoundaryCtx) {
-      errorBoundaryCtx.add(unload);
+      errorBoundaryCtx.add(suspenseCtx);
+    }
+
+    if (root._load) {
+      root._attach(undefined, undefined, true);
+
+      suspenseCtx.push(root);
+    } else {
+      return (root as PendingControl)._fakeSuspense(suspenseCtx);
     }
   }
 
-  return root._promise._promise;
+  return selectPromise(root);
 };
 
 export default suspendOnControl;

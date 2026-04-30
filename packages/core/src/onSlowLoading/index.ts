@@ -1,5 +1,6 @@
-import type { ReadonlyAsyncControl } from '#types';
+import type { AsyncControl } from '#types';
 import { INTERNALS } from '#shared-internal/constants';
+import { addListener, removeListener } from '#internal/flushQueue';
 
 /**
  * Registers a callback to be invoked when the given {@link control} triggers a slow loading timeout.
@@ -26,37 +27,17 @@ import { INTERNALS } from '#shared-internal/constants';
  * unsubscribe();
  * ```
  */
-const onSlowLoading = (control: ReadonlyAsyncControl, cb: () => void) => {
-  const slowLoading = control[INTERNALS]._root._slowLoadMonitor;
+const onSlowLoading = (control: AsyncControl, cb: () => void) => {
+  const slowLoading = control[INTERNALS][INTERNALS]._load!._slowLoadMonitor;
 
   if (!slowLoading) {
     throw new Error('slow loading timeout was not provided');
   }
 
-  const callbacks = slowLoading._listeners;
-
-  const indexMap = slowLoading._listenerIndex;
-
-  if (!indexMap.has(cb)) {
-    indexMap.set(cb, callbacks.length);
-
-    callbacks.push(cb);
-  }
+  addListener(slowLoading, cb);
 
   return () => {
-    if (indexMap.has(cb)) {
-      const last = callbacks.pop()!;
-
-      if (last != cb) {
-        const index = indexMap.get(cb)!;
-
-        callbacks[index] = last;
-
-        indexMap.set(last, index)!;
-      }
-
-      indexMap.delete(cb);
-    }
+    removeListener(slowLoading, cb);
   };
 };
 

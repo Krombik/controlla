@@ -3,11 +3,10 @@ import type {
   LoadableControlScope,
   SyncExternalStorage,
 } from '#types';
-import createLoadRunner from '#internal/createLoadRunner';
 import createScope from '#internal/createScope';
 import createAsyncRoot from '#internal/createAsyncRoot';
-
-const loadOnce: Parameters<typeof createLoadRunner>[0] = (load) => load();
+import { AsyncControlInternals } from '#internal/types';
+import { INTERNALS } from '#shared-internal/constants';
 
 const createRequestableControl: {
   /**
@@ -23,14 +22,26 @@ const createRequestableControl: {
   options: RequestableControlOptions<any, any[]>,
   syncExternalStorage?: SyncExternalStorage,
   keys?: any[]
-) =>
-  createScope(
+) => {
+  const { fetch } = options;
+
+  return createScope(
     createAsyncRoot(
       options,
-      createLoadRunner(loadOnce, options.fetch),
+      function (this: LoadableControlScope, ...args: any[]) {
+        const internals = this[INTERNALS] as AsyncControlInternals;
+
+        fetch(...args).then(
+          (value) => {
+            internals._enqueueSet(value);
+          },
+          (err) => internals._errorControl[INTERNALS]._enqueueSet(err)
+        );
+      },
       keys,
       syncExternalStorage
     )
   );
+};
 
 export default createRequestableControl;

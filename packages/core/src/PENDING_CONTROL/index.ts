@@ -2,80 +2,77 @@ import noop from 'lodash.noop';
 import type {
   PendingControl,
   Mutable,
-  AsyncRootNode,
+  AsyncControlInternals,
   ErrorControlInternals,
 } from '#internal/types';
-import alwaysNoop from '#shared-internal/alwaysNoop';
 import { INTERNALS } from '#shared-internal/constants';
-import type { LoadableControlScope } from '#types';
+import type { AsyncControlScope } from '#types';
 import alwaysTrue from '#shared-internal/alwaysTrue';
 
+function alwaysThis(this: any) {
+  return this;
+}
+
 const NOOP_PROMISE_DESCRIPTOR: PropertyDescriptor = {
-  value() {
-    return this;
-  },
+  value: alwaysThis,
 };
 
 const errorControl = {
-  _root: undefined!,
+  [INTERNALS]: undefined!,
   _get: noop,
   _enqueueSet: noop,
-  _subscribe: alwaysNoop,
   _value: undefined,
-  _version: true,
-} as Partial<ErrorControlInternals> as ErrorControlInternals;
+  _attach: noop,
+  _detach: noop,
+} as Partial<
+  ErrorControlInternals<AsyncControlInternals>
+> as ErrorControlInternals<AsyncControlInternals>;
 
-const utils = {
-  _fakeSuspense(suspenseCtx, errorBoundaryCtx) {
-    if (suspenseCtx) {
-      return new Promise<void>((res) => {
-        suspenseCtx.push(res);
-
-        if (errorBoundaryCtx) {
-          errorBoundaryCtx.add(res);
-        }
-      });
-    }
-
-    throw new Error('No Suspense Wrapper');
+const internals = {
+  _fakeSuspense(suspenseCtx) {
+    return new Promise<any>((res) => {
+      suspenseCtx.push({ _detach: res });
+    });
   },
-  _promise: Object.create(Promise.prototype, {
-    then: NOOP_PROMISE_DESCRIPTOR,
-    catch: NOOP_PROMISE_DESCRIPTOR,
-    finally: NOOP_PROMISE_DESCRIPTOR,
-  }),
-  _slowLoadMonitor: null,
+  _promise: {
+    _promise: Object.create(Promise.prototype, {
+      then: NOOP_PROMISE_DESCRIPTOR,
+      catch: NOOP_PROMISE_DESCRIPTOR,
+      finally: NOOP_PROMISE_DESCRIPTOR,
+    }),
+  } as AsyncControlInternals['_promise'],
+  _attach: noop,
+  _detach: noop,
   _value: undefined,
-  _subscribe: alwaysNoop,
   _get: noop,
   _enqueueSet: noop,
-  _root: undefined!,
+  [INTERNALS]: undefined!,
   _errorControl: {
     [INTERNALS]: errorControl,
   },
-  _loadingControl: {
-    [INTERNALS]: {
-      _get: alwaysTrue,
-      _subscribe: alwaysNoop,
-      _valueToggler: true,
-    } as Partial<AsyncRootNode['_loadingControl'][typeof INTERNALS]>,
-  },
+  _loadingControl: undefined!,
   _readyControl: undefined!,
-  _version: true,
 } as Partial<PendingControl> as PendingControl;
 
-(utils as Mutable<typeof utils>)._root = utils;
+(internals as Mutable<typeof internals>)[INTERNALS] = internals;
 
-(errorControl as Mutable<typeof errorControl>)._root = errorControl;
+(errorControl as Mutable<typeof errorControl>)[INTERNALS] = errorControl;
 
-(utils as Mutable<typeof utils>)._readyControl = {
+(internals as Mutable<typeof internals>)._loadingControl = {
   [INTERNALS]: {
+    [INTERNALS]: internals,
+    _get: alwaysTrue,
+    _value: true,
+  } as Partial<AsyncControlInternals['_loadingControl'][typeof INTERNALS]>,
+} as AsyncControlInternals['_loadingControl'];
+
+(internals as Mutable<typeof internals>)._readyControl = {
+  [INTERNALS]: {
+    [INTERNALS]: internals,
     _get: noop,
-    _root: utils,
-    _subscribe: alwaysNoop,
-    _version: undefined!,
-  } as Partial<AsyncRootNode['_readyControl'][typeof INTERNALS]>,
-} as AsyncRootNode['_readyControl'];
+    _value: undefined,
+  } as Partial<AsyncControlInternals['_readyControl'][typeof INTERNALS]>,
+} as AsyncControlInternals['_readyControl'];
 
 /**
  * A special control that remains permanently in a pending state.
@@ -92,7 +89,7 @@ const utils = {
  * );
  * ```
  */
-const PENDING_CONTROL: LoadableControlScope<any, any, any> = new Proxy(utils, {
+const PENDING_CONTROL: AsyncControlScope = new Proxy(internals, {
   get(target, key, proxy) {
     return key === INTERNALS ? target : proxy;
   },

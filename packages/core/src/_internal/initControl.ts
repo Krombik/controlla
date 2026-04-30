@@ -1,46 +1,39 @@
-import type { RootControlNode } from '#internal/types';
+import type { Mutable, PrimitiveControlInternals } from '#internal/types';
+import { INTERNALS } from '#shared-internal/constants';
 import type { SyncExternalStorage } from '#types';
-import scheduleMicrotask from './scheduleMicrotask';
 
-const initControl = <S extends RootControlNode>(
-  control: S,
+const initControl = <I extends PrimitiveControlInternals>(
+  internals: I,
   value: unknown | (() => unknown) | undefined,
   syncExternalStorage: SyncExternalStorage | undefined,
   keys: any[] | undefined
-): S => {
+): I => {
+  (internals as Mutable<I>)[INTERNALS] = internals;
+
   if (syncExternalStorage) {
-    const { get, set, observe } = syncExternalStorage(keys);
+    const externalStorage = syncExternalStorage(keys);
 
-    const _value = get();
+    if (externalStorage.observe) {
+    }
 
-    if (_value !== undefined) {
-      value = _value;
+    const storageValue = externalStorage.get();
+
+    if (storageValue !== undefined) {
+      internals._value = storageValue;
     } else {
-      if (typeof value == 'function') {
-        value = value(keys);
+      const defaultValue = typeof value != 'function' ? value : value();
+
+      if (defaultValue !== undefined) {
+        externalStorage.set(defaultValue);
+
+        internals._value = defaultValue;
       }
-
-      set(value);
     }
-
-    if (observe) {
-      const cleanup = observe((newValue) => {
-        control._enqueueSet(newValue, scheduleMicrotask);
-      });
-
-      control._useCleanup = (useEffect) => {
-        useEffect(() => cleanup, [cleanup]);
-      };
-    }
-
-    control._subscribe(set, true);
-  } else if (typeof value == 'function') {
-    value = value(keys);
+  } else {
+    internals._value = typeof value != 'function' ? value : value();
   }
 
-  control._value = value;
-
-  return control;
+  return internals;
 };
 
 export default initControl;

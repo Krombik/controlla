@@ -1,14 +1,15 @@
-import type { Lane, PatchTreeNode, RootControlNode } from '#internal/types';
+import type { Lane, PatchTreeNode, ControlInternals } from '#internal/types';
+import addToLevel from '#internal/addToLevel';
 
 const runPatching = (
   lane: Lane,
-  control: RootControlNode,
+  internals: ControlInternals,
   nextValue: any,
   path: readonly string[] | undefined
 ) => {
   const l = path ? path.length : 0;
 
-  let patchNode = lane._patchByControl.get(control);
+  let patchNode = lane._patchByControl.get(internals);
 
   let children: Map<string, PatchTreeNode>;
 
@@ -24,9 +25,9 @@ const runPatching = (
       _value: undefined,
     };
 
-    lane._patchByControl.set(control, patchNode);
+    lane._patchByControl.set(internals, patchNode);
 
-    lane._pendingControls.push(control);
+    addToLevel(lane, internals);
   }
 
   for (let i = 0; i < l; i++) {

@@ -1,178 +1,290 @@
+import identity from 'lodash.identity';
+import { INTERNALS } from '#shared-internal/constants';
+import { EMPTY_ARR } from '#internal/constants';
 import createScope from '#internal/createScope';
-import { getLane, getCurrentLane, scheduleFlush } from '#internal/flushQueue';
 import readRootValue from '#internal/readRootValue';
-import {
-  AsyncRootNode,
-  ChangeListener,
+import type {
+  AsyncControlInternals,
   ChildControlNode,
   Mutable,
-  RootControlNode,
+  ControlInternals,
+  Notifier,
+  Lane,
+  PatchTreeNode,
+  Listeners,
+  ChangeListener,
 } from '#internal/types';
-import alwaysNoop from '#shared-internal/alwaysNoop';
-import { INTERNALS } from '#shared-internal/constants';
-import identity from 'lodash.identity';
+import addToLevel from '#internal/addToLevel';
+import {
+  commitNextValue,
+  commitPatchNode,
+  UNCHANGED,
+} from '#internal/commitPatchNode';
+import notify from '#internal/notify';
 import runPatching from '#internal/runPatching';
-import type { Scheduler } from '#types';
-import useVersionedSync from '#internal/useVersionedSync';
-import createSubscriber from '#internal/createSubscriber';
-import { commitSet } from './commitPatchNode';
+import { addListener, removeListener } from './flushQueue';
+import { attach, detach } from './syncLifecycle';
+import attachNotifier from './attachNotifier';
 
-function enqueueDerivedSet(
-  this: RootControlNode,
-  nextValue: any,
-  scheduler: Scheduler,
-  path?: readonly string[]
+type DerivedControlInternals = ControlInternals & {
+  readonly _load:
+    | ReadonlyArray<ControlInternals>
+    | ControlInternals
+    | undefined;
+  _mapper(...args: any[]): any;
+  _keys: any;
+  _rewritten: boolean;
+  readonly _isSingleDependency: boolean;
+};
+
+function attachSingleLoad(
+  this: DerivedControlInternals,
+  control: Listeners<ChangeListener>,
+  listener: ChangeListener,
+  isLoad: boolean
 ) {
-  const lane = getLane(scheduler);
+  addListener(control, listener);
 
-  lane._afterFlushHooks.push(() => {
-    runPatching(lane, this, nextValue, path);
-  });
+  (this._load as ControlInternals)._attach(undefined, undefined, isLoad);
+}
 
-  scheduleFlush(lane, scheduler);
+function detachSingleLoad(
+  this: DerivedControlInternals,
+  control: Listeners<ChangeListener>,
+  listener: ChangeListener,
+  isLoad: boolean
+) {
+  removeListener(control, listener);
+
+  (this._load as ControlInternals)._attach(undefined, undefined, isLoad);
+}
+
+function attachMultipleLoads(
+  this: DerivedControlInternals,
+  control: Listeners<ChangeListener>,
+  listener: ChangeListener,
+  isLoad: boolean
+) {
+  const loadableDependencies = this._load as ReadonlyArray<ControlInternals>;
+
+  addListener(control, listener);
+
+  for (let i = 0; i < loadableDependencies.length; i++) {
+    loadableDependencies[i]._attach(undefined, undefined, isLoad);
+  }
+}
+
+function detachMultipleLoads(
+  this: DerivedControlInternals,
+  control: Listeners<ChangeListener>,
+  listener: ChangeListener,
+  isLoad: boolean
+) {
+  const loadableDependencies = this._load as ReadonlyArray<ControlInternals>;
+
+  removeListener(control, listener);
+
+  for (let i = 0; i < loadableDependencies.length; i++) {
+    loadableDependencies[i]._detach(undefined, undefined, isLoad);
+  }
+}
+
+function keyNotify(
+  this: Notifier,
+  lane: Lane,
+  root: DerivedControlInternals,
+  value: any,
+  _: any
+) {
+  if (root._isSingleDependency) {
+    root._keys = value;
+  } else {
+    root._keys[this._index] = value;
+  }
+
+  root._rewritten = true;
+
+  const { _patchByControl } = lane;
+
+  if (!_patchByControl.has(root)) {
+    addToLevel(lane, root);
+
+    _patchByControl.set(root, null!);
+  }
+}
+
+function commitSet(
+  this: DerivedControlInternals,
+  patchNode: PatchTreeNode,
+  lane: Lane
+) {
+  const root = this;
+
+  const prevValue = root._value;
+
+  const nextValue = root._rewritten
+    ? commitNextValue(
+        root._isSingleDependency
+          ? root._mapper(root._keys)
+          : root._mapper(...root._keys),
+        prevValue,
+        root,
+        lane
+      )
+    : commitPatchNode(patchNode, prevValue, root, lane);
+
+  root._rewritten = false;
+
+  if (root._isSingleDependency) {
+    root._keys = undefined;
+  }
+
+  if (nextValue !== UNCHANGED) {
+    root._value = nextValue;
+
+    notify(root._listeners, root._dependents, lane, nextValue, prevValue);
+  }
+}
+
+function enqueueSet(
+  this: DerivedControlInternals,
+  value: any,
+  lane: Lane,
+  path: string[] | undefined
+) {
+  if (!this._rewritten) {
+    runPatching(lane, this, value, path);
+  }
 }
 
 const makeDerivedControl = (params: any[]) => {
   const controlCount = params.length - 1;
 
-  const listeners: ChangeListener[] = [];
+  const derivedRoot: DerivedControlInternals = {
+    [INTERNALS]: undefined!,
+    _get: readRootValue,
+    _listeners: EMPTY_ARR,
+    _indexMap: undefined,
+    _dependents: EMPTY_ARR,
+    _path: undefined,
+    _children: undefined,
+    _storage: undefined,
+    _commitSet: commitSet,
+    _enqueueSet: enqueueSet,
+    _level: 0,
+    _value: undefined,
+    _attach: attach,
+    _detach: detach,
+    _load: undefined,
+    _mapper: identity,
+    _keys: undefined,
+    _isSingleDependency: controlCount < 2,
+    _rewritten: false,
+  };
 
-  let initialValue: any;
-
-  let attachLoad: (() => () => void) | undefined;
-
-  let detachSubscriptions: () => void;
+  const weakRef = new WeakRef(derivedRoot);
 
   if (controlCount > 1) {
-    const unsubscribers = Array<() => void>(controlCount);
+    const seenLoadableRoots = new Set<ControlInternals>();
 
-    const seenLoadableRoots = new Set<AsyncRootNode>();
-
-    const loadableRoots: Array<AsyncRootNode> = [];
+    const loadableRoots: Array<ControlInternals> = [];
 
     const values = Array(controlCount);
 
-    let canSchedule = true;
+    let level = 0;
 
     for (let i = 0; i < controlCount; i++) {
-      const scopedIndex = i;
+      const internals: ChildControlNode<
+        ControlInternals | AsyncControlInternals
+      > = params[i][INTERNALS];
 
-      const control: ChildControlNode = params[i][INTERNALS];
+      const root = internals[INTERNALS];
 
-      const root = control._root as AsyncRootNode;
+      if (root._level > level) {
+        level = root._level;
+      }
 
-      if (
-        root &&
-        '_attachLoad' in root &&
-        root._attachLoad != alwaysNoop &&
-        !seenLoadableRoots.has(root)
-      ) {
+      if (root._load && !seenLoadableRoots.has(root)) {
         seenLoadableRoots.add(root);
 
         loadableRoots.push(root);
       }
 
-      unsubscribers[i] = control._subscribe((newValue) => {
-        values[scopedIndex] = newValue;
+      attachNotifier(internals, {
+        _ref: weakRef,
+        _notify: keyNotify,
+        _index: i,
+        _current: EMPTY_ARR,
+      });
 
-        if (canSchedule) {
-          canSchedule = false;
-
-          const currentLane = getCurrentLane()!;
-
-          currentLane._afterFlushHooks.push(() => {
-            runPatching(
-              currentLane,
-              controlRoot,
-              combine(...values),
-              undefined
-            );
-
-            canSchedule = true;
-          });
-        }
-      }, true);
-
-      values[i] = control._get();
+      values[i] = internals._get();
     }
 
     const combine: (...values: any[]) => any = params[controlCount];
 
     const loaderCount = loadableRoots.length;
 
-    initialValue = combine(...values);
+    derivedRoot._mapper = combine;
 
-    detachSubscriptions = () => {
-      for (let i = 0; i < controlCount; i++) {
-        unsubscribers[i]();
-      }
-    };
+    derivedRoot._value = combine(...values);
+
+    (derivedRoot as Mutable<typeof derivedRoot>)._level = level + 1;
+
+    derivedRoot._keys = values;
 
     if (loaderCount) {
       if (loaderCount == 1) {
-        const root = loadableRoots[0];
+        (derivedRoot as Mutable<typeof derivedRoot>)._load = loadableRoots[0];
 
-        attachLoad = () => root._attachLoad();
+        derivedRoot._attach = attachSingleLoad;
+
+        derivedRoot._detach = detachSingleLoad;
       } else {
-        attachLoad = () => {
-          const unloads = Array<() => void>(loaderCount);
+        (derivedRoot as Mutable<typeof derivedRoot>)._load = loadableRoots;
 
-          for (let i = 0; i < loaderCount; i++) {
-            unloads[i] = loadableRoots[i]._attachLoad();
-          }
+        derivedRoot._attach = attachMultipleLoads;
 
-          return () => {
-            for (let i = 0; i < loaderCount; i++) {
-              unloads[i]();
-            }
-          };
-        };
+        derivedRoot._detach = detachMultipleLoads;
       }
     }
   } else {
-    const control: ChildControlNode = params[0][INTERNALS];
+    const internals: ChildControlNode<
+      ControlInternals | AsyncControlInternals
+    > = params[0][INTERNALS];
 
-    const mapValue = controlCount ? params[1] : identity;
+    if (controlCount) {
+      const mapper = params[1];
 
-    const root = control._root as AsyncRootNode;
+      derivedRoot._mapper = mapper;
 
-    if (root && '_attachLoad' in root && root._attachLoad != alwaysNoop) {
-      attachLoad = () => root._attachLoad();
+      derivedRoot._value = mapper(internals._get());
+    } else {
+      derivedRoot._value = internals._get();
     }
 
-    detachSubscriptions = control._subscribe((nextValue) => {
-      const currentLane = getCurrentLane()!;
+    const root = internals[INTERNALS];
 
-      currentLane._afterFlushHooks.push(() => {
-        runPatching(currentLane, controlRoot, mapValue(nextValue), undefined);
-      });
-    }, true);
+    (derivedRoot as Mutable<typeof derivedRoot>)._level = root._level + 1;
 
-    initialValue = mapValue(control._get());
+    if (root._load) {
+      (derivedRoot as Mutable<typeof derivedRoot>)._load = root;
+
+      derivedRoot._attach = attachSingleLoad;
+
+      derivedRoot._detach = detachSingleLoad;
+    }
+
+    attachNotifier(internals, {
+      _ref: weakRef,
+      _notify: keyNotify,
+      _index: 0,
+      _current: EMPTY_ARR,
+    });
   }
 
-  const controlRoot: RootControlNode = {
-    _children: undefined,
-    _enqueueSet: enqueueDerivedSet,
-    _get: readRootValue,
-    _listeners: listeners,
-    _path: undefined,
-    _root: undefined!,
-    _storage: undefined,
-    _subscribe: createSubscriber(
-      listeners,
-      attachLoad && { _attachLoad: attachLoad }
-    ),
-    _useCleanup: detachSubscriptions,
-    _value: initialValue,
-    _version: 0,
-    _useSubscribeWithLoad: useVersionedSync,
-    _commitSet: commitSet,
-  };
+  (derivedRoot as Mutable<typeof derivedRoot>)[INTERNALS] = derivedRoot;
 
-  (controlRoot as Mutable<typeof controlRoot>)._root = controlRoot;
-
-  return createScope(controlRoot);
+  return createScope(derivedRoot);
 };
 
 export default makeDerivedControl;

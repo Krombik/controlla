@@ -10,9 +10,8 @@ import {
 } from 'react';
 import SuspenseContext from '#internal/SuspenseContext';
 import ErrorBoundaryContext from '#internal/ErrorBoundaryContext';
-import noop from 'lodash.noop';
 import scheduleMicrotask from '#internal/scheduleMicrotask';
-import alwaysNoop from '#shared-internal/alwaysNoop';
+import noop from 'lodash.noop';
 
 type Ctx = NonNullable<ContextType<typeof SuspenseContext>>;
 
@@ -36,9 +35,9 @@ const nextTick = () => {
 const Fallback: FC<PropsWithChildren<{ _ctx: Ctx }>> = (props) => {
   const errorBoundaryCtx = useContext(ErrorBoundaryContext);
 
-  const effectRef = useRef<() => () => void>(alwaysNoop);
+  const effectRef = useRef(noop);
 
-  if (effectRef.current == alwaysNoop) {
+  if (effectRef.current == noop) {
     const ctx = props._ctx;
 
     const currQueue = queue;
@@ -46,18 +45,12 @@ const Fallback: FC<PropsWithChildren<{ _ctx: Ctx }>> = (props) => {
     const currIndexMap = indexMap;
 
     const cleanup = () => {
-      const l = ctx.length;
+      for (let i = 0; i < ctx.length; i++) {
+        ctx[i]._detach(undefined, undefined, true);
+      }
 
-      const _delete = errorBoundaryCtx
-        ? errorBoundaryCtx.delete.bind(errorBoundaryCtx)
-        : noop;
-
-      for (let i = 0; i < l; i++) {
-        const unload = ctx[i];
-
-        unload();
-
-        _delete(unload);
+      if (errorBoundaryCtx) {
+        errorBoundaryCtx.delete(ctx);
       }
 
       ctx.length = 0;
