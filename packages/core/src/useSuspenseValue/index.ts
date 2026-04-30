@@ -1,12 +1,12 @@
-import { useContext, useSyncExternalStore } from 'react';
+import { useContext, useLayoutEffect, useReducer } from 'react';
 import type { Falsy } from '#internal/types';
 import ErrorBoundaryContext from '#internal/ErrorBoundaryContext';
 import SuspenseContext from '#internal/SuspenseContext';
 import suspendOnControl from '#internal/suspendOnControl';
-import alwaysNoop from '#shared-internal/alwaysNoop';
 import noop from 'lodash.noop';
 import { INTERNALS } from '#shared-internal/constants';
 import type { ReadonlyAsyncControl } from '#types';
+import forceRerenderReducer from '#internal/forceRerenderReducer';
 
 const useSuspenseValue: {
   /**
@@ -58,13 +58,16 @@ const useSuspenseValue: {
 
   const suspenseCtx = useContext(SuspenseContext);
 
+  const forceRerender = useReducer(forceRerenderReducer, 0)[1];
+
   if (control) {
-    const utils = control[INTERNALS];
+    const internals = control[INTERNALS];
 
-    const root = utils._root;
+    const root = internals[INTERNALS];
 
-    const err =
-      root._errorControl[INTERNALS]._useSubscribeWithLoad(useSyncExternalStore);
+    const errInternals = root._errorControl[INTERNALS];
+
+    const err = errInternals._value;
 
     const isError = err !== undefined;
 
@@ -73,19 +76,31 @@ const useSuspenseValue: {
     }
 
     if (root._value !== undefined || isError) {
-      const value = utils._useSubscribeWithLoad(useSyncExternalStore);
+      const value = internals._get();
+
+      useLayoutEffect(() => {
+        root._attach(internals, forceRerender, true);
+
+        errInternals._attach(errInternals, forceRerender, false);
+
+        if (value !== internals._get() || err !== errInternals._value) {
+          forceRerender();
+        }
+
+        return () => {
+          root._detach(internals, forceRerender, true);
+
+          errInternals._detach(errInternals, forceRerender, false);
+        };
+      }, [internals]);
 
       return safeReturn ? [value, err] : value;
     }
 
-    useSyncExternalStore(alwaysNoop, noop);
-
     throw suspendOnControl(root, errorBoundaryCtx, suspenseCtx);
   }
 
-  useSyncExternalStore(alwaysNoop, noop);
-
-  useSyncExternalStore(alwaysNoop, noop);
+  useLayoutEffect(noop, [0]);
 };
 
 export default useSuspenseValue;

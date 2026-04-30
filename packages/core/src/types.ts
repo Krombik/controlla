@@ -2,16 +2,17 @@ import type { Primitive, PrimitiveOrNested } from 'keyweaver';
 
 import type { INTERNALS } from '#shared-internal/constants';
 import type {
-  AsyncRootNode,
-  ChildControlNode,
-  RootControlNode,
+  ControlInternalsChild,
   Nil,
   PartialTuple,
-  PollableMethods,
   ScopeMarker,
   StorageItem as RegistryItem,
   StorageMarker as RegistryMarker,
   ToIndex,
+  ControlInternals,
+  AsyncControlInternals,
+  AsyncControlInternalsChild,
+  ControlType,
 } from '#internal/types';
 
 declare const CONTROL_MARKER: unique symbol;
@@ -20,13 +21,9 @@ declare const SETTABLE_MARKER: unique symbol;
 
 declare const ERROR_MARKER: unique symbol;
 
-declare const LOADABLE_MARKER: unique symbol;
-
-declare const LOADING_PROCESS_MARKER: unique symbol;
-
 export type ReadonlyControl<Value = any> = {
   /** @internal */
-  [INTERNALS]: ChildControlNode | RootControlNode;
+  [INTERNALS]: ControlInternals | ControlInternalsChild;
   [CONTROL_MARKER]: Value;
 };
 
@@ -49,7 +46,7 @@ export type Control<Value = any> = ReadonlyControl<Value> & {
 
 type AsyncControlBase<Error> = {
   /** @internal */
-  readonly [INTERNALS]: AsyncRootNode;
+  readonly [INTERNALS]: AsyncControlInternals | AsyncControlInternalsChild;
   [ERROR_MARKER]: Error;
 };
 
@@ -60,35 +57,18 @@ type AsyncControlBase<Error> = {
 export type AsyncControl<Value = any, Error = any> = Control<Value> &
   AsyncControlBase<Error>;
 
-type LoadableControlBase<LoadingProcess> = {
-  [LOADABLE_MARKER]: true;
-  [LOADING_PROCESS_MARKER]: LoadingProcess;
-};
-
-/**
- * Represents a control that supports loading functionality, extending {@link AsyncControl}
- * with a method to initiate and manage the loading process.
- */
-export type LoadableControl<
-  Value = any,
-  Error = any,
-  LoadingProcess = never,
-> = AsyncControl<Value, Error> & LoadableControlBase<LoadingProcess>;
-
 type ProcessScope<
   Value,
   S extends ReadonlyControl,
   M = Exclude<Value, Nil>,
   N = Extract<Value, Nil>,
-> = (S extends LoadableControl<any, infer E, infer C>
-  ? LoadableControl<Value, E, C>
-  : S extends AsyncControl<any, infer E>
-    ? AsyncControl<Value, E>
-    : S extends Control
-      ? Control<Value>
-      : S extends ReadonlyAsyncControl<any, infer E>
-        ? ReadonlyAsyncControl<Value, E>
-        : ReadonlyControl<Value>) &
+> = (S extends AsyncControl<any, infer E>
+  ? AsyncControl<Value, E>
+  : S extends Control
+    ? Control<Value>
+    : S extends ReadonlyAsyncControl<any, infer E>
+      ? ReadonlyAsyncControl<Value, E>
+      : ReadonlyControl<Value>) &
   (0 extends 1 & Value
     ? { readonly [key in string | number]: ProcessScope<any, S, any, any> }
     : M extends Primitive
@@ -115,50 +95,18 @@ export type ControlScope<Value = any> = Scope & ProcessScope<Value, Control>;
 export type AsyncControlScope<Value = any, Error = any> = Scope &
   ProcessScope<Value, AsyncControl<any, Error>>;
 
-export type LoadableControlScope<
-  Value = any,
-  Error = any,
-  LoadingProcess = never,
-> = Scope & ProcessScope<Value, LoadableControl<any, Error, LoadingProcess>>;
-
-export type PollableControlScope<Value = any, Error = any> = Scope &
-  LoadableControlScope<Value, Error, PollableMethods>;
-
-export type PollableControl<T, E = any> = LoadableControl<
-  T,
-  E,
-  PollableMethods
->;
-
-export type AsyncControlOptions<T, Keys extends PrimitiveOrNested[] = never> = {
-  /** The initial value of the control or a function to resolve it using keys. */
-  value?: T | ((...args: [Keys] extends [never] ? [] : [keys: Keys]) => T);
-  /** A function to determine if the control is considered loaded, based on the {@link value current} and {@link prevValue previous} values and the number of loading {@link attempt attempts}. */
-  isLoaded?(value: T, prevValue: T | undefined, attempt: number): boolean;
-  /** The timeout in milliseconds for considering the loading process slow. */
-  loadingTimeout?: number;
-};
-
-interface WithLoadingProcess<LoadingProcess, S> {
-  LoadingProcess: new (
-    options: Omit<this, 'load' | 'LoadingProcess'>,
-    control: S
-  ) => LoadingProcess;
-}
-
-export type LoadableControlOptions<
+export interface AsyncSource<
   T = any,
   E = any,
-  LoadingProcess = never,
   Keys extends PrimitiveOrNested[] = never,
-> = AsyncControlOptions<T, Keys> & {
+> {
   /**
    * A function to initiate the loading process. This method can optionally return
    * a cleanup function to be called when the loading is complete or canceled.
    */
   load(
-    this: AsyncControl<T, E>,
-    ...keys: [Keys] extends [never] ? [] : Keys
+    control: AsyncControl<T, E>,
+    ...args: [Keys] extends [never] ? [] : [keys: Keys]
   ): void | (() => void);
   /**
    * The duration in milliseconds. If set, the control will reload
@@ -171,19 +119,21 @@ export type LoadableControlOptions<
    */
   reloadOnFocus?: number;
   revalidate?: boolean;
-} & ([LoadingProcess] extends [never]
-    ? {}
-    : WithLoadingProcess<LoadingProcess, AsyncControl<T, E>>);
+  /** The timeout in milliseconds for considering the loading process slow. */
+  loadingTimeout?: number;
+}
 
-export type RequestableControlOptions<
-  T,
+export type AsyncControlOptions<
+  T = any,
   Keys extends PrimitiveOrNested[] = never,
-> = Omit<LoadableControlOptions<T, any, never, Keys>, 'load' | 'isLoaded'> & {
-  /**
-   * A function that starts the loading process for the control and returns a promise
-   * that resolves with the loaded value.
-   */
-  fetch(...keys: [Keys] extends [never] ? [] : Keys): Promise<T>;
+  E = any,
+> = {
+  /** The initial value of the control or a function to resolve it using keys. */
+  value?: T | ((...args: [Keys] extends [never] ? [] : [keys: Keys]) => T);
+  /** A function to determine if the control is considered loaded, based on the {@link value current} and {@link prevValue previous} values and the number of loading {@link attempt attempts}. */
+  isLoaded?(value: T, prevValue: T | undefined, attempt: number): boolean;
+
+  source?: AsyncSource<T, E, Keys>;
 };
 
 export type PollableControlOptions<
@@ -227,13 +177,17 @@ export type Registry<
   delete(...keys: Keys | PartialTuple<Keys>): boolean;
   clear(): void;
   /** @internal */
-  readonly _storage: Map<any, any>;
+  _bounded: WeakMap<any, any> | undefined;
+  /** @internal */
+  _storage: Map<any, any>;
   /** @internal */
   readonly _getItem: (...args: any[]) => any;
   /** @internal */
   readonly _arg1: any;
   /** @internal */
   readonly _syncExternalStorage: SyncExternalStorage | undefined;
+  /** @internal */
+  _type: ControlType;
 } & (T extends AsyncControl
     ? {
         invalidate(...keys: Keys | PartialTuple<Keys> | []): void;
@@ -246,8 +200,6 @@ export type SyncExternalStorage<T = any> = {
     get(): T | undefined;
     observe?(setControl: (value: T) => void): () => void;
   };
-  /** @internal */
-  _observable?: true;
 };
 
 export type Scheduler = (cb: () => void) => any;

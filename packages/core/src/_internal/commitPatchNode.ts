@@ -1,4 +1,9 @@
-import { PatchTreeNode, ControlNode, RootControlNode } from './types';
+import notify from '#internal/notify';
+import type {
+  PatchTreeNode,
+  Lane,
+  ControlInternalsChild,
+} from '#internal/types';
 
 export const UNCHANGED = Symbol();
 
@@ -13,60 +18,50 @@ const getPrototypeOf = Object.getPrototypeOf;
 const isArray = Array.isArray;
 
 const notifyDescendants = (
-  children: Map<string, ControlNode>,
+  children: Map<string, ControlInternalsChild>,
   source: any,
-  emitSourceValues: boolean
+  emitSourceValues: boolean,
+  lane: Lane
 ) => {
   const queue = [children, source];
 
-  const extractFromQueue = queue.pop.bind(queue);
+  do {
+    const children: Map<string, ControlInternalsChild> = queue.pop();
 
-  const addToQueue = queue.push.bind(queue);
-
-  while (queue.length) {
-    const children: Map<string, ControlNode> = extractFromQueue();
-
-    const value = extractFromQueue();
+    const value = queue.pop();
 
     const it = children.keys();
 
     for (let i = children.size; i--; ) {
-      const key = it.next().value;
+      const key = it.next().value!;
 
       const childValue = value[key];
 
       if (childValue !== undefined) {
         const child = children.get(key)!;
 
-        const callbacks = child._listeners;
-
-        const l = callbacks.length;
-
-        if (l) {
-          const next = emitSourceValues ? childValue : undefined;
-
-          const prev = emitSourceValues ? undefined : childValue;
-
-          child._version++;
-
-          for (let i = 0; i < l; i++) {
-            callbacks[i](next, prev);
-          }
-        }
+        notify(
+          child._listeners,
+          child._dependents,
+          lane,
+          emitSourceValues ? childValue : undefined,
+          emitSourceValues ? undefined : childValue
+        );
 
         if (child._children && childValue && typeof childValue == 'object') {
-          addToQueue(child._children, childValue);
+          queue.push(child._children, childValue);
         }
       }
     }
-  }
+  } while (queue.length);
 };
 
 const compareAndNotify = (
   prevValue: any,
   nextValue: any,
-  children: Map<string, ControlNode> | undefined,
-  scanUntilMismatch: boolean
+  children: Map<string, ControlInternalsChild> | undefined,
+  scanUntilMismatch: boolean,
+  lane: Lane
 ) => {
   const aPrototype = getPrototypeOf(prevValue);
 
@@ -75,17 +70,19 @@ const compareAndNotify = (
       const it = children.keys();
 
       for (let i = children.size; i--; ) {
-        const key = it.next().value;
+        const key = it.next().value!;
 
         const child = children.get(key)!;
 
-        const callbacks = child._listeners;
+        const listeners = child._listeners;
 
-        const l = callbacks.length;
+        const dependents = child._dependents;
+
+        const isListened = !!listeners.length || !!dependents.length;
 
         const grandchildren = child._children;
 
-        if (l || grandchildren) {
+        if (isListened || grandchildren) {
           const a = prevValue[key];
 
           const b = nextValue[key];
@@ -98,22 +95,19 @@ const compareAndNotify = (
             if (
               isAPrimitive ||
               isBPrimitive ||
-              compareAndNotify(a, b, grandchildren, !!l)
+              compareAndNotify(a, b, grandchildren, isListened, lane)
             ) {
               if (isAPrimitive != isBPrimitive && grandchildren) {
                 notifyDescendants(
                   grandchildren,
                   isAPrimitive ? b : a,
-                  isAPrimitive
+                  isAPrimitive,
+                  lane
                 );
               }
 
-              if (l) {
-                child._version++;
-
-                for (let i = 0; i < l; i++) {
-                  callbacks[i](b, a);
-                }
+              if (isListened) {
+                notify(listeners, dependents, lane, b, a);
               }
             }
           }
@@ -131,18 +125,28 @@ const compareAndNotify = (
 
     const aL = aKeys.length;
 
+    let sharedKeys = 0;
+
     for (let i = 0; i < aL; i++) {
       const key = aKeys[i];
 
       const child = children && children.get(key);
 
-      const callbacks = child && child._listeners;
+      const listeners = child && child._listeners;
 
-      const l = callbacks && callbacks.length;
+      const dependents = child && child._dependents;
+
+      const isListened =
+        !!(listeners && listeners.length) ||
+        !!(dependents && dependents.length);
 
       const grandchildren = child && child._children;
 
-      if (scanUntilMismatch || l || grandchildren) {
+      if (key in nextValue) {
+        sharedKeys++;
+      }
+
+      if (scanUntilMismatch || isListened || grandchildren) {
         const a = prevValue[key];
 
         const b = nextValue[key];
@@ -155,7 +159,13 @@ const compareAndNotify = (
           if (
             isAPrimitive ||
             isBPrimitive ||
-            compareAndNotify(a, b, grandchildren, !!l || scanUntilMismatch)
+            compareAndNotify(
+              a,
+              b,
+              grandchildren,
+              scanUntilMismatch || isListened,
+              lane
+            )
           ) {
             if (scanUntilMismatch) {
               if (!children) {
@@ -169,16 +179,13 @@ const compareAndNotify = (
               notifyDescendants(
                 grandchildren,
                 isAPrimitive ? b : a,
-                isAPrimitive
+                isAPrimitive,
+                lane
               );
             }
 
-            if (l) {
-              child._version++;
-
-              for (let i = 0; i < l; i++) {
-                callbacks[i](b, a);
-              }
+            if (isListened) {
+              notify(listeners!, dependents!, lane, b, a);
             }
 
             result = true;
@@ -191,43 +198,45 @@ const compareAndNotify = (
 
     const bL = bKeys.length;
 
-    for (let i = 0; i < bL; i++) {
-      const key = bKeys[i];
+    if (bL !== sharedKeys) {
+      for (let i = 0; i < bL; i++) {
+        const key = bKeys[i];
 
-      if (!(key in prevValue)) {
-        const child = children && children.get(key);
+        if (!(key in prevValue)) {
+          const child = children && children.get(key);
 
-        const callbacks = child && child._listeners;
+          const listeners = child && child._listeners;
 
-        const l = callbacks && callbacks.length;
+          const dependents = child && child._dependents;
 
-        const grandchildren = child && child._children;
+          const isListened =
+            !!(listeners && listeners.length) ||
+            !!(dependents && dependents.length);
 
-        if (scanUntilMismatch || l || grandchildren) {
-          const b = nextValue[key];
+          const grandchildren = child && child._children;
 
-          if (b !== undefined) {
-            if (scanUntilMismatch) {
-              if (!children) {
-                return true;
+          if (scanUntilMismatch || isListened || grandchildren) {
+            const b = nextValue[key];
+
+            if (b !== undefined) {
+              if (scanUntilMismatch) {
+                if (!children) {
+                  return true;
+                }
+
+                scanUntilMismatch = false;
               }
 
-              scanUntilMismatch = false;
-            }
-
-            if (grandchildren && b && typeof b == 'object') {
-              notifyDescendants(grandchildren, b, true);
-            }
-
-            if (l) {
-              child._version++;
-
-              for (let i = 0; i < l; i++) {
-                callbacks[i](b, undefined);
+              if (grandchildren && b && typeof b == 'object') {
+                notifyDescendants(grandchildren, b, true, lane);
               }
-            }
 
-            result = true;
+              if (isListened) {
+                notify(listeners!, dependents!, lane, b, undefined);
+              }
+
+              result = true;
+            }
           }
         }
       }
@@ -241,7 +250,9 @@ const compareAndNotify = (
 
     const lNext = nextValue.length;
 
-    if (scanUntilMismatch && lPrev != lNext) {
+    result = lPrev != lNext;
+
+    if (scanUntilMismatch && result) {
       if (!children) {
         return true;
       }
@@ -254,13 +265,17 @@ const compareAndNotify = (
 
       const child = children && children.get(key);
 
-      const callbacks = child && child._listeners;
+      const listeners = child && child._listeners;
 
-      const l = callbacks && callbacks.length;
+      const dependents = child && child._dependents;
+
+      const isListened =
+        !!(listeners && listeners.length) ||
+        !!(dependents && dependents.length);
 
       const grandchildren = child && child._children;
 
-      if (scanUntilMismatch || l || grandchildren) {
+      if (scanUntilMismatch || isListened || grandchildren) {
         const a = prevValue[i];
 
         const b = nextValue[i];
@@ -273,7 +288,13 @@ const compareAndNotify = (
           if (
             isAPrimitive ||
             isBPrimitive ||
-            compareAndNotify(a, b, grandchildren, !!l || scanUntilMismatch)
+            compareAndNotify(
+              a,
+              b,
+              grandchildren,
+              scanUntilMismatch || isListened,
+              lane
+            )
           ) {
             if (scanUntilMismatch) {
               if (!children) {
@@ -287,16 +308,13 @@ const compareAndNotify = (
               notifyDescendants(
                 grandchildren,
                 isAPrimitive ? b : a,
-                isAPrimitive
+                isAPrimitive,
+                lane
               );
             }
 
-            if (l) {
-              child._version++;
-
-              for (let i = 0; i < l; i++) {
-                callbacks[i](b, a);
-              }
+            if (isListened) {
+              notify(listeners!, dependents!, lane, b, a);
             }
 
             result = true;
@@ -308,26 +326,14 @@ const compareAndNotify = (
     for (let i = lNext; i < lPrev; i++) {
       const a = prevValue[i];
 
-      if (a !== undefined) {
-        const child = children!.get('' + i);
+      const child = children!.get('' + i);
 
-        if (child) {
-          if (child._children && a && typeof a == 'object') {
-            notifyDescendants(child._children, a, false);
-          }
-
-          const callbacks = child._listeners;
-
-          const l = callbacks.length;
-
-          if (l) {
-            child._version++;
-
-            for (let i = 0; i < l; i++) {
-              callbacks[i](undefined, a);
-            }
-          }
+      if (child && a !== undefined) {
+        if (child._children && a && typeof a == 'object') {
+          notifyDescendants(child._children, a, false, lane);
         }
+
+        notify(child._listeners, child._dependents, lane, undefined, a);
       }
     }
 
@@ -342,16 +348,16 @@ const compareAndNotify = (
 const buildPatchedValue = (patchNode: PatchTreeNode) => {
   const keys = patchNode._patchedKeys;
 
-  const l = keys.length;
+  const keysCount = keys.length;
 
-  if (l) {
+  if (keysCount) {
     const children = patchNode._children;
 
     const value = patchNode._value;
 
     const copy = isArray(value) ? value.slice() : { ...value };
 
-    for (let i = 0; i < l; i++) {
+    for (let i = 0; i < keysCount; i++) {
       const key = keys[i];
 
       copy[key] = buildPatchedValue(children.get(key)!);
@@ -363,128 +369,118 @@ const buildPatchedValue = (patchNode: PatchTreeNode) => {
   return patchNode._value;
 };
 
-export const commitPatchNode = (
-  patchNode: PatchTreeNode,
+export const commitNextValue = (
+  nextValue: any,
   prevValue: any,
-  control: ControlNode | undefined
-): any => {
-  if (patchNode._hasValuePatch) {
-    const nextValue = buildPatchedValue(patchNode);
+  internals: ControlInternalsChild | undefined,
+  lane: Lane
+) => {
+  if (prevValue !== nextValue) {
+    const isAPrimitive = prevValue == null || typeof prevValue != 'object';
 
-    if (prevValue !== nextValue) {
-      const isAPrimitive = prevValue == null || typeof prevValue != 'object';
+    const isBPrimitive = nextValue == null || typeof nextValue != 'object';
 
-      const isBPrimitive = nextValue == null || typeof nextValue != 'object';
+    const children = internals && internals._children;
 
-      const children = control && control._children;
-
-      if (
-        isAPrimitive ||
-        isBPrimitive ||
-        compareAndNotify(prevValue, nextValue, children, true)
-      ) {
-        if (isAPrimitive != isBPrimitive && children) {
-          notifyDescendants(
-            children,
-            isAPrimitive ? nextValue : prevValue,
-            isAPrimitive
-          );
-        }
-
-        return nextValue;
+    if (
+      isAPrimitive ||
+      isBPrimitive ||
+      compareAndNotify(prevValue, nextValue, children, true, lane)
+    ) {
+      if (isAPrimitive != isBPrimitive && children) {
+        notifyDescendants(
+          children,
+          isAPrimitive ? nextValue : prevValue,
+          isAPrimitive,
+          lane
+        );
       }
-    }
-  } else {
-    if (prevValue == null || typeof prevValue != 'object') {
-      throw new Error(
-        `Cannot set properties of ${prevValue !== null ? typeof prevValue : 'null'}`
-      );
-    }
 
-    const keys = patchNode._patchedKeys;
-
-    const l = keys.length;
-
-    const children = patchNode._children;
-
-    const controlChildren = control && control._children;
-
-    for (let i = 0; i < l; i++) {
-      const key = keys[i];
-
-      const nextValue = commitPatchNode(
-        children.get(key)!,
-        prevValue[key],
-        controlChildren && controlChildren.get(key)
-      );
-
-      if (nextValue !== UNCHANGED) {
-        let value;
-
-        if (isArray(prevValue)) {
-          value = prevValue.slice();
-
-          value[key as `${number}`] = nextValue;
-        } else {
-          value = { ...prevValue, [key]: nextValue };
-        }
-
-        while (++i < l) {
-          const key = keys[i];
-
-          const nextValue = commitPatchNode(
-            children.get(key)!,
-            prevValue[key],
-            controlChildren && controlChildren.get(key)
-          );
-
-          if (nextValue !== UNCHANGED) {
-            value[key] = nextValue;
-          }
-        }
-
-        if (control) {
-          const callbacks = control._listeners;
-
-          const l = callbacks.length;
-
-          if (l) {
-            control._version++;
-
-            for (let i = 0; i < l; i++) {
-              callbacks[i](value, prevValue);
-            }
-          }
-        }
-
-        return value;
-      }
+      return nextValue;
     }
   }
 
   return UNCHANGED;
 };
 
-export function commitSet(this: RootControlNode, patchNode: PatchTreeNode) {
-  const control = this;
+export const commitPatchNode = (
+  patchNode: PatchTreeNode,
+  prevValue: any,
+  internals: ControlInternalsChild | undefined,
+  lane: Lane
+): any => {
+  if (patchNode._hasValuePatch) {
+    return commitNextValue(
+      buildPatchedValue(patchNode),
+      prevValue,
+      internals,
+      lane
+    );
+  }
 
-  const prevValue = control._value;
+  if (prevValue == null || typeof prevValue != 'object') {
+    throw new Error(
+      `Cannot set properties of ${prevValue !== null ? typeof prevValue : 'null'}`
+    );
+  }
 
-  const nextValue = commitPatchNode(patchNode, prevValue, control);
+  const keys = patchNode._patchedKeys;
 
-  if (nextValue !== UNCHANGED) {
-    control._value = nextValue;
+  const keysCount = keys.length;
 
-    const callbacks = control._listeners;
+  const children = patchNode._children;
 
-    const l = callbacks.length;
+  const controlChildren = internals && internals._children;
 
-    if (l) {
-      control._version++;
+  for (let i = 0; i < keysCount; i++) {
+    const key = keys[i];
 
-      for (let i = 0; i < l; i++) {
-        callbacks[i](nextValue, prevValue);
+    const nextValue = commitPatchNode(
+      children.get(key)!,
+      prevValue[key],
+      controlChildren && controlChildren.get(key),
+      lane
+    );
+
+    if (nextValue !== UNCHANGED) {
+      let value;
+
+      if (isArray(prevValue)) {
+        value = prevValue.slice();
+
+        value[key as `${number}`] = nextValue;
+      } else {
+        value = { ...prevValue, [key]: nextValue };
       }
+
+      while (++i < keysCount) {
+        const key = keys[i];
+
+        const nextValue = commitPatchNode(
+          children.get(key)!,
+          prevValue[key],
+          controlChildren && controlChildren.get(key),
+          lane
+        );
+
+        if (nextValue !== UNCHANGED) {
+          value[key] = nextValue;
+        }
+      }
+
+      if (internals) {
+        notify(
+          internals._listeners,
+          internals._dependents,
+          lane,
+          value,
+          prevValue
+        );
+      }
+
+      return value;
     }
   }
-}
+
+  return UNCHANGED;
+};

@@ -2,13 +2,8 @@ import makeDerivedControl from '#internal/makeDerivedControl';
 import { ControlScope, ReadonlyAsyncControl, ReadonlyControl } from '#types';
 
 const createDerivedControl: {
-  <C extends ReadonlyControl>(
-    control: C
-  ): C extends ReadonlyAsyncControl<infer V>
-    ? ControlScope<V | undefined>
-    : C extends ReadonlyControl<infer V>
-      ? ControlScope<V>
-      : never;
+  <T>(control: ReadonlyAsyncControl<T>): ControlScope<T | undefined>;
+  <T>(control: ReadonlyControl<T>): ControlScope<T>;
   <T, V>(
     control: ReadonlyAsyncControl<T>,
     mapper: (value: T | undefined) => V

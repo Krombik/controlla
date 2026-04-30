@@ -24,6 +24,16 @@ const onValueChange: {
    *
    */
   <T>(control: ReadonlyControl<T>, onChange: ChangeListener<T>): () => void;
-} = (control, onChange) => control[INTERNALS]._subscribe(onChange, true);
+} = (control, onChange) => {
+  const internals = control[INTERNALS];
+
+  const root = internals[INTERNALS];
+
+  root._attach(internals, onChange, false);
+
+  return () => {
+    root._detach(internals, onChange, false);
+  };
+};
 
 export default onValueChange;

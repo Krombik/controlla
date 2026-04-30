@@ -1,124 +1,82 @@
-import type {
-  AsyncRootNode,
-  ChildControlNode,
-  RootControlNode,
-} from '#internal/types';
-import alwaysNoop from '#shared-internal/alwaysNoop';
+import type { ControlInternalsChild, ControlInternals } from '#internal/types';
 import append from '#shared-internal/append';
 import { INTERNALS } from '#shared-internal/constants';
-import createSubscriber from '#internal/createSubscriber';
-import useVersionedSync from './useVersionedSync';
+import { EMPTY_ARR } from '#internal/constants';
 
-function get(this: ChildControlNode) {
-  const self = this;
+function get(this: ControlInternalsChild) {
+  const path = this._path;
 
-  const path = self._path;
+  let value = this[INTERNALS]._value;
 
-  const l = path.length;
-
-  let value = self._root._value;
-
-  for (let i = 0; i < l; i++) {
+  for (let i = 0; i < path!.length; i++) {
     if (value == null) {
       return undefined;
     }
 
-    value = value[path[i]];
+    value = value[path![i]];
   }
 
   return value;
 }
 
-const childHandler: ProxyHandler<ChildControlNode> = {
-  get(control, prop: string | typeof INTERNALS) {
+const controlHandler: ProxyHandler<ControlInternals | ControlInternalsChild> = {
+  get(internals, prop: string | typeof INTERNALS) {
     if (prop === INTERNALS) {
-      if (control._subscribe == alwaysNoop) {
-        control._subscribe = createSubscriber(
-          control._listeners,
-          '_attachLoad' in control._root
-            ? (control._root as AsyncRootNode)
-            : undefined
-        );
-      }
-
-      return control;
+      return internals;
     }
 
-    if (control._storage) {
-      const child = control._storage.get(prop);
+    let storage = internals._storage;
 
-      if (child) {
-        return child;
+    let children: Map<string, ControlInternalsChild> | undefined;
+
+    if (storage !== undefined) {
+      const control = storage.get(prop);
+
+      if (control !== undefined) {
+        return control;
       }
+
+      children = internals._children;
     } else {
-      control._children = new Map();
+      internals._storage = storage = new Map();
 
-      control._storage = new Map();
+      children = internals._children;
+
+      if (children === undefined) {
+        internals._children = children = new Map();
+      }
     }
 
-    const nextControl: ChildControlNode = {
-      _root: control._root,
-      _listeners: [],
-      _path: append(control._path, prop),
-      _children: undefined,
-      _storage: undefined,
-      _get: get,
-      _subscribe: alwaysNoop,
-      _version: 0,
-      _useSubscribeWithLoad: useVersionedSync,
-    };
+    let nextInternals = children!.get(prop);
 
-    const next = new Proxy(nextControl, childHandler);
+    if (nextInternals === undefined) {
+      const path = internals._path;
 
-    control._children!.set(prop, nextControl);
+      children!.set(
+        prop,
+        (nextInternals = {
+          _get: get,
+          _listeners: EMPTY_ARR,
+          _indexMap: undefined,
+          _dependents: EMPTY_ARR,
+          _path: path !== undefined ? append(path, prop) : [prop],
+          [INTERNALS]: internals[INTERNALS],
+          _children: undefined,
+          _storage: undefined,
+          _data: undefined,
+        })
+      );
+    }
 
-    control._storage.set(prop, next);
+    const next = new Proxy(nextInternals, this);
+
+    storage.set(prop, next);
 
     return next;
   },
 };
 
-const rootHandler: ProxyHandler<RootControlNode> = {
-  get(control, prop: string | typeof INTERNALS) {
-    if (prop === INTERNALS) {
-      return control;
-    }
-
-    if (control._storage) {
-      const child = control._storage.get(prop);
-
-      if (child) {
-        return child;
-      }
-    } else {
-      control._children = new Map();
-
-      control._storage = new Map();
-    }
-
-    const nextControl: ChildControlNode = {
-      _root: control,
-      _listeners: [],
-      _path: [prop],
-      _children: undefined,
-      _storage: undefined,
-      _get: get,
-      _subscribe: alwaysNoop,
-      _version: 0,
-      _useSubscribeWithLoad: useVersionedSync,
-    };
-
-    const next = new Proxy(nextControl, childHandler);
-
-    control._children!.set(prop, nextControl);
-
-    control._storage.set(prop, next);
-
-    return next;
-  },
-};
-
-const createScope = (control: RootControlNode): any =>
-  new Proxy(control, rootHandler);
+const createScope = <T extends ControlInternals>(internals: T): any =>
+  new Proxy(internals, controlHandler);
 
 export default createScope;

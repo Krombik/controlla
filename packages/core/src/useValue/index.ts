@@ -1,18 +1,24 @@
-import { useSyncExternalStore } from 'react';
+import { useLayoutEffect, useReducer } from 'react';
 import type { Falsy } from '#internal/types';
 import noop from 'lodash.noop';
-import alwaysNoop from '#shared-internal/alwaysNoop';
 import { INTERNALS } from '#shared-internal/constants';
 import type {
   AsyncControl,
   ReadonlyAsyncControl,
   ReadonlyControl,
 } from '#types';
+import forceRerenderReducer from '#internal/forceRerenderReducer';
+import useInternalsValue from '#internal/useInternalsValue';
 
-const useValue = ((control: AsyncControl | Falsy) =>
-  control
-    ? control[INTERNALS]._useSubscribeWithLoad(useSyncExternalStore)
-    : useSyncExternalStore(alwaysNoop, noop)) as {
+const useValue = ((control: AsyncControl | Falsy) => {
+  const forceRerender = useReducer(forceRerenderReducer, 0)[1];
+
+  if (control) {
+    return useInternalsValue(control[INTERNALS], forceRerender);
+  }
+
+  useLayoutEffect(noop, [0]);
+}) as {
   /**
    * A hook to retrieve the current value from the provided {@link control}.
    * It ensures that the component re-renders whenever the {@link control} value changes.
