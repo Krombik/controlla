@@ -24,7 +24,7 @@ import {
   errorAttachAsync,
   errorDetachAsync,
   handleLoadingStateControls,
-} from '#internal/asyncLifecycle';
+} from './utils';
 import notify from '#internal/notify';
 import addToLevel from '#internal/addToLevel';
 import { attach, detach } from '#internal/syncLifecycle';
