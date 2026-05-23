@@ -9,28 +9,21 @@ const invalidate: {
   (control: AsyncControl, silent?: boolean): void;
   (control: AsyncControl, scheduler?: Scheduler): void;
 } = (control: AsyncControl, schedulerOrKeepPrevValue?: Scheduler | boolean) => {
-  const root = control[INTERNALS][INTERNALS];
+  const isLoud = schedulerOrKeepPrevValue !== true;
 
-  const { _load: data } = root;
+  const scheduler = isLoud
+    ? schedulerOrKeepPrevValue || scheduleMicrotask
+    : scheduleMicrotask;
 
-  if (!data || data._loadedAt) {
-    if (schedulerOrKeepPrevValue !== true) {
-      const scheduler = schedulerOrKeepPrevValue || scheduleMicrotask;
+  const lane = getLane(scheduler);
 
-      const lane = getLane(scheduler);
+  control[INTERNALS][INTERNALS]._errorControl[INTERNALS]._enqueueSet(
+    isLoud ? RELOAD : SILENT_RELOAD,
+    lane,
+    undefined
+  );
 
-      root._enqueueSet(undefined, lane);
-
-      root._errorControl[INTERNALS]._enqueueSet(RELOAD, lane);
-
-      scheduleFlush(lane, scheduler);
-    } else if (data) {
-      root._errorControl[INTERNALS]._enqueueSet(
-        SILENT_RELOAD,
-        getLane(scheduleMicrotask)
-      );
-    }
-  }
+  scheduleFlush(lane, scheduler);
 };
 
 export default invalidate;

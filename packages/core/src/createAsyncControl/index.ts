@@ -16,18 +16,36 @@ import initControl from '#internal/initControl';
 import readRootValue from '#internal/readRootValue';
 import { INTERNALS } from '#shared-internal/constants';
 import runPatching from '#internal/runPatching';
-import { commitPatchNode, UNCHANGED } from '#internal/commitPatchNode';
-import { EMPTY_ARR, RELOAD, SILENT_RELOAD } from '#internal/constants';
+import {
+  commitNextValue,
+  commitPatchNode,
+  UNCHANGED,
+} from '#internal/commitPatchNode';
+import {
+  EMPTY_ARR,
+  PatchType,
+  RELOAD,
+  SILENT_RELOAD,
+} from '#internal/constants';
 import {
   attachAsync,
+  cleanupLoad,
   detachAsync,
   errorAttachAsync,
   errorDetachAsync,
-  handleLoadingStateControls,
+  triggerLoad,
 } from './utils';
 import notify from '#internal/notify';
 import addToLevel from '#internal/addToLevel';
 import { attach, detach } from '#internal/syncLifecycle';
+import makeStatusInternals from '#internal/makeStatusInternals';
+import settlePromise from '#internal/settlePromise';
+
+const throwIfUndefined = () => {
+  throw new Error(
+    '[control] Cannot set undefined directly. Use invalidate(control) to trigger a reload'
+  );
+};
 
 function asyncEnqueueSet(
   this: AsyncControlInternals,
@@ -35,39 +53,56 @@ function asyncEnqueueSet(
   lane: Lane,
   path: string[] | undefined
 ) {
-  runPatching(lane, this, value, path);
-
-  if (!path && value !== undefined) {
-    const errControl = this._errorControl[INTERNALS];
-
-    const { _patchByControl } = lane;
-
-    if (!_patchByControl.has(errControl)) {
-      addToLevel(lane, errControl);
-    }
-
-    _patchByControl.set(errControl, undefined);
+  if (path === undefined && value === undefined) {
+    throwIfUndefined();
   }
+
+  runPatching(lane, this, value, path);
 }
 
 function errorEnqueueSet(
   this: ErrorControlInternals<AsyncControlInternals>,
   value: any,
-  lane: Lane
+  lane: Lane,
+  _: any
 ) {
-  const internals = this;
+  if (value === undefined) {
+    throwIfUndefined();
+  }
+
+  const internals = this._parent;
 
   const { _patchByControl } = lane;
 
-  if (value !== undefined) {
-    runPatching(lane, internals._parent, undefined, undefined);
-  }
+  const patchNode = _patchByControl.get(internals);
 
-  if (!_patchByControl.has(internals)) {
+  const type =
+    value === RELOAD
+      ? PatchType.RELOAD
+      : value === SILENT_RELOAD
+        ? PatchType.SILENT_RELOAD
+        : PatchType.ERROR;
+
+  if (patchNode) {
+    patchNode._type = type;
+
+    patchNode._value = value;
+
+    if (patchNode._patchedKeys.length) {
+      patchNode._patchedKeys.length = 0;
+
+      patchNode._children.clear();
+    }
+  } else {
     addToLevel(lane, internals);
-  }
 
-  _patchByControl.set(internals, value);
+    _patchByControl.set(internals, {
+      _children: new Map(),
+      _type: type,
+      _patchedKeys: [],
+      _value: value,
+    });
+  }
 }
 
 function commitAsyncSet(
@@ -77,9 +112,49 @@ function commitAsyncSet(
 ) {
   const internals = this;
 
+  const errorInternals = internals._errorControl[INTERNALS];
+
+  const loadingControl = internals._loadingControl[INTERNALS];
+
+  const readyControl = internals._readyControl[INTERNALS];
+
+  const prevLoading: boolean = loadingControl._value;
+
+  const prevReady: true | undefined = readyControl._value;
+
   const prevValue = internals._value;
 
-  const nextValue = commitPatchNode(patchNode, prevValue, internals, lane);
+  const prevErrorValue = errorInternals._value;
+
+  const patchType = patchNode._type;
+
+  const load = internals._load;
+
+  let nextValue;
+
+  let nextErrorValue: any;
+
+  let nextReadyValue = prevReady;
+
+  let nextLoadingValue = prevLoading;
+
+  if (patchType < PatchType.ERROR) {
+    nextValue = commitPatchNode(patchNode, prevValue, internals, lane);
+  } else if (patchType == PatchType.ERROR) {
+    nextValue = commitNextValue(undefined, prevValue, internals, lane);
+
+    nextErrorValue = patchNode._value;
+  } else if (PatchType.RELOAD) {
+    nextValue = commitNextValue(undefined, prevValue, internals, lane);
+
+    nextLoadingValue = true;
+
+    nextReadyValue = undefined;
+  } else {
+    nextValue = UNCHANGED;
+
+    nextLoadingValue = true;
+  }
 
   if (nextValue !== UNCHANGED) {
     internals._value = nextValue;
@@ -97,80 +172,80 @@ function commitAsyncSet(
     }
 
     if (nextValue !== undefined) {
-      const isLoaded = internals._isLoaded(
+      nextLoadingValue = !internals._isLoaded(
         nextValue,
         prevValue,
         internals._attempt
       );
 
-      internals._attempt = isLoaded ? 0 : internals._attempt + 1;
+      nextReadyValue = true;
 
-      handleLoadingStateControls(internals, lane, isLoaded, true);
+      internals._attempt = nextLoadingValue ? internals._attempt + 1 : 0;
 
-      if (internals._promise) {
-        internals._promise._resolve(nextValue);
+      settlePromise(internals, true, nextValue);
+    }
+  }
 
-        internals._promise = undefined;
+  if (nextErrorValue !== prevErrorValue) {
+    internals._value = nextErrorValue;
+
+    notify(
+      internals._listeners,
+      internals._dependents,
+      lane,
+      nextErrorValue,
+      prevErrorValue
+    );
+
+    if (nextErrorValue !== undefined) {
+      nextLoadingValue = false;
+
+      nextReadyValue = undefined;
+
+      internals._attempt = 0;
+
+      settlePromise(internals, false, nextErrorValue);
+    }
+  }
+
+  if (!nextLoadingValue && load) {
+    load._loadedAt =
+      load._source.reloadOnFocus || load._source.reloadIfStale ? Date.now() : 1;
+  }
+
+  if (nextLoadingValue != prevLoading) {
+    loadingControl._value = nextLoadingValue;
+
+    notify(
+      loadingControl._listeners,
+      loadingControl._dependents,
+      lane,
+      nextLoadingValue,
+      prevLoading
+    );
+
+    if (load) {
+      if (load._activeCount || !load._canScheduleUnload) {
+        if (nextLoadingValue) {
+          triggerLoad(internals);
+        } else {
+          cleanupLoad(load);
+        }
+      } else if (nextLoadingValue) {
+        load._loadedAt = 0;
       }
     }
   }
-}
 
-function commitErrorSet(
-  this: ErrorControlInternals<AsyncControlInternals>,
-  nextValue: any,
-  lane: Lane
-) {
-  const internals = this;
+  if (prevReady !== nextReadyValue) {
+    readyControl._value = nextReadyValue;
 
-  const prevValue = internals._value;
-
-  if (nextValue !== RELOAD && nextValue !== SILENT_RELOAD) {
-    if (prevValue !== nextValue) {
-      const parent = internals._parent;
-
-      internals._value = nextValue;
-
-      notify(
-        internals._listeners,
-        internals._dependents,
-        lane,
-        nextValue,
-        prevValue
-      );
-
-      if (prevValue === undefined) {
-        parent._attempt = 0;
-
-        handleLoadingStateControls(parent, lane, true, undefined);
-
-        if (parent._promise) {
-          parent._promise._reject(nextValue);
-
-          parent._promise = undefined;
-        }
-      }
-    }
-  } else {
-    const wasError = prevValue !== undefined;
-
-    if (wasError) {
-      internals._value = undefined;
-
-      notify(
-        internals._listeners,
-        internals._dependents,
-        lane,
-        undefined,
-        prevValue
-      );
-    }
-
-    handleLoadingStateControls(
-      internals._parent,
+    notify(
+      readyControl._listeners,
+      readyControl._dependents,
       lane,
-      false,
-      wasError || nextValue === RELOAD ? undefined : true
+      nextReadyValue,
+      prevReady
     );
   }
 }
@@ -189,31 +264,11 @@ const createAsyncControl: {
 
   const source = options && options.source;
 
-  const loadingControl: AsyncControlInternals['_loadingControl'][typeof INTERNALS] =
-    {
-      [INTERNALS]: undefined!,
-      _get: readRootValue,
-      _listeners: EMPTY_ARR,
-      _indexMap: undefined,
-      _dependents: EMPTY_ARR,
-      _path: undefined,
-      _value: true,
-      _level: 0,
-      _load: undefined,
-    };
+  const isLoadable = !!source;
 
-  const readyControl: AsyncControlInternals['_readyControl'][typeof INTERNALS] =
-    {
-      [INTERNALS]: undefined!,
-      _get: readRootValue,
-      _listeners: EMPTY_ARR,
-      _indexMap: undefined,
-      _dependents: EMPTY_ARR,
-      _path: undefined,
-      _value: undefined,
-      _level: 0,
-      _load: undefined,
-    };
+  const loadingInternals = makeStatusInternals(undefined!, true);
+
+  const readyInternals = makeStatusInternals(undefined!, undefined);
 
   const errorControl: ErrorControlInternals<AsyncControlInternals> = {
     [INTERNALS]: undefined!,
@@ -226,10 +281,9 @@ const createAsyncControl: {
     _level: 0,
     _attach: source ? errorAttachAsync : attach,
     _detach: source ? errorDetachAsync : detach,
-    _commitSet: commitErrorSet,
     _enqueueSet: errorEnqueueSet,
     _parent: undefined!,
-    _load: source ? true : undefined,
+    _load: isLoadable,
   };
 
   const internals = initControl<AsyncControlInternals>(
@@ -250,8 +304,8 @@ const createAsyncControl: {
       _detach: source ? detachAsync : detach,
       _externalStorage: undefined,
       _errorControl: { [INTERNALS]: errorControl },
-      _loadingControl: { [INTERNALS]: loadingControl },
-      _readyControl: { [INTERNALS]: readyControl },
+      _loadingControl: { [INTERNALS]: loadingInternals },
+      _readyControl: { [INTERNALS]: readyInternals },
       _load: source && {
         _activeCount: 0,
         _canScheduleUnload: true,
@@ -282,20 +336,20 @@ const createAsyncControl: {
 
   (errorControl as Mutable<typeof errorControl>)._parent = internals;
 
-  (readyControl as Mutable<typeof readyControl>)[INTERNALS] = internals;
+  (readyInternals as Mutable<typeof readyInternals>)[INTERNALS] = internals;
 
-  (loadingControl as Mutable<typeof loadingControl>)[INTERNALS] = internals;
+  (loadingInternals as Mutable<typeof loadingInternals>)[INTERNALS] = internals;
 
   if (value !== undefined) {
-    readyControl._value = true;
+    readyInternals._value = true;
 
     if (
-      (!source || !source.revalidate) &&
+      (!isLoadable || !source.revalidate) &&
       (!isLoaded || isLoaded(value, undefined, 0))
     ) {
-      loadingControl._value = false;
+      loadingInternals._value = false;
 
-      if (source) {
+      if (isLoadable) {
         internals._load!._loadedAt =
           source.reloadIfStale || source.reloadOnFocus ? Date.now() : 1;
       }

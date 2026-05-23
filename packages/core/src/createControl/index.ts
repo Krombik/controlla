@@ -79,7 +79,7 @@ const createControl: {
         _value: undefined,
         _attach: attach,
         _detach: detach,
-        _load: undefined,
+        _load: false,
         _commitSet: commitSet,
         _enqueueSet: enqueueSet,
         _externalStorage: undefined,
