@@ -2,22 +2,7 @@ import type { ControlInternalsChild, ControlInternals } from '#internal/types';
 import append from '#shared-internal/append';
 import { INTERNALS } from '#shared-internal/constants';
 import { EMPTY_ARR } from '#internal/constants';
-
-function get(this: ControlInternalsChild) {
-  const path = this._path;
-
-  let value = this[INTERNALS]._value;
-
-  for (let i = 0; i < path!.length; i++) {
-    if (value == null) {
-      return undefined;
-    }
-
-    value = value[path![i]];
-  }
-
-  return value;
-}
+import makeChildNode from '#internal/makeChildNode';
 
 const controlHandler: ProxyHandler<ControlInternals | ControlInternalsChild> = {
   get(internals, prop: string | typeof INTERNALS) {
@@ -54,17 +39,12 @@ const controlHandler: ProxyHandler<ControlInternals | ControlInternalsChild> = {
 
       children!.set(
         prop,
-        (nextInternals = {
-          _get: get,
-          _listeners: EMPTY_ARR,
-          _indexMap: undefined,
-          _dependents: EMPTY_ARR,
-          _path: path !== undefined ? append(path, prop) : [prop],
-          [INTERNALS]: internals[INTERNALS],
-          _children: undefined,
-          _storage: undefined,
-          _data: undefined,
-        })
+        (nextInternals = makeChildNode(
+          internals[INTERNALS],
+          path !== undefined ? append(path, prop) : [prop],
+          undefined,
+          EMPTY_ARR
+        ))
       );
     }
 

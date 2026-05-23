@@ -9,42 +9,6 @@ import type { ReadonlyAsyncControl } from '#types';
 import forceRerenderReducer from '#internal/forceRerenderReducer';
 
 const useSuspenseValue: {
-  /**
-   * Hook to retrieve the current value of the loaded {@link control}.
-   * If the {@link control} isn't loaded, the component using this hook suspends.
-   * Ensure the component is wrapped in a <Suspense> component to handle the loading control.
-   * If loading fails and {@link safeReturn} is not enabled, an error is thrown.
-   *
-   * @example
-   * ```jsx
-   * const DataComponent = () => {
-   *   const data = use(asyncControl); // Suspends if not loaded
-   *
-   *   return <div>Data: {JSON.stringify(data)}</div>;
-   * };
-   *
-   * const SafeComponent = () => {
-   *   const [data, error] = use(asyncControl, true); // Safely returns a tuple
-   *
-   *   if (error) {
-   *     return <div>Error: {error.message}</div>;
-   *   }
-   *
-   *   return <div>Data: {JSON.stringify(data)}</div>;
-   * };
-   *
-   * const App = () => (
-   *   <>
-   *     <Suspense fallback={<div>Loading...</div>}>
-   *       <DataComponent />
-   *     </Suspense>
-   *     <Suspense fallback={<div>Loading...</div>}>
-   *       <SafeComponent />
-   *     </Suspense>
-   *   </>
-   * );
-   * ```
-   */
   <S extends ReadonlyAsyncControl | Falsy, SafeReturn extends boolean = false>(
     control: S,
     safeReturn?: SafeReturn

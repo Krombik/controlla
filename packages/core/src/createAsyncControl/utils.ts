@@ -2,11 +2,8 @@ import type {
   AsyncControlInternals,
   ChangeListener,
   ErrorControlInternals,
-  Lane,
   Listeners,
 } from '#internal/types';
-import { INTERNALS } from '#shared-internal/constants';
-import notify from '#internal/notify';
 import scheduleMicrotask from '#internal/scheduleMicrotask';
 import {
   addListener,
@@ -24,14 +21,12 @@ const visibilityChangeIndexMap = new Map<AsyncControlInternals, number>();
 const triggerSilentReload = (internals: AsyncControlInternals) => {
   const currLine = getCurrentLane();
 
-  const errInternals = internals._errorControl[INTERNALS];
-
   if (currLine) {
-    errInternals._enqueueSet(SILENT_RELOAD, currLine);
+    internals._enqueueSet(SILENT_RELOAD, currLine, undefined);
   } else {
     const lane = getLane(scheduleMicrotask);
 
-    errInternals._enqueueSet(SILENT_RELOAD, lane);
+    internals._enqueueSet(SILENT_RELOAD, lane, undefined);
 
     scheduleFlush(lane, scheduleMicrotask);
   }
@@ -54,7 +49,7 @@ const visibilityChangeListener = () => {
   }
 };
 
-const triggerLoad = (internals: AsyncControlInternals) => {
+export const triggerLoad = (internals: AsyncControlInternals) => {
   const data = internals._load!;
 
   const { _slowLoadMonitor } = data;
@@ -78,7 +73,9 @@ const loaderCleanupSet: AsyncControlInternals[] = [];
 
 let isLoadCleanupPending = true;
 
-const cleanup = (load: NonNullable<AsyncControlInternals['_load']>) => {
+export const cleanupLoad = (
+  load: NonNullable<AsyncControlInternals['_load']>
+) => {
   const { _slowLoadMonitor } = load;
 
   if (load._cleanup) {
@@ -101,7 +98,7 @@ const handleUnloads = () => {
     source._canScheduleUnload = true;
 
     if (!source._activeCount) {
-      cleanup(source);
+      cleanupLoad(source);
 
       if (source._source.reloadOnFocus) {
         const last = visibilityChangeQueue.pop()!;
@@ -129,68 +126,6 @@ const handleUnloads = () => {
   loaderCleanupSet.length = 0;
 
   isLoadCleanupPending = true;
-};
-
-export const handleLoadingStateControls = (
-  internals: AsyncControlInternals,
-  lane: Lane,
-  isLoaded: boolean,
-  nextReady: true | undefined
-) => {
-  const loadingControl = internals._loadingControl[INTERNALS];
-
-  const readyControl = internals._readyControl[INTERNALS];
-
-  const prevLoading = loadingControl._value;
-
-  const prevReady = readyControl._value;
-
-  const nextLoading = !isLoaded;
-
-  const source = internals._load;
-
-  if (isLoaded && source) {
-    source._loadedAt =
-      source._source.reloadOnFocus || source._source.reloadIfStale
-        ? Date.now()
-        : 1;
-  }
-
-  if (nextLoading != prevLoading) {
-    loadingControl._value = nextLoading;
-
-    notify(
-      loadingControl._listeners,
-      loadingControl._dependents,
-      lane,
-      nextLoading,
-      prevLoading
-    );
-
-    if (source) {
-      if (source._activeCount || !source._canScheduleUnload) {
-        if (isLoaded) {
-          cleanup(source);
-        } else {
-          triggerLoad(internals);
-        }
-      } else if (nextLoading) {
-        source._loadedAt = 0;
-      }
-    }
-  }
-
-  if (prevReady !== nextReady) {
-    readyControl._value = nextReady;
-
-    notify(
-      readyControl._listeners,
-      readyControl._dependents,
-      lane,
-      nextReady,
-      prevReady
-    );
-  }
 };
 
 const attachLoad = (control: AsyncControlInternals) => {

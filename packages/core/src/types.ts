@@ -12,8 +12,8 @@ import type {
   ControlInternals,
   AsyncControlInternals,
   AsyncControlInternalsChild,
-  ControlType,
 } from '#internal/types';
+import type { ControlType } from '#internal/constants';
 
 declare const CONTROL_MARKER: unique symbol;
 
@@ -150,38 +150,74 @@ export type PollableControlOptions<
     hiddenInterval?: number;
   };
 
-/**
- * Represents a structured control storage system that allows retrieval and deletion
- * of control entries using specified keys.
- */
+type MixedKey<K> = K | ReadonlyControl<K | undefined>;
+
+type MixedKeys<Keys extends PrimitiveOrNested[]> = {
+  [I in keyof Keys]: MixedKey<Keys[I]>;
+};
+
+type CombineErrors<T extends RegistryItem, Errors> =
+  T extends AsyncControlScope<infer V, infer E>
+    ? AsyncControlScope<
+        V,
+        Errors extends any[] ? [...Errors, E | undefined] : never
+      >
+    : T extends ControlScope<infer V>
+      ? AsyncControlScope<Exclude<V, undefined>, Errors>
+      : T extends Control<infer V>
+        ? AsyncControl<Exclude<V, undefined>, Errors>
+        : never;
+
 export type Registry<
   T extends RegistryItem,
-  Keys extends PrimitiveOrNested[],
+  Keys extends Exclude<PrimitiveOrNested, undefined>[],
 > = RegistryMarker<Keys, T> & {
-  /**
-   * Retrieves a control within the storage using the provided keys.
-   *
-   * @example
-   * ```js
-   * const control = storage.get('key', { some: { nested: ['key'] } });
-   * ```
-   */
-  get(...keys: Keys): T;
-  has(...keys: Keys | PartialTuple<Keys>): boolean;
+  get<K extends MixedKeys<Keys>>(
+    ...keys: K
+  ): [Extract<K[number], ReadonlyAsyncControl>] extends [never]
+    ? T extends AsyncControl
+      ? T
+      : Extract<K[number], Control> extends Control<infer V>
+        ? [Extract<V, undefined>] extends [never]
+          ? T
+          : T extends ControlScope<infer V>
+            ? ControlScope<V | undefined>
+            : T extends Control<infer V>
+              ? Control<V | undefined>
+              : never
+        : T
+    : CombineErrors<
+        T,
+        {
+          [index in keyof K]: K[index] extends ReadonlyAsyncControl<
+            any,
+            infer E
+          >
+            ? E | undefined
+            : undefined;
+        }
+      >;
+  has(...keys: MixedKeys<Keys> | PartialTuple<MixedKeys<Keys>>): boolean;
   /**
    * Deletes a control entry from the storage associated with the given key.
    *
    * **Warning**: This only removes the control entry from
    * the storage but does not clear or reset the control itself.
    */
-  delete(...keys: Keys | PartialTuple<Keys>): boolean;
+  delete(...keys: MixedKeys<Keys> | PartialTuple<MixedKeys<Keys>>): boolean;
   clear(): void;
   /** @internal */
   _bounded: WeakMap<any, any> | undefined;
   /** @internal */
   _storage: Map<any, any>;
   /** @internal */
-  readonly _getItem: (...args: any[]) => any;
+  readonly _depth: number;
+  /** @internal */
+  _getItem(
+    arg1: any,
+    syncExternalStorage: SyncExternalStorage | undefined,
+    keys: any[] | undefined
+  ): Control | ControlScope | AsyncControlScope;
   /** @internal */
   readonly _arg1: any;
   /** @internal */

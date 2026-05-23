@@ -15,6 +15,7 @@ import type {
   SyncExternalStorage,
 } from '#types';
 import type SuspenseContext from '#internal/SuspenseContext';
+import type { PatchType } from './constants';
 
 export type Lane = {
   _canScheduleFlush: boolean;
@@ -41,7 +42,7 @@ export type ChangeListener<T = any> = (newValue: T, prevValue: T) => void;
 
 /** @internal */
 export type PatchTreeNode = {
-  _hasValuePatch: boolean;
+  _type: PatchType;
   _value: any;
   readonly _children: Map<string, PatchTreeNode>;
   readonly _patchedKeys: string[];
@@ -69,7 +70,7 @@ export interface ControlInternalsBase extends Listeners<ChangeListener> {
   readonly _dependents: Notifier[];
 }
 
-interface Attachers {
+export interface Attachers {
   _attach(
     control: Listeners<ChangeListener> | undefined,
     listener: ChangeListener | undefined,
@@ -80,19 +81,23 @@ interface Attachers {
     listener: ChangeListener | undefined,
     isLoad: boolean
   ): void;
-}
-
-export interface RootBase extends Attachers {
-  _value: any;
-  readonly [INTERNALS]: this;
   readonly _level: number;
   readonly _load: unknown;
+}
+
+export interface RootBase {
+  _value: any;
+  readonly [INTERNALS]: this;
 }
 
 export type ReadonlyPrimitiveControlInternals = ControlInternalsBase & RootBase;
 
 interface Settable {
-  _enqueueSet(value: any, lane: Lane, path?: readonly string[]): void;
+  _enqueueSet(
+    value: any,
+    lane: Lane,
+    path: readonly string[] | undefined
+  ): void;
   _commitSet(value: any, lane: Lane): void;
 }
 
@@ -100,17 +105,19 @@ export type WithExternalStorage = {
   readonly _externalStorage?: ReturnType<SyncExternalStorage>;
 };
 
-export type PrimitiveControlInternals = ReadonlyPrimitiveControlInternals &
+export type PrimitiveControlInternals = Attachers &
+  ControlInternalsBase &
+  RootBase &
   Settable &
   WithExternalStorage;
 
 export type ErrorControlInternals<Parent> = ReadonlyPrimitiveControlInternals &
-  Settable & {
+  Attachers &
+  Pick<Settable, '_enqueueSet'> & {
     readonly _parent: Parent;
   };
 
-export interface ControlInternals
-  extends ControlInternalsBase, RootBase, Settable, WithExternalStorage {
+export interface ControlInternals extends PrimitiveControlInternals {
   _children:
     | Map<
         string,
@@ -140,10 +147,10 @@ export type AsyncThings<Parent> = {
     [INTERNALS]: ErrorControlInternals<Parent>;
   };
   readonly _loadingControl: {
-    [INTERNALS]: Omit<ReadonlyPrimitiveControlInternals, keyof Attachers>;
+    [INTERNALS]: ReadonlyPrimitiveControlInternals;
   };
   readonly _readyControl: {
-    [INTERNALS]: Omit<ReadonlyPrimitiveControlInternals, keyof Attachers>;
+    [INTERNALS]: ReadonlyPrimitiveControlInternals;
   };
   _promise:
     | {
@@ -152,7 +159,6 @@ export type AsyncThings<Parent> = {
         _reject(err: any): void;
       }
     | undefined;
-  readonly _load: unknown;
 };
 
 export interface AsyncControlInternals
@@ -253,10 +259,3 @@ export type PendingControl = {
 } & AsyncControlInternals;
 
 export type RenderablePrimitives = string | number | null | undefined;
-
-export const enum ControlType {
-  UNDEFINED = 0,
-  SYNC = 1,
-  ASYNC = 2,
-  LOADABLE = 3,
-}

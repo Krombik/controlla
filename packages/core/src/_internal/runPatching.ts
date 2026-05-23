@@ -1,5 +1,6 @@
 import type { Lane, PatchTreeNode, ControlInternals } from '#internal/types';
 import addToLevel from '#internal/addToLevel';
+import { PatchType } from './constants';
 
 const runPatching = (
   lane: Lane,
@@ -7,57 +8,58 @@ const runPatching = (
   nextValue: any,
   path: readonly string[] | undefined
 ) => {
-  const l = path ? path.length : 0;
-
   let patchNode = lane._patchByControl.get(internals);
 
   let children: Map<string, PatchTreeNode>;
 
   if (patchNode) {
     children = patchNode._children;
+
+    patchNode._type = PatchType.UNSET;
   } else {
-    children = new Map();
-
-    patchNode = {
-      _children: children,
-      _hasValuePatch: false,
-      _patchedKeys: [],
-      _value: undefined,
-    };
-
-    lane._patchByControl.set(internals, patchNode);
+    lane._patchByControl.set(
+      internals,
+      (patchNode = {
+        _children: (children = new Map()),
+        _type: PatchType.UNSET,
+        _patchedKeys: [],
+        _value: undefined,
+      })
+    );
 
     addToLevel(lane, internals);
   }
 
-  for (let i = 0; i < l; i++) {
-    let key = path![i];
+  if (path) {
+    for (let i = 0, l = path.length; i < l; i++) {
+      let key = path![i];
 
-    if (!children.has(key)) {
-      patchNode._patchedKeys.push(key);
+      if (!children.has(key)) {
+        patchNode._patchedKeys.push(key);
 
-      while (++i < l) {
+        while (++i < l) {
+          children.set(key, {
+            _children: (children = new Map()),
+            _type: PatchType.UNSET,
+            _patchedKeys: [(key = path![i])],
+            _value: undefined,
+          });
+        }
+
         children.set(key, {
-          _children: (children = new Map()),
-          _hasValuePatch: false,
-          _patchedKeys: [(key = path![i])],
-          _value: undefined,
+          _children: new Map(),
+          _type: PatchType.SET,
+          _patchedKeys: [],
+          _value: nextValue,
         });
+
+        return;
       }
 
-      children.set(key, {
-        _children: new Map(),
-        _hasValuePatch: true,
-        _patchedKeys: [],
-        _value: nextValue,
-      });
+      patchNode = children.get(key)!;
 
-      return;
+      children = patchNode._children;
     }
-
-    patchNode = children.get(key)!;
-
-    children = patchNode._children;
   }
 
   if (patchNode._patchedKeys.length) {
@@ -68,7 +70,7 @@ const runPatching = (
 
   patchNode._value = nextValue;
 
-  patchNode._hasValuePatch = true;
+  patchNode._type = PatchType.SET;
 };
 
 export default runPatching;

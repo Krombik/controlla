@@ -409,7 +409,7 @@ export const commitPatchNode = (
   internals: ControlInternalsChild | undefined,
   lane: Lane
 ): any => {
-  if (patchNode._hasValuePatch) {
+  if (patchNode._type) {
     return commitNextValue(
       buildPatchedValue(patchNode),
       prevValue,

@@ -10,6 +10,9 @@ import type {
   ControlInternals,
   Lane,
   PatchTreeNode,
+  AsyncThings,
+  ErrorControlInternals,
+  Notifier,
 } from '#internal/types';
 import {
   commitNextValue,
@@ -28,9 +31,33 @@ import {
   keyNotify,
   type DerivedControlInternals,
 } from '#internal/derivedControlUtils';
+import makeStatusInternals from '#internal/makeStatusInternals';
+import throwReadonlyError from '#internal/throwReadonlyError';
+import addToQueue from '#internal/addToQueue';
+
+interface AsyncDerivedControlInternals
+  extends DerivedControlInternals, AsyncThings<AsyncDerivedControlInternals> {
+  readonly _errors: any[] | undefined;
+}
+
+function keyErrorNotify(
+  this: Notifier,
+  lane: Lane,
+  root: AsyncDerivedControlInternals,
+  value: any,
+  _: any
+) {
+  if (root._errors) {
+    root._errors[this._index] = value;
+  }
+
+  root._equable = false;
+
+  addToQueue(lane, root);
+}
 
 function commitSet(
-  this: DerivedControlInternals,
+  this: AsyncDerivedControlInternals,
   patchNode: PatchTreeNode,
   lane: Lane
 ) {
@@ -66,11 +93,29 @@ function commitSet(
 }
 
 const makeDerivedControl = (params: any[]) => {
-  let maxLevel = 0;
-
   const controlCount = params.length - 1;
 
-  const derivedRoot: DerivedControlInternals = {
+  const errorInternals: ErrorControlInternals<AsyncDerivedControlInternals> = {
+    [INTERNALS]: undefined!,
+    _attach: attach,
+    _detach: detach,
+    _dependents: EMPTY_ARR,
+    _enqueueSet: throwReadonlyError,
+    _get: readRootValue,
+    _indexMap: undefined,
+    _level: 0,
+    _listeners: EMPTY_ARR,
+    _load: true,
+    _parent: undefined!,
+    _path: undefined,
+    _value: undefined,
+  };
+
+  const loadingInternals = makeStatusInternals(undefined!, true);
+
+  const readyInternals = makeStatusInternals(undefined!, undefined);
+
+  const derivedRoot: AsyncDerivedControlInternals = {
     [INTERNALS]: undefined!,
     _get: readRootValue,
     _listeners: EMPTY_ARR,
@@ -91,9 +136,18 @@ const makeDerivedControl = (params: any[]) => {
     _isSingleDependency: controlCount < 2,
     _equable: true,
     _notifiers: undefined!,
+    _errorControl: { [INTERNALS]: errorInternals },
+    _loadingControl: { [INTERNALS]: loadingInternals },
+    _readyControl: { [INTERNALS]: readyInternals },
+    _promise: undefined,
+    _errors: undefined,
   };
 
   const weakRef = new WeakRef(derivedRoot);
+
+  let maxLevel = 0;
+
+  let errors;
 
   if (controlCount > 1) {
     const seenLoadableRoots = new Set<ControlInternals>();
@@ -168,6 +222,8 @@ const makeDerivedControl = (params: any[]) => {
 
     const root = internals[INTERNALS];
 
+    const keyErrorControl = (root as AsyncControlInternals)._errorControl;
+
     maxLevel = root._level;
 
     if (controlCount) {
@@ -175,9 +231,46 @@ const makeDerivedControl = (params: any[]) => {
 
       derivedRoot._mapper = mapper;
 
-      derivedRoot._value = mapper(internals._get());
+      if (keyErrorControl) {
+        const errorValue = keyErrorControl[INTERNALS]._value;
+
+        (derivedRoot as Mutable<typeof derivedRoot>)._errors = errors = [
+          errorValue,
+          undefined,
+        ];
+
+        if (errorValue === undefined) {
+          if (root._value !== undefined) {
+            try {
+              derivedRoot._value = mapper(internals._get());
+            } catch (error) {
+              errors[1] = error;
+
+              errorInternals._value = errors.slice();
+            }
+          }
+        } else {
+          errorInternals._value = errors.slice();
+        }
+      } else if (root._value !== undefined) {
+        try {
+          derivedRoot._value = mapper(internals._get());
+        } catch (error) {
+          errorInternals._value = error;
+        }
+      }
     } else {
-      derivedRoot._value = internals._get();
+      if (keyErrorControl) {
+        const errorValue = keyErrorControl[INTERNALS]._value;
+
+        if (errorValue === undefined) {
+          derivedRoot._value = internals._get();
+        } else {
+          errorInternals._value = errorValue;
+        }
+      } else {
+        derivedRoot._value = internals._get();
+      }
     }
 
     if (root._load) {
