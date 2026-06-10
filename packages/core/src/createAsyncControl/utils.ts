@@ -13,6 +13,7 @@ import {
   scheduleFlush,
 } from '#internal/flushQueue';
 import { SILENT_RELOAD } from '#internal/constants';
+import { INTERNALS } from '#shared-internal/constants';
 
 const visibilityChangeQueue: AsyncControlInternals[] = [];
 
@@ -49,6 +50,17 @@ const visibilityChangeListener = () => {
   }
 };
 
+const endLoad = (internals: AsyncControlInternals) => {
+  const load = internals._load!;
+
+  internals._attempt = 0;
+
+  load._loadedAt =
+    load._source.reloadOnFocus || load._source.reloadIfStale ? Date.now() : 1;
+
+  cleanupLoad(load);
+};
+
 export const triggerLoad = (internals: AsyncControlInternals) => {
   const data = internals._load!;
 
@@ -56,7 +68,36 @@ export const triggerLoad = (internals: AsyncControlInternals) => {
 
   data._loadedAt = 0;
 
-  data._cleanup = data._source.load(internals as any, data._keys);
+  data._cleanup = data._source.load!(
+    {
+      setValue(value, scheduler) {
+        const isLoaded = internals._isLoaded(
+          value,
+          internals._value,
+          internals._attempt
+        );
+
+        if (isLoaded) {
+          endLoad(internals);
+        }
+
+        internals._enqueueSet(value, getLane(scheduler || scheduleMicrotask));
+
+        return !isLoaded;
+      },
+      setError(value, scheduler) {
+        endLoad(internals);
+
+        internals._errorControl[INTERNALS]._enqueueSet(
+          value,
+          getLane(scheduler || scheduleMicrotask)
+        );
+      },
+      stillLoading: () => !data._loadedAt,
+      getValue: () => internals._get(),
+    },
+    data._keys!
+  );
 
   if (_slowLoadMonitor) {
     _slowLoadMonitor._timerId = setTimeout(() => {

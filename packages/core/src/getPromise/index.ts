@@ -18,8 +18,8 @@ const getPromise = <T>(control: ReadonlyAsyncControl<T>): Promise<T> => {
   const internals = control[INTERNALS];
 
   return internals._path
-    ? selectPromise(internals[INTERNALS]).then(() => internals._get())
-    : selectPromise(internals[INTERNALS]);
+    ? selectPromise(internals._root).then(() => internals._get())
+    : selectPromise(internals._root);
 };
 
 export default getPromise;

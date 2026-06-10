@@ -4,7 +4,7 @@ import type { ReadonlyControl } from '#types';
 const load = (control: ReadonlyControl) => {
   let isCallable = true;
 
-  const root = control[INTERNALS][INTERNALS];
+  const root = control[INTERNALS]._root;
 
   root._attach(undefined, undefined, true);
 

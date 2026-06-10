@@ -1,19 +1,50 @@
-import type { Mutable, PrimitiveControlInternals } from '#internal/types';
-import { INTERNALS } from '#shared-internal/constants';
+import type {
+  AsyncControlInternals,
+  Mutable,
+  PrimitiveControlInternals,
+} from '#internal/types';
 import type { SyncExternalStorage } from '#types';
+import { getCurrentLane, getLane, scheduleFlush } from '#internal/flushQueue';
+import scheduleMicrotask from '#internal/scheduleMicrotask';
+import { RELOAD } from './constants';
+import { INTERNALS } from '#shared-internal/constants';
 
 const initControl = <I extends PrimitiveControlInternals>(
   internals: I,
   value: unknown | (() => unknown) | undefined,
   syncExternalStorage: SyncExternalStorage | undefined,
-  keys: any[] | undefined
+  keys: any[] | undefined,
+  isSync: boolean
 ): I => {
-  (internals as Mutable<I>)[INTERNALS] = internals;
+  (internals as Mutable<I>)._root = internals;
 
   if (syncExternalStorage) {
     const externalStorage = syncExternalStorage(keys);
 
     if (externalStorage.observe) {
+      const ref = new WeakRef(internals);
+
+      const unobserve = (internals._unobserve = externalStorage.observe(
+        (value) => {
+          const self = ref.deref();
+
+          if (self) {
+            const lane = getCurrentLane() || getLane(scheduleMicrotask);
+
+            if (isSync || value !== undefined) {
+              self._enqueueSet(value, lane);
+            } else {
+              (self as any as AsyncControlInternals)._errorControl[
+                INTERNALS
+              ]._enqueueSet(RELOAD, lane);
+            }
+
+            scheduleFlush(lane, scheduleMicrotask);
+          } else {
+            unobserve();
+          }
+        }
+      ));
     }
 
     const storageValue = externalStorage.get();
@@ -21,7 +52,8 @@ const initControl = <I extends PrimitiveControlInternals>(
     if (storageValue !== undefined) {
       internals._value = storageValue;
     } else {
-      const defaultValue = typeof value != 'function' ? value : value();
+      const defaultValue =
+        typeof value != 'function' ? value : keys ? value(...keys) : value();
 
       if (defaultValue !== undefined) {
         externalStorage.set(defaultValue);
@@ -29,8 +61,11 @@ const initControl = <I extends PrimitiveControlInternals>(
         internals._value = defaultValue;
       }
     }
+
+    (internals as Mutable<I>)._externalStorage = externalStorage;
   } else {
-    internals._value = typeof value != 'function' ? value : value();
+    internals._value =
+      typeof value != 'function' ? value : keys ? value(...keys) : value();
   }
 
   return internals;

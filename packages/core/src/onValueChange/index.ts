@@ -27,7 +27,7 @@ const onValueChange: {
 } = (control, onChange) => {
   const internals = control[INTERNALS];
 
-  const root = internals[INTERNALS];
+  const root = internals._root;
 
   root._attach(internals, onChange, false);
 

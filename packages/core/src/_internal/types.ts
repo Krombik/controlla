@@ -9,7 +9,7 @@ import type {
   useSyncExternalStore as _useSyncExternalStore,
 } from 'react';
 import type {
-  AsyncSource,
+  AsyncControlOptions,
   Control,
   ReadonlyAsyncControl,
   SyncExternalStorage,
@@ -87,22 +87,20 @@ export interface Attachers {
 
 export interface RootBase {
   _value: any;
-  readonly [INTERNALS]: this;
+  readonly _root: this;
 }
 
 export type ReadonlyPrimitiveControlInternals = ControlInternalsBase & RootBase;
 
 interface Settable {
-  _enqueueSet(
-    value: any,
-    lane: Lane,
-    path: readonly string[] | undefined
-  ): void;
+  _enqueueSet(value: any, lane: Lane, path?: readonly string[]): void;
   _commitSet(value: any, lane: Lane): void;
 }
 
 export type WithExternalStorage = {
-  readonly _externalStorage?: ReturnType<SyncExternalStorage>;
+  _externalStorage?: ReturnType<SyncExternalStorage> | undefined;
+  /** Unsubscribes from external storage changes; consumed by `useControl` on unmount. */
+  _unobserve?: (() => void) | undefined;
 };
 
 export type PrimitiveControlInternals = Attachers &
@@ -123,10 +121,7 @@ export interface ControlInternals extends PrimitiveControlInternals {
         string,
         Pick<
           this,
-          | '_children'
-          | '_storage'
-          | typeof INTERNALS
-          | keyof ControlInternalsBase
+          '_children' | '_storage' | '_root' | keyof ControlInternalsBase
         > & {
           readonly _data?: {
             readonly _selfNotifier: Notifier;
@@ -172,7 +167,7 @@ export interface AsyncControlInternals
         _cleanup: (() => void) | void | undefined;
         _loadedAt: number;
         readonly _keys?: any[];
-        readonly _source: AsyncSource<any, any, any>;
+        readonly _source: AsyncControlOptions<any, any, any[]>;
         readonly _slowLoadMonitor:
           | ({
               _timerId: ReturnType<typeof setTimeout> | undefined;

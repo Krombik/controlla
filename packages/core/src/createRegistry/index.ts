@@ -27,7 +27,12 @@ import { INTERNALS } from '#shared-internal/constants';
 import invalidate from '#@/invalidate';
 import createScope from '#internal/createScope';
 import readRootValue from '#internal/readRootValue';
-import { ControlType, EMPTY_ARR } from '#internal/constants';
+import {
+  ControlType,
+  EMPTY_ARR,
+  RELOAD,
+  SILENT_RELOAD,
+} from '#internal/constants';
 import append from '#shared-internal/append';
 import { addListener, removeListener } from '#internal/flushQueue';
 import addToQueue from '#internal/addToQueue';
@@ -40,7 +45,9 @@ import getStorageKey from '#internal/getStorageKey';
 import getToken from '#internal/getToken';
 import makeStatusInternals from '#internal/makeStatusInternals';
 import settlePromise from '#internal/settlePromise';
+import { AggregateControlError } from '#internal/AggregateControlError';
 import throwReadonlyError from '#internal/throwReadonlyError';
+import { commitErrorValue, commitStatusValue } from '#internal/commitStatus';
 
 type Undefinable<O extends {}> = {
   [key in keyof O]: O[key] | undefined;
@@ -89,6 +96,31 @@ function enqueueBoundedSet(
   }
 }
 
+function enqueueBoundedErrorSet(
+  this: ErrorControlInternals<BoundedInternals>,
+  value: any,
+  lane: Lane,
+  path: string[] | undefined
+) {
+  if (value !== RELOAD && value !== SILENT_RELOAD) {
+    throwReadonlyError();
+  }
+
+  const target = this._parent._target;
+
+  if (target && '_errorControl' in target) {
+    (target as AsyncControlInternals)._errorControl[INTERNALS]._enqueueSet(
+      value,
+      lane,
+      path
+    );
+  } else if (process.env.NODE_ENV !== 'production') {
+    console.warn(
+      '[registry] invalidate on bounded control with unresolved or non-async target was ignored.'
+    );
+  }
+}
+
 const childNodeNotify = (
   _: Lane,
   node: BoundedInternalsChild,
@@ -101,7 +133,7 @@ const childNodeNotify = (
 
   data._prevValue = prevValue;
 
-  node[INTERNALS]._changedNodes.push(node);
+  node._root._changedNodes.push(node);
 };
 
 const cleanupPrevTarget = (root: BoundedInternals) => {
@@ -298,24 +330,20 @@ function commitSet(this: BoundedInternals, _: any, lane: Lane) {
     }
   }
 
-  if (registry._type != ControlType.SYNC || errors) {
+  if (errors) {
     const errorInternals = root._errorControl![INTERNALS];
 
     const loadingInternals = root._loadingControl![INTERNALS];
 
     const readyInternals = root._readyControl![INTERNALS];
 
-    const prevLoading = loadingInternals._value;
-
-    const prevReady = readyInternals._value;
-
-    const prevError = errorInternals._value;
+    const prevError: AggregateControlError | undefined = errorInternals._value;
 
     let nextLoadingValue = true;
 
     let nextReadyValue: undefined | true;
 
-    let nextErrorValue: any;
+    let nextErrorValue: AggregateControlError | undefined;
 
     if (currentTarget) {
       if ('_errorControl' in currentTarget) {
@@ -338,18 +366,16 @@ function commitSet(this: BoundedInternals, _: any, lane: Lane) {
           }
         }
 
-        if (errorValue !== undefined) {
-          if (errors === undefined) {
-            nextErrorValue = errorValue;
-          } else if (errorValue !== errors[registry._depth]) {
+        if (errorValue === undefined) {
+          if (errors[registry._depth] !== undefined) {
             errors[registry._depth] = errorValue;
-
-            nextErrorValue = errors.slice();
-          } else {
-            nextErrorValue = prevError;
           }
-        } else if (errors && errors[registry._depth] !== undefined) {
+        } else if (errorValue !== errors[registry._depth]) {
           errors[registry._depth] = errorValue;
+
+          nextErrorValue = new AggregateControlError(errors);
+        } else {
+          nextErrorValue = prevError;
         }
 
         nextLoadingValue = currentTarget._loadingControl[INTERNALS]._value;
@@ -360,55 +386,51 @@ function commitSet(this: BoundedInternals, _: any, lane: Lane) {
 
         nextReadyValue = !nextLoadingValue || undefined;
       }
-    } else if (errors) {
-      for (let i = 0, l = errors.length; i < l; i++) {
-        if (errors[i] !== undefined) {
-          nextErrorValue = errors.slice();
+    } else {
+      if (prevError) {
+        const prevErrors = prevError.errors;
 
-          break;
+        let isError = false;
+
+        let isChanged = false;
+
+        for (let i = 0, l = errors.length; i < l; i++) {
+          const err = errors[i];
+
+          if (err !== undefined) {
+            isError = true;
+          }
+
+          if (err !== prevErrors[i]) {
+            isChanged = true;
+          }
+        }
+
+        if (isError) {
+          nextLoadingValue = false;
+
+          nextErrorValue = isChanged
+            ? new AggregateControlError(errors)
+            : prevError;
+        }
+      } else {
+        for (let i = 0, l = errors.length; i < l; i++) {
+          if (errors[i] !== undefined) {
+            nextLoadingValue = false;
+
+            nextErrorValue = new AggregateControlError(errors);
+
+            break;
+          }
         }
       }
     }
 
-    if (prevError !== nextErrorValue) {
-      errorInternals._value = nextErrorValue;
+    commitErrorValue(root, errorInternals, nextErrorValue, lane);
 
-      notify(
-        errorInternals._listeners,
-        errorInternals._dependents,
-        lane,
-        nextErrorValue,
-        prevError
-      );
+    commitStatusValue(loadingInternals, nextLoadingValue, lane);
 
-      if (nextErrorValue !== undefined) {
-        settlePromise(root, false, nextErrorValue);
-      }
-    }
-
-    if (nextLoadingValue != prevLoading) {
-      loadingInternals._value = nextLoadingValue;
-
-      notify(
-        loadingInternals._listeners,
-        loadingInternals._dependents,
-        lane,
-        nextLoadingValue,
-        prevLoading
-      );
-    }
-
-    if (nextReadyValue != prevReady) {
-      readyInternals._value = nextReadyValue;
-
-      notify(
-        readyInternals._listeners,
-        readyInternals._dependents,
-        lane,
-        nextReadyValue,
-        prevReady
-      );
-    }
+    commitStatusValue(readyInternals, nextReadyValue, lane);
   }
 }
 
@@ -855,79 +877,112 @@ const attachNotifierWithoutCurrentChange = (
   }
 };
 
-function get(this: Registry<any, any>, ...keys: any[]): any {
-  const self = this;
-
+const getRegistryDepth = (registry: Registry<any, any>, keys: any[]) => {
   const depth = keys.length;
 
-  const registryDepth = self._depth;
+  const registryDepth = registry._depth;
 
   if (registryDepth != depth) {
     if (registryDepth) {
       throw new Error('inconsistent registry depth');
     }
 
-    (self as Mutable<typeof self>)._depth = depth;
+    (registry as Mutable<typeof registry>)._depth = depth;
   }
 
-  const endIndex = depth - 1;
+  return depth;
+};
+
+function get(this: Registry<any, any>, ...keys: any[]): any {
+  const self = this;
+
+  const endIndex = getRegistryDepth(self, keys) - 1;
 
   let storage = self._storage;
 
-  let keyValue: any;
-
-  let nextStorage: Map<any, any> | undefined = storage;
-
-  for (let i = 0; true; i++) {
-    keyValue = keys[i];
+  for (let i = 0; i < endIndex; i++) {
+    const keyValue = keys[i];
 
     if (keyValue === undefined) {
       throwUndefinedError();
     }
 
-    const firstInternals: ControlInternalsChild | undefined =
-      keyValue && keyValue[INTERNALS];
+    const storageKey = getStorageKey(keyValue);
 
-    if (firstInternals) {
-      let existedIndex = i;
+    const nextStorage = storage.get(storageKey);
 
-      let bounded = self._bounded!;
+    if (nextStorage) {
+      storage = nextStorage;
+    } else {
+      storage.set(storageKey, (storage = new Map()));
 
-      let nextBounded: WeakMap<any, any> | undefined;
+      while (++i < endIndex) {
+        const keyValue = keys[i];
 
-      if (!bounded) {
-        (self as Mutable<typeof self>)._bounded = bounded = new WeakMap();
-      } else if (nextStorage) {
-        nextBounded = bounded;
-      }
-
-      for (let j = 0; j < i; j++) {
-        const token = getToken(getStorageKey(keys[j]));
-
-        nextBounded = nextBounded && bounded.get(token);
-
-        if (nextBounded) {
-          bounded = nextBounded;
-        } else {
-          bounded.set(token, (bounded = new WeakMap()));
-        }
-      }
-
-      for (
-        nextBounded = nextBounded && bounded.get(firstInternals);
-        nextBounded !== undefined;
-      ) {
-        if (existedIndex == endIndex) {
-          return nextBounded;
+        if (keyValue === undefined) {
+          throwUndefinedError();
         }
 
-        keyValue = keys[++existedIndex];
-
-        bounded = nextBounded;
-
-        nextBounded = nextBounded.get(keyToBoundedKey(keyValue));
+        storage.set(getStorageKey(keyValue), (storage = new Map()));
       }
 
+      break;
+    }
+  }
+
+  const keyValue = keys[endIndex];
+
+  if (keyValue === undefined) {
+    throwUndefinedError();
+  }
+
+  const storageKey = getStorageKey(keyValue);
+
+  let control = storage.get(storageKey);
+
+  if (control === undefined) {
+    storage.set(
+      storageKey,
+      (control = self._getItem(self._arg1, self._syncExternalStorage, keys))
+    );
+
+    if (self._type == ControlType.UNDEFINED) {
+      self._type = getControlType(control[INTERNALS]);
+    }
+  }
+
+  return control;
+}
+
+function bind(this: Registry<any, any>, ...keys: any[]): any {
+  const self = this;
+
+  const depth = getRegistryDepth(self, keys);
+
+  const endIndex = depth - 1;
+
+  let bounded = self._bounded;
+
+  if (bounded === undefined) {
+    self._bounded = bounded = new WeakMap();
+  }
+
+  for (let i = 0; ; i++) {
+    const item = keys[i];
+
+    if (item === undefined) {
+      throwUndefinedError();
+    }
+
+    const nextBounded: typeof bounded = bounded.get(keyToBoundedKey(item));
+
+    if (nextBounded) {
+      if (i == endIndex) {
+        return nextBounded;
+      }
+
+      bounded = nextBounded;
+    } else {
       const loadableDependencies: ControlInternals[] = [];
 
       const seenLoadableRoots = new Set<ControlInternals>();
@@ -936,11 +991,15 @@ function get(this: Registry<any, any>, ...keys: any[]): any {
 
       let errors: any[] | undefined;
 
-      let isReady = true;
-
       let isError = false;
 
       let maxLevel = 0;
+
+      let storage = self._storage;
+
+      let isControlExist = true;
+
+      let isReady = true;
 
       const boundedInternals: BoundedInternals = {
         _load: undefined,
@@ -957,7 +1016,7 @@ function get(this: Registry<any, any>, ...keys: any[]): any {
         _registry: self,
         _storage: undefined,
         _target: undefined,
-        [INTERNALS]: undefined!,
+        _root: undefined!,
         _attach: attach,
         _detach: detach,
         _activeCount: 0,
@@ -985,23 +1044,30 @@ function get(this: Registry<any, any>, ...keys: any[]): any {
       (boundedInternals as Mutable<BoundedInternals>)._selfNotifier =
         rootNotifier;
 
-      (boundedInternals as Mutable<BoundedInternals>)[INTERNALS] =
-        boundedInternals;
+      (boundedInternals as Mutable<BoundedInternals>)._root = boundedInternals;
 
-      for (
-        let j = i,
-          keyInternals: ControlInternalsChild | undefined = firstInternals,
-          keyRoot: ControlInternals | undefined = keyInternals[INTERNALS];
-        true;
-      ) {
-        if (keyRoot) {
-          keys[j] = keyValue = keyInternals!._get();
+      for (let j = 0; ; j++) {
+        let keyValue;
+
+        const item = keys[j];
+
+        const internals: ControlInternalsChild | undefined =
+          item && item[INTERNALS];
+
+        if (internals) {
+          const root = internals._root;
+
+          const errorControl = (root as BoundedInternals)._errorControl;
+
+          keys[j] = keyValue = internals._get();
+
+          if (root._level > maxLevel) {
+            maxLevel = root._level;
+          }
 
           if (isReady && keyValue === undefined) {
             isReady = false;
           }
-
-          const errorControl = (keyRoot as BoundedInternals)._errorControl;
 
           if (errorControl) {
             const errorInternals = errorControl[INTERNALS];
@@ -1038,213 +1104,194 @@ function get(this: Registry<any, any>, ...keys: any[]): any {
             _current: EMPTY_ARR,
           };
 
-          attachNotifier(keyInternals!, notifier);
+          attachNotifier(internals, notifier);
 
           notifiers.push(notifier);
 
-          if (keyRoot._load && !seenLoadableRoots.has(keyRoot)) {
-            loadableDependencies.push(keyRoot);
+          if (root._load && !seenLoadableRoots.has(root)) {
+            loadableDependencies.push(root);
 
-            seenLoadableRoots.add(keyRoot);
+            seenLoadableRoots.add(root);
           }
+        } else {
+          keyValue = item;
 
-          if (keyRoot._level > maxLevel) {
-            maxLevel = keyRoot._level;
+          if (keyValue === undefined) {
+            throwUndefinedError();
           }
-        } else if (keyValue === undefined) {
-          throwUndefinedError();
         }
 
         const storageKey = getStorageKey(keyValue);
 
-        if (j == endIndex) {
-          let controlType = self._type;
+        if (j >= i) {
+          if (j == endIndex) {
+            let controlType = self._type;
 
-          let targetInternals:
-            | ControlInternals
-            | AsyncControlInternals
-            | undefined;
+            let targetInternals:
+              | ControlInternals
+              | AsyncControlInternals
+              | undefined;
 
-          (boundedInternals as Mutable<BoundedInternals>)._level = ++maxLevel;
+            (boundedInternals as Mutable<BoundedInternals>)._level = ++maxLevel;
 
-          if (isReady) {
-            let control:
-              | ControlScope
-              | Control
-              | AsyncControlScope
-              | undefined = nextStorage && storage.get(storageKey);
+            if (isReady) {
+              let control:
+                | ControlScope
+                | Control
+                | AsyncControlScope
+                | undefined = isControlExist
+                ? storage.get(storageKey)
+                : undefined;
 
-            if (!control) {
-              storage.set(
-                storageKey,
-                (control = self._getItem(
-                  self._arg1,
-                  self._syncExternalStorage,
-                  keys
-                ))
+              if (!control) {
+                storage.set(
+                  storageKey,
+                  (control = self._getItem(
+                    self._arg1,
+                    self._syncExternalStorage,
+                    keys
+                  ))
+                );
+              }
+
+              targetInternals = control![INTERNALS] as ControlInternals;
+
+              if (controlType == ControlType.UNDEFINED) {
+                self._type = controlType = getControlType(targetInternals);
+              }
+
+              boundedInternals._value = targetInternals._value;
+
+              boundedInternals._target = targetInternals;
+
+              attachNotifierWithoutCurrentChange(targetInternals, rootNotifier);
+            } else if (controlType == ControlType.UNDEFINED) {
+              self._type = controlType = getControlType(
+                self._getItem(self._arg1, undefined, undefined)[
+                  INTERNALS
+                ] as ControlInternals
               );
             }
 
-            targetInternals = control![INTERNALS] as ControlInternals;
+            let isLoadable = false;
 
-            if (controlType == ControlType.UNDEFINED) {
-              self._type = controlType = getControlType(targetInternals);
+            if (loadableDependencies.length) {
+              (boundedInternals as Mutable<BoundedInternals>)._load =
+                loadableDependencies;
+
+              isLoadable = true;
+            } else if (controlType == ControlType.LOADABLE) {
+              (boundedInternals as Mutable<BoundedInternals>)._load = EMPTY_ARR;
+
+              isLoadable = true;
             }
 
-            boundedInternals._value = targetInternals._value;
+            if (controlType != ControlType.SYNC || errors) {
+              let loadingValue = true;
 
-            boundedInternals._target = targetInternals;
+              let readyValue: undefined | true;
 
-            attachNotifierWithoutCurrentChange(targetInternals, rootNotifier);
-          } else if (controlType == ControlType.UNDEFINED) {
-            self._type = controlType = getControlType(
-              self._getItem(self._arg1, undefined, undefined)[
-                INTERNALS
-              ] as ControlInternals
-            );
-          }
-
-          let isLoadable = false;
-
-          if (loadableDependencies.length) {
-            (boundedInternals as Mutable<BoundedInternals>)._load =
-              loadableDependencies;
-
-            isLoadable = true;
-          } else if (controlType == ControlType.LOADABLE) {
-            (boundedInternals as Mutable<BoundedInternals>)._load = EMPTY_ARR;
-
-            isLoadable = true;
-          }
-
-          if (controlType != ControlType.SYNC || errors) {
-            let loadingValue = true;
-
-            let readyValue: undefined | true;
-
-            let errorValue: any;
-
-            if (isReady) {
-              if ('_errorControl' in targetInternals!) {
-                const errorInternals = targetInternals._errorControl[INTERNALS];
-
-                const currErrorValue = errorInternals._value;
-
-                loadingValue =
-                  targetInternals._loadingControl[INTERNALS]._value;
-
-                readyValue = targetInternals._readyControl[INTERNALS]._value;
-
-                if (errors === undefined) {
-                  errorValue = currErrorValue;
-                } else if (currErrorValue !== undefined) {
-                  errors[depth] = currErrorValue;
-
-                  errorValue = errors.slice();
-                }
-
-                attachNotifierWithoutCurrentChange(
-                  errorInternals,
-                  rootNotifier
-                );
-              } else {
-                loadingValue = boundedInternals._value === undefined;
-
-                readyValue = !loadingValue || undefined;
+              if (errors === undefined) {
+                (boundedInternals as Mutable<BoundedInternals>)._errors =
+                  errors = Array(depth + 1);
               }
-            } else if (isError) {
-              errorValue = errors!.slice();
+
+              if (isReady) {
+                if ('_errorControl' in targetInternals!) {
+                  const errorInternals =
+                    targetInternals._errorControl[INTERNALS];
+
+                  const currErrorValue = errorInternals._value;
+
+                  loadingValue =
+                    targetInternals._loadingControl[INTERNALS]._value;
+
+                  readyValue = targetInternals._readyControl[INTERNALS]._value;
+
+                  if (currErrorValue !== undefined) {
+                    errors[depth] = currErrorValue;
+
+                    isError = true;
+                  }
+
+                  attachNotifierWithoutCurrentChange(
+                    errorInternals,
+                    rootNotifier
+                  );
+                } else {
+                  loadingValue = boundedInternals._value === undefined;
+
+                  readyValue = !loadingValue || undefined;
+                }
+              }
+
+              const errorInternals: ErrorControlInternals<BoundedInternals> = {
+                _root: undefined!,
+                _attach: errorAttach,
+                _detach: errorDetach,
+                _dependents: EMPTY_ARR,
+                _enqueueSet: enqueueBoundedErrorSet,
+                _get: readRootValue,
+                _indexMap: undefined,
+                _level: maxLevel,
+                _listeners: EMPTY_ARR,
+                _load: isLoadable,
+                _parent: boundedInternals,
+                _path: undefined,
+                _value: isError
+                  ? new AggregateControlError(errors!)
+                  : undefined,
+              };
+
+              (errorInternals as Mutable<typeof errorInternals>)._root =
+                errorInternals;
+
+              (boundedInternals as Mutable<BoundedInternals>)._loadingControl =
+                {
+                  [INTERNALS]: makeStatusInternals(
+                    boundedInternals,
+                    loadingValue
+                  ),
+                };
+
+              (boundedInternals as Mutable<BoundedInternals>)._readyControl = {
+                [INTERNALS]: makeStatusInternals(boundedInternals, readyValue),
+              };
+
+              (boundedInternals as Mutable<BoundedInternals>)._errorControl = {
+                [INTERNALS]: errorInternals,
+              };
             }
 
-            const errorInternals: ErrorControlInternals<BoundedInternals> = {
-              [INTERNALS]: undefined!,
-              _attach: errorAttach,
-              _detach: errorDetach,
-              _dependents: EMPTY_ARR,
-              _enqueueSet: throwReadonlyError,
-              _get: readRootValue,
-              _indexMap: undefined,
-              _level: maxLevel,
-              _listeners: EMPTY_ARR,
-              _load: isLoadable,
-              _parent: boundedInternals,
-              _path: undefined,
-              _value: errorValue,
-            };
+            const boundedControl = createScope(boundedInternals);
 
-            (errorInternals as Mutable<typeof errorInternals>)[INTERNALS] =
-              errorInternals;
+            bounded.set(internals || getToken(storageKey), boundedControl);
 
-            (boundedInternals as Mutable<BoundedInternals>)._loadingControl = {
-              [INTERNALS]: makeStatusInternals(boundedInternals, loadingValue),
-            };
-
-            (boundedInternals as Mutable<BoundedInternals>)._readyControl = {
-              [INTERNALS]: makeStatusInternals(boundedInternals, readyValue),
-            };
-
-            (boundedInternals as Mutable<BoundedInternals>)._errorControl = {
-              [INTERNALS]: errorInternals,
-            };
+            return boundedControl;
           }
 
-          const boundedControl = createScope(boundedInternals);
-
-          bounded.set(keyInternals || getToken(storageKey), boundedControl);
-
-          return boundedControl;
-        }
-
-        if (j >= existedIndex) {
           bounded.set(
-            keyInternals || getToken(storageKey),
+            internals || getToken(storageKey),
             (bounded = new WeakMap())
           );
         }
 
         if (isReady) {
-          nextStorage = nextStorage && storage.get(storageKey);
+          if (isControlExist) {
+            const nextStorage = storage.get(storageKey);
 
-          if (nextStorage) {
-            storage = nextStorage;
+            if (nextStorage) {
+              storage = nextStorage;
+            } else {
+              isControlExist = false;
+
+              storage.set(storageKey, (storage = new Map()));
+            }
           } else {
             storage.set(storageKey, (storage = new Map()));
           }
         }
-
-        keyValue = keys[++j];
-
-        keyInternals = keyValue && keyValue[INTERNALS];
-
-        keyRoot = keyInternals && keyInternals[INTERNALS];
       }
-    }
-
-    const storageKey = getStorageKey(keyValue);
-
-    if (i == endIndex) {
-      let control = nextStorage && storage.get(storageKey);
-
-      if (!control) {
-        storage.set(
-          storageKey,
-          (control = self._getItem(self._arg1, self._syncExternalStorage, keys))
-        );
-
-        if (self._type == ControlType.UNDEFINED) {
-          self._type = getControlType(control[INTERNALS]);
-        }
-      }
-
-      return control;
-    }
-
-    nextStorage = nextStorage && storage.get(storageKey);
-
-    if (nextStorage) {
-      storage = nextStorage;
-    } else {
-      storage.set(storageKey, (storage = new Map()));
     }
   }
 }
@@ -1255,7 +1302,7 @@ const createRegistry: {
       T | undefined,
       [
         createAsyncControl: typeof createAsyncControl,
-        options?: AsyncControlOptions<T, Keys, E>,
+        options?: AsyncControlOptions<T, E, Keys>,
       ]
     >
   ): Registry<AsyncControlScope<T, E>, Keys>;
@@ -1279,6 +1326,7 @@ const createRegistry: {
     _bounded: undefined,
     delete: _delete,
     get,
+    bind,
     invalidate: _invalidate,
     has,
     clear,

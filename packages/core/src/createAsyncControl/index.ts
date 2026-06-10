@@ -40,6 +40,7 @@ import addToLevel from '#internal/addToLevel';
 import { attach, detach } from '#internal/syncLifecycle';
 import makeStatusInternals from '#internal/makeStatusInternals';
 import settlePromise from '#internal/settlePromise';
+import { commitErrorValue, commitStatusValue } from '#internal/commitStatus';
 
 const throwIfUndefined = () => {
   throw new Error(
@@ -124,8 +125,6 @@ function commitAsyncSet(
 
   const prevValue = internals._value;
 
-  const prevErrorValue = errorInternals._value;
-
   const patchType = patchNode._type;
 
   const load = internals._load;
@@ -186,27 +185,15 @@ function commitAsyncSet(
     }
   }
 
-  if (nextErrorValue !== prevErrorValue) {
-    internals._value = nextErrorValue;
+  if (nextErrorValue !== undefined) {
+    nextLoadingValue = false;
 
-    notify(
-      internals._listeners,
-      internals._dependents,
-      lane,
-      nextErrorValue,
-      prevErrorValue
-    );
+    nextReadyValue = undefined;
 
-    if (nextErrorValue !== undefined) {
-      nextLoadingValue = false;
-
-      nextReadyValue = undefined;
-
-      internals._attempt = 0;
-
-      settlePromise(internals, false, nextErrorValue);
-    }
+    internals._attempt = 0;
   }
+
+  commitErrorValue(internals, errorInternals, nextErrorValue, lane);
 
   if (!nextLoadingValue && load) {
     load._loadedAt =
@@ -237,22 +224,12 @@ function commitAsyncSet(
     }
   }
 
-  if (prevReady !== nextReadyValue) {
-    readyControl._value = nextReadyValue;
-
-    notify(
-      readyControl._listeners,
-      readyControl._dependents,
-      lane,
-      nextReadyValue,
-      prevReady
-    );
-  }
+  commitStatusValue(readyControl, nextReadyValue, lane);
 }
 
 const createAsyncControl: {
   <T, E = any>(
-    options?: AsyncControlOptions<T, never, E>,
+    options?: AsyncControlOptions<T, E>,
     syncExternalStorage?: SyncExternalStorage<T | undefined>
   ): AsyncControlScope<T, E>;
 } = (
@@ -262,16 +239,14 @@ const createAsyncControl: {
 ) => {
   const isLoaded = options && options.isLoaded;
 
-  const source = options && options.source;
-
-  const isLoadable = !!source;
+  const isLoadable = options && options.load && true;
 
   const loadingInternals = makeStatusInternals(undefined!, true);
 
   const readyInternals = makeStatusInternals(undefined!, undefined);
 
   const errorControl: ErrorControlInternals<AsyncControlInternals> = {
-    [INTERNALS]: undefined!,
+    _root: undefined!,
     _get: readRootValue,
     _listeners: EMPTY_ARR,
     _indexMap: undefined,
@@ -279,8 +254,8 @@ const createAsyncControl: {
     _path: undefined,
     _value: undefined,
     _level: 0,
-    _attach: source ? errorAttachAsync : attach,
-    _detach: source ? errorDetachAsync : detach,
+    _attach: isLoadable ? errorAttachAsync : attach,
+    _detach: isLoadable ? errorDetachAsync : detach,
     _enqueueSet: errorEnqueueSet,
     _parent: undefined!,
     _load: isLoadable,
@@ -288,7 +263,7 @@ const createAsyncControl: {
 
   const internals = initControl<AsyncControlInternals>(
     {
-      [INTERNALS]: undefined!,
+      _root: undefined!,
       _get: readRootValue,
       _listeners: EMPTY_ARR,
       _indexMap: undefined,
@@ -300,20 +275,20 @@ const createAsyncControl: {
       _storage: undefined,
       _commitSet: commitAsyncSet,
       _enqueueSet: asyncEnqueueSet,
-      _attach: source ? attachAsync : attach,
-      _detach: source ? detachAsync : detach,
+      _attach: isLoadable ? attachAsync : attach,
+      _detach: isLoadable ? detachAsync : detach,
       _externalStorage: undefined,
       _errorControl: { [INTERNALS]: errorControl },
       _loadingControl: { [INTERNALS]: loadingInternals },
       _readyControl: { [INTERNALS]: readyInternals },
-      _load: source && {
+      _load: isLoadable && {
         _activeCount: 0,
         _canScheduleUnload: true,
-        _source: source,
+        _source: options,
         _cleanup: undefined,
         _loadedAt: 0,
         _keys: keys,
-        _slowLoadMonitor: source.loadingTimeout
+        _slowLoadMonitor: options.loadingTimeout
           ? {
               _timerId: undefined,
               _listeners: EMPTY_ARR,
@@ -327,31 +302,32 @@ const createAsyncControl: {
     },
     options && options.value,
     syncExternalStorage,
-    keys
+    keys,
+    false
   );
 
   const value = internals._value;
 
-  (errorControl as Mutable<typeof errorControl>)[INTERNALS] = errorControl;
+  (errorControl as Mutable<typeof errorControl>)._root = errorControl;
 
   (errorControl as Mutable<typeof errorControl>)._parent = internals;
 
-  (readyInternals as Mutable<typeof readyInternals>)[INTERNALS] = internals;
+  (readyInternals as Mutable<typeof readyInternals>)._root = internals;
 
-  (loadingInternals as Mutable<typeof loadingInternals>)[INTERNALS] = internals;
+  (loadingInternals as Mutable<typeof loadingInternals>)._root = internals;
 
   if (value !== undefined) {
     readyInternals._value = true;
 
     if (
-      (!isLoadable || !source.revalidate) &&
+      (!isLoadable || !options.revalidate) &&
       (!isLoaded || isLoaded(value, undefined, 0))
     ) {
       loadingInternals._value = false;
 
       if (isLoadable) {
         internals._load!._loadedAt =
-          source.reloadIfStale || source.reloadOnFocus ? Date.now() : 1;
+          options.reloadIfStale || options.reloadOnFocus ? Date.now() : 1;
       }
     }
   }

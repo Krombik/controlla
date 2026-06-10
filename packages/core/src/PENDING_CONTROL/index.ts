@@ -18,7 +18,7 @@ const NOOP_PROMISE_DESCRIPTOR: PropertyDescriptor = {
 };
 
 const errorControl = {
-  [INTERNALS]: undefined!,
+  _root: undefined!,
   _get: noop,
   _enqueueSet: noop,
   _value: undefined,
@@ -46,7 +46,7 @@ const internals = {
   _value: undefined,
   _get: noop,
   _enqueueSet: noop,
-  [INTERNALS]: undefined!,
+  _root: undefined!,
   _errorControl: {
     [INTERNALS]: errorControl,
   },
@@ -54,13 +54,13 @@ const internals = {
   _readyControl: undefined!,
 } as Partial<PendingControl> as PendingControl;
 
-(internals as Mutable<typeof internals>)[INTERNALS] = internals;
+(internals as Mutable<typeof internals>)._root = internals;
 
-(errorControl as Mutable<typeof errorControl>)[INTERNALS] = errorControl;
+(errorControl as Mutable<typeof errorControl>)._root = errorControl;
 
 (internals as Mutable<typeof internals>)._loadingControl = {
   [INTERNALS]: {
-    [INTERNALS]: internals,
+    _root: internals,
     _get: alwaysTrue,
     _value: true,
   } as Partial<AsyncControlInternals['_loadingControl'][typeof INTERNALS]>,
@@ -68,7 +68,7 @@ const internals = {
 
 (internals as Mutable<typeof internals>)._readyControl = {
   [INTERNALS]: {
-    [INTERNALS]: internals,
+    _root: internals,
     _get: noop,
     _value: undefined,
   } as Partial<AsyncControlInternals['_readyControl'][typeof INTERNALS]>,

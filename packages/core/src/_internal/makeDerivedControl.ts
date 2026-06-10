@@ -20,9 +20,8 @@ import notify from '#internal/notify';
 import { attach, detach } from '#internal/syncLifecycle';
 import attachNotifier from '#internal/attachNotifier';
 import {
-  attachMultipleLoads,
+  applyLoadWiring,
   attachSingleLoad,
-  detachMultipleLoads,
   detachSingleLoad,
   enqueueSet,
   keyNotify,
@@ -71,7 +70,7 @@ const makeDerivedControl = (params: any[]) => {
   const controlCount = params.length - 1;
 
   const derivedRoot: DerivedControlInternals = {
-    [INTERNALS]: undefined!,
+    _root: undefined!,
     _get: readRootValue,
     _listeners: EMPTY_ARR,
     _indexMap: undefined,
@@ -109,7 +108,7 @@ const makeDerivedControl = (params: any[]) => {
         ControlInternals | AsyncControlInternals
       > = params[i][INTERNALS];
 
-      const root = internals[INTERNALS];
+      const root = internals._root;
 
       if (root._level > maxLevel) {
         maxLevel = root._level;
@@ -136,8 +135,6 @@ const makeDerivedControl = (params: any[]) => {
 
     const combine: (...values: any[]) => any = params[controlCount];
 
-    const loaderCount = loadableRoots.length;
-
     derivedRoot._mapper = combine;
 
     derivedRoot._value = combine(...values);
@@ -146,27 +143,13 @@ const makeDerivedControl = (params: any[]) => {
 
     derivedRoot._keys = values;
 
-    if (loaderCount) {
-      if (loaderCount == 1) {
-        (derivedRoot as Mutable<typeof derivedRoot>)._load = loadableRoots[0];
-
-        derivedRoot._attach = attachSingleLoad;
-
-        derivedRoot._detach = detachSingleLoad;
-      } else {
-        (derivedRoot as Mutable<typeof derivedRoot>)._load = loadableRoots;
-
-        derivedRoot._attach = attachMultipleLoads;
-
-        derivedRoot._detach = detachMultipleLoads;
-      }
-    }
+    applyLoadWiring(derivedRoot, loadableRoots);
   } else {
     const internals: ChildControlNode<
       ControlInternals | AsyncControlInternals
     > = params[0][INTERNALS];
 
-    const root = internals[INTERNALS];
+    const root = internals._root;
 
     maxLevel = root._level;
 
@@ -201,7 +184,7 @@ const makeDerivedControl = (params: any[]) => {
 
   (derivedRoot as Mutable<typeof derivedRoot>)._level = maxLevel + 1;
 
-  (derivedRoot as Mutable<typeof derivedRoot>)[INTERNALS] = derivedRoot;
+  (derivedRoot as Mutable<typeof derivedRoot>)._root = derivedRoot;
 
   return createScope(derivedRoot);
 };

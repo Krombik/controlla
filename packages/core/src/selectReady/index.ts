@@ -5,6 +5,6 @@ import { INTERNALS } from '#shared-internal/constants';
 const selectReady = <E>(
   control: ReadonlyAsyncControl<any, E>
 ): ReadonlyAsyncControl<true, E> =>
-  control[INTERNALS][INTERNALS]._readyControl as any;
+  control[INTERNALS]._root._readyControl as any;
 
 export default selectReady;

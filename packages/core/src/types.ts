@@ -14,12 +14,15 @@ import type {
   AsyncControlInternalsChild,
 } from '#internal/types';
 import type { ControlType } from '#internal/constants';
+import type { AggregateControlError } from '#internal/AggregateControlError';
 
 declare const CONTROL_MARKER: unique symbol;
 
 declare const SETTABLE_MARKER: unique symbol;
 
 declare const ERROR_MARKER: unique symbol;
+
+export type { AggregateControlError };
 
 export type ReadonlyControl<Value = any> = {
   /** @internal */
@@ -95,18 +98,29 @@ export type ControlScope<Value = any> = Scope & ProcessScope<Value, Control>;
 export type AsyncControlScope<Value = any, Error = any> = Scope &
   ProcessScope<Value, AsyncControl<any, Error>>;
 
-export interface AsyncSource<
+export type LoadHandle<T = any, E = any> = {
+  setValue(value: T, scheduler?: Scheduler): boolean;
+  getValue(): T | undefined;
+  setError(error: E, scheduler?: Scheduler): void;
+  stillLoading(): boolean;
+};
+
+export type AsyncControlOptions<
   T = any,
   E = any,
-  Keys extends PrimitiveOrNested[] = never,
-> {
+  Keys extends PrimitiveOrNested[] = [],
+> = {
+  /** The initial value of the control or a function to resolve it using keys. */
+  value?: T | ((...args: Keys) => T);
+  /** A function to determine if the control is considered loaded, based on the {@link value current} and {@link prevValue previous} values and the number of loading {@link attempt attempts}. */
+  isLoaded?(value: T, prevValue: T | undefined, attempt: number): boolean;
   /**
    * A function to initiate the loading process. This method can optionally return
    * a cleanup function to be called when the loading is complete or canceled.
    */
-  load(
-    control: AsyncControl<T, E>,
-    ...args: [Keys] extends [never] ? [] : [keys: Keys]
+  load?(
+    handle: LoadHandle<T, E>,
+    ...args: [Keys] extends [[]] ? [] : [keys: Keys]
   ): void | (() => void);
   /**
    * The duration in milliseconds. If set, the control will reload
@@ -121,34 +135,7 @@ export interface AsyncSource<
   revalidate?: boolean;
   /** The timeout in milliseconds for considering the loading process slow. */
   loadingTimeout?: number;
-}
-
-export type AsyncControlOptions<
-  T = any,
-  Keys extends PrimitiveOrNested[] = never,
-  E = any,
-> = {
-  /** The initial value of the control or a function to resolve it using keys. */
-  value?: T | ((...args: [Keys] extends [never] ? [] : [keys: Keys]) => T);
-  /** A function to determine if the control is considered loaded, based on the {@link value current} and {@link prevValue previous} values and the number of loading {@link attempt attempts}. */
-  isLoaded?(value: T, prevValue: T | undefined, attempt: number): boolean;
-
-  source?: AsyncSource<T, E, Keys>;
 };
-
-export type PollableControlOptions<
-  T = any,
-  Keys extends PrimitiveOrNested[] = never,
-> = RequestableControlOptions<T, Keys> &
-  Pick<AsyncControlOptions<T>, 'isLoaded'> & {
-    /** The interval in milliseconds at which the control should poll for new data. */
-    interval: number;
-    /**
-     * The interval in milliseconds for polling when the document is hidden (e.g., when the tab is not in focus).
-     * If set to `0`, polling is disabled while the tab is hidden.
-     */
-    hiddenInterval?: number;
-  };
 
 type MixedKey<K> = K | ReadonlyControl<K | undefined>;
 
@@ -156,28 +143,42 @@ type MixedKeys<Keys extends PrimitiveOrNested[]> = {
   [I in keyof Keys]: MixedKey<Keys[I]>;
 };
 
+type GetAggregateControlError<Errors, Error = never> = Errors extends any[]
+  ? AggregateControlError<[...Errors, target: Error]>
+  : never;
+
 type CombineErrors<T extends RegistryItem, Errors> =
   T extends AsyncControlScope<infer V, infer E>
-    ? AsyncControlScope<
-        V,
-        Errors extends any[] ? [...Errors, E | undefined] : never
-      >
+    ? AsyncControlScope<V, GetAggregateControlError<Errors, E>>
     : T extends ControlScope<infer V>
-      ? AsyncControlScope<Exclude<V, undefined>, Errors>
+      ? AsyncControlScope<
+          Exclude<V, undefined>,
+          GetAggregateControlError<Errors>
+        >
       : T extends Control<infer V>
-        ? AsyncControl<Exclude<V, undefined>, Errors>
+        ? AsyncControl<Exclude<V, undefined>, GetAggregateControlError<Errors>>
         : never;
+
+type BoundControl<T extends RegistryItem, K extends any[]> = CombineErrors<
+  T,
+  {
+    [index in keyof K]: K[index] extends ReadonlyAsyncControl<any, infer E>
+      ? E
+      : never;
+  }
+>;
 
 export type Registry<
   T extends RegistryItem,
   Keys extends Exclude<PrimitiveOrNested, undefined>[],
 > = RegistryMarker<Keys, T> & {
-  get<K extends MixedKeys<Keys>>(
+  get(...keys: Keys): T;
+  bind<const K extends MixedKeys<Keys>>(
     ...keys: K
   ): [Extract<K[number], ReadonlyAsyncControl>] extends [never]
     ? T extends AsyncControl
-      ? T
-      : Extract<K[number], Control> extends Control<infer V>
+      ? BoundControl<T, K>
+      : Extract<K[number], ReadonlyControl> extends ReadonlyControl<infer V>
         ? [Extract<V, undefined>] extends [never]
           ? T
           : T extends ControlScope<infer V>
@@ -185,18 +186,8 @@ export type Registry<
             : T extends Control<infer V>
               ? Control<V | undefined>
               : never
-        : T
-    : CombineErrors<
-        T,
-        {
-          [index in keyof K]: K[index] extends ReadonlyAsyncControl<
-            any,
-            infer E
-          >
-            ? E | undefined
-            : undefined;
-        }
-      >;
+        : never
+    : BoundControl<T, K>;
   has(...keys: MixedKeys<Keys> | PartialTuple<MixedKeys<Keys>>): boolean;
   /**
    * Deletes a control entry from the storage associated with the given key.
@@ -230,12 +221,19 @@ export type Registry<
       }
     : {});
 
-export type SyncExternalStorage<T = any> = {
-  (keys: PrimitiveOrNested[] | undefined): {
-    set(value: T): void;
-    get(): T | undefined;
-    observe?(setControl: (value: T) => void): () => void;
-  };
+export type ExternalStorageInstance<T = any> = {
+  get(): T | undefined;
+  set(value: T): void;
+  /**
+   * Subscribes to external changes of the stored value (e.g. another browser
+   * tab). The {@link onChange} callback receives `undefined` when the value
+   * was removed. Returns an unsubscribe function.
+   */
+  observe?(onChange: (value: T | undefined) => void): () => void;
 };
+
+export type SyncExternalStorage<T = any> = (
+  keys?: PrimitiveOrNested[]
+) => ExternalStorageInstance<T>;
 
 export type Scheduler = (cb: () => void) => any;
