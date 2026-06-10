@@ -11,16 +11,13 @@ const invalidate: {
 } = (control: AsyncControl, schedulerOrKeepPrevValue?: Scheduler | boolean) => {
   const isLoud = schedulerOrKeepPrevValue !== true;
 
-  const scheduler = isLoud
-    ? schedulerOrKeepPrevValue || scheduleMicrotask
-    : scheduleMicrotask;
+  const scheduler = (isLoud && schedulerOrKeepPrevValue) || scheduleMicrotask;
 
   const lane = getLane(scheduler);
 
-  control[INTERNALS][INTERNALS]._errorControl[INTERNALS]._enqueueSet(
+  control[INTERNALS]._root._errorControl[INTERNALS]._enqueueSet(
     isLoud ? RELOAD : SILENT_RELOAD,
-    lane,
-    undefined
+    lane
   );
 
   scheduleFlush(lane, scheduler);

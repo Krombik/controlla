@@ -40,7 +40,7 @@ const controlHandler: ProxyHandler<ControlInternals | ControlInternalsChild> = {
       children!.set(
         prop,
         (nextInternals = makeChildNode(
-          internals[INTERNALS],
+          internals._root,
           path !== undefined ? append(path, prop) : [prop],
           undefined,
           EMPTY_ARR

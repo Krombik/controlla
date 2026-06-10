@@ -3,6 +3,7 @@ import type {
   ControlInternals,
   Lane,
   Listeners,
+  Mutable,
   Notifier,
 } from '#internal/types';
 import { addListener, removeListener } from '#internal/flushQueue';
@@ -37,10 +38,10 @@ export function detachSingleLoad(
 ) {
   removeListener(control, listener);
 
-  (this._load as ControlInternals)._attach(undefined, undefined, isLoad);
+  (this._load as ControlInternals)._detach(undefined, undefined, isLoad);
 }
 
-export function attachMultipleLoads(
+function attachMultipleLoads(
   this: DerivedControlInternals,
   control: Listeners<ChangeListener>,
   listener: ChangeListener,
@@ -55,7 +56,7 @@ export function attachMultipleLoads(
   }
 }
 
-export function detachMultipleLoads(
+function detachMultipleLoads(
   this: DerivedControlInternals,
   control: Listeners<ChangeListener>,
   listener: ChangeListener,
@@ -98,3 +99,32 @@ export function enqueueSet(
     runPatching(lane, this, value, path);
   }
 }
+
+/**
+ * Wires the derived control's load dependencies based on the collected
+ * loadable roots. Mutates the passed root in place — allocates nothing.
+ */
+export const applyLoadWiring = (
+  root: DerivedControlInternals,
+  loadableRoots: ControlInternals[]
+) => {
+  const count = loadableRoots.length;
+
+  if (count) {
+    const mutableRoot = root as Mutable<DerivedControlInternals>;
+
+    if (count == 1) {
+      mutableRoot._load = loadableRoots[0];
+
+      mutableRoot._attach = attachSingleLoad;
+
+      mutableRoot._detach = detachSingleLoad;
+    } else {
+      mutableRoot._load = loadableRoots;
+
+      mutableRoot._attach = attachMultipleLoads;
+
+      mutableRoot._detach = detachMultipleLoads;
+    }
+  }
+};

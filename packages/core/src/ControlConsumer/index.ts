@@ -52,7 +52,7 @@ const ControlConsumer = ((
       return (props.render! as Function)(value);
     }
   } else {
-    const root = internals[INTERNALS] as AsyncControlInternals;
+    const root = internals._root as AsyncControlInternals;
 
     const loadingInternals = root._loadingControl[INTERNALS];
 

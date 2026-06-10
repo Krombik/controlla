@@ -1,7 +1,7 @@
 import { createContext } from 'react';
-import type { RootBase } from '#internal/types';
+import type { Attachers } from '#internal/types';
 
-const SuspenseContext = createContext<Array<Pick<RootBase, '_detach'>> | null>(
+const SuspenseContext = createContext<Array<Pick<Attachers, '_detach'>> | null>(
   null
 );
 

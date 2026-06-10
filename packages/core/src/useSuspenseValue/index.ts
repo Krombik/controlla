@@ -27,7 +27,7 @@ const useSuspenseValue: {
   if (control) {
     const internals = control[INTERNALS];
 
-    const root = internals[INTERNALS];
+    const root = internals._root;
 
     const errInternals = root._errorControl[INTERNALS];
 

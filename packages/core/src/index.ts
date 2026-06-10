@@ -1,7 +1,5 @@
 export { default as createControl } from '#@/createControl';
 export { default as createAsyncControl } from '#@/createAsyncControl';
-export { default as createRequestableControl } from '#@/createRequestableControl';
-export { default as createPollableControl } from '#@/createPollableControl';
 
 export { default as useControl } from '#@/useControl';
 
@@ -25,7 +23,7 @@ export { default as onValuesChange } from '#@/onValuesChange';
 export { default as getPromise } from '#@/getPromise';
 export { default as onSlowLoading } from '#@/onSlowLoading';
 
-export { default as batchedUpdates } from '#@/batchedUpdates';
+export { default as batch } from '#@/batch';
 
 export { default as wrapErrorBoundary } from '#@/wrapErrorBoundary';
 

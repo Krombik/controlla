@@ -1,4 +1,3 @@
-import { INTERNALS } from '#shared-internal/constants';
 import { EMPTY_ARR } from '#internal/constants';
 import type {
   ControlInternals,
@@ -9,7 +8,7 @@ import type {
 function get(this: ControlInternalsChild) {
   const path = this._path;
 
-  let value = this[INTERNALS]._value;
+  let value = this._root._value;
 
   for (let i = 0; i < path!.length; i++) {
     if (value == null) {
@@ -33,7 +32,7 @@ const makeChildNode = (
   _indexMap: undefined,
   _dependents: dependents,
   _path: path,
-  [INTERNALS]: root,
+  _root: root,
   _children: children,
   _storage: undefined,
   _data: undefined,

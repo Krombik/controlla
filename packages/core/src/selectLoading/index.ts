@@ -3,7 +3,6 @@ import { INTERNALS } from '#shared-internal/constants';
 
 const selectLoading = (
   control: ReadonlyAsyncControl
-): ReadonlyControl<boolean> =>
-  control[INTERNALS][INTERNALS]._loadingControl as any;
+): ReadonlyControl<boolean> => control[INTERNALS]._root._loadingControl as any;
 
 export default selectLoading;

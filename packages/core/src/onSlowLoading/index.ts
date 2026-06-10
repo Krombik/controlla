@@ -28,7 +28,7 @@ import { addListener, removeListener } from '#internal/flushQueue';
  * ```
  */
 const onSlowLoading = (control: AsyncControl, cb: () => void) => {
-  const slowLoading = control[INTERNALS][INTERNALS]._load!._slowLoadMonitor;
+  const slowLoading = control[INTERNALS]._root._load!._slowLoadMonitor;
 
   if (!slowLoading) {
     throw new Error('slow loading timeout was not provided');

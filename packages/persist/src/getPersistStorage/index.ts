@@ -53,36 +53,38 @@ const getPersistStorage = <T>({
         },
         set(value) {
           if (value !== undefined) {
-            storage.setItem(key, converter.stringify(value as any));
+            const str = converter.stringify(value as any);
+
+            if (storage.getItem(key) !== str) {
+              storage.setItem(key, str);
+            }
           } else {
             storage.removeItem(key);
           }
         },
         observe:
           observable && storage.listen
-            ? (setControl) =>
+            ? (onChange) =>
                 storage.listen!(key, (value) => {
-                  let parsedValue: T;
-
                   if (value !== undefined) {
+                    let parsedValue: T;
+
                     try {
                       parsedValue = converter.parse(value);
                     } catch {
                       return;
                     }
-                  }
 
-                  if (isValid(parsedValue!)) {
-                    setControl(parsedValue!);
+                    if (isValid(parsedValue)) {
+                      onChange(parsedValue);
+                    }
+                  } else {
+                    onChange(undefined);
                   }
                 })
             : undefined,
       };
     };
-
-    if (observable && storage.listen) {
-      fn._observable = true;
-    }
 
     return fn;
   }

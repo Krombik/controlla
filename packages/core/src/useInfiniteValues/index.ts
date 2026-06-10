@@ -41,7 +41,7 @@ const useInfiniteValues = <C extends ReadonlyControl>(
         isActual = false;
       }
 
-      item[INTERNALS]._attach(item, forceRerender, true);
+      item._root._attach(item, forceRerender, true);
     }
 
     handleSubscriptionsRef.current = (internals) => {
@@ -57,9 +57,9 @@ const useInfiniteValues = <C extends ReadonlyControl>(
         const prev = prevInternals[i];
 
         if (prev != curr) {
-          curr[INTERNALS]._attach(curr, forceRerender, true);
+          curr._root._attach(curr, forceRerender, true);
 
-          prev[INTERNALS]._detach(prev, forceRerender, true);
+          prev._root._detach(prev, forceRerender, true);
         }
       }
 
@@ -68,13 +68,13 @@ const useInfiniteValues = <C extends ReadonlyControl>(
           for (let i = minL; i < currL; i++) {
             const curr = internals[i];
 
-            curr[INTERNALS]._attach(curr, forceRerender, true);
+            curr._root._attach(curr, forceRerender, true);
           }
         } else {
           for (let i = minL; i < prevL; i++) {
             const prev = prevInternals[i];
 
-            prev[INTERNALS]._detach(prev, forceRerender, true);
+            prev._root._detach(prev, forceRerender, true);
           }
         }
       }
@@ -90,7 +90,7 @@ const useInfiniteValues = <C extends ReadonlyControl>(
       for (let i = 0; i < prevInternals.length; i++) {
         const item = prevInternals[i];
 
-        item[INTERNALS]._detach(item, forceRerender, true);
+        item._root._detach(item, forceRerender, true);
       }
     };
   }, []);

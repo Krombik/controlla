@@ -1,4 +1,3 @@
-import { INTERNALS } from '#shared-internal/constants';
 import { EMPTY_ARR } from '#internal/constants';
 import readRootValue from '#internal/readRootValue';
 import type {
@@ -11,7 +10,7 @@ const makeStatusInternals = (
   root: ControlInternals,
   value: any
 ): Omit<ReadonlyPrimitiveControlInternals, keyof Attachers> => ({
-  [INTERNALS]: root,
+  _root: root,
   _dependents: EMPTY_ARR,
   _get: readRootValue,
   _indexMap: undefined,

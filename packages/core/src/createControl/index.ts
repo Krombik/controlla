@@ -6,7 +6,6 @@ import initControl from '#internal/initControl';
 import readRootValue from '#internal/readRootValue';
 import { EMPTY_ARR } from '#internal/constants';
 import notify from '#internal/notify';
-import { INTERNALS } from '#shared-internal/constants';
 import runPatching from '#internal/runPatching';
 import { attach, detach } from '#internal/syncLifecycle';
 
@@ -67,7 +66,7 @@ const createControl: {
   createScope(
     initControl<ControlInternals>(
       {
-        [INTERNALS]: undefined!,
+        _root: undefined!,
         _get: readRootValue,
         _listeners: EMPTY_ARR,
         _indexMap: undefined,
@@ -86,7 +85,8 @@ const createControl: {
       },
       value,
       syncExternalStorage,
-      keys
+      keys,
+      true
     )
   );
 

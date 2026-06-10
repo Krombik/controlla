@@ -1,6 +1,6 @@
 import identity from 'lodash.identity';
 import { INTERNALS } from '#shared-internal/constants';
-import { EMPTY_ARR } from '#internal/constants';
+import { EMPTY_ARR, RELOAD, SILENT_RELOAD } from '#internal/constants';
 import createScope from '#internal/createScope';
 import readRootValue from '#internal/readRootValue';
 import type {
@@ -23,21 +23,25 @@ import notify from '#internal/notify';
 import { attach, detach } from '#internal/syncLifecycle';
 import attachNotifier from '#internal/attachNotifier';
 import {
-  attachMultipleLoads,
-  attachSingleLoad,
-  detachMultipleLoads,
-  detachSingleLoad,
+  applyLoadWiring,
   enqueueSet,
   keyNotify,
   type DerivedControlInternals,
 } from '#internal/derivedControlUtils';
+import { commitErrorValue, commitStatusValue } from '#internal/commitStatus';
 import makeStatusInternals from '#internal/makeStatusInternals';
 import throwReadonlyError from '#internal/throwReadonlyError';
+import settlePromise from '#internal/settlePromise';
 import addToQueue from '#internal/addToQueue';
+import { AggregateControlError } from '#internal/AggregateControlError';
 
 interface AsyncDerivedControlInternals
   extends DerivedControlInternals, AsyncThings<AsyncDerivedControlInternals> {
-  readonly _errors: any[] | undefined;
+  /**
+   * Positional errors of all dependencies followed by the mapper error in the
+   * last slot. Length is `dependencyCount + 1`. Always present.
+   */
+  readonly _errors: any[];
 }
 
 function keyErrorNotify(
@@ -47,13 +51,46 @@ function keyErrorNotify(
   value: any,
   _: any
 ) {
-  if (root._errors) {
-    root._errors[this._index] = value;
-  }
+  root._errors[this._index] = value;
 
   root._equable = false;
 
   addToQueue(lane, root);
+}
+
+function enqueueDerivedErrorSet(
+  this: ErrorControlInternals<AsyncDerivedControlInternals>,
+  value: any,
+  lane: Lane,
+  path: string[] | undefined
+) {
+  if (value !== RELOAD && value !== SILENT_RELOAD) {
+    throwReadonlyError();
+  }
+
+  const load = this._parent._load;
+
+  if (load) {
+    if (Array.isArray(load)) {
+      for (let i = 0; i < load.length; i++) {
+        (load[i] as AsyncControlInternals)._errorControl[INTERNALS]._enqueueSet(
+          value,
+          lane,
+          path
+        );
+      }
+    } else {
+      (load as AsyncControlInternals)._errorControl[INTERNALS]._enqueueSet(
+        value,
+        lane,
+        path
+      );
+    }
+  } else if (process.env.NODE_ENV !== 'production') {
+    console.warn(
+      '[derived] invalidate on a derived control with no loadable dependencies was ignored.'
+    );
+  }
 }
 
 function commitSet(
@@ -65,58 +102,157 @@ function commitSet(
 
   const prevValue = root._value;
 
-  let nextValue: any;
-
   if (root._equable) {
-    nextValue = commitPatchNode(patchNode, prevValue, root, lane);
-  } else {
-    let next;
+    const nextValue = commitPatchNode(patchNode, prevValue, root, lane);
 
-    root._equable = true;
+    if (nextValue !== UNCHANGED) {
+      root._value = nextValue;
 
-    if (root._isSingleDependency) {
-      next = root._mapper(root._keys);
+      notify(root._listeners, root._dependents, lane, nextValue, prevValue);
 
-      root._keys = undefined;
-    } else {
-      next = root._mapper(...root._keys);
+      if (nextValue !== undefined) {
+        settlePromise(root, true, nextValue);
+      }
     }
 
-    nextValue = commitNextValue(next, prevValue, root, lane);
+    return;
   }
+
+  root._equable = true;
+
+  const errors = root._errors;
+
+  const errorInternals = root._errorControl[INTERNALS];
+
+  const isSingle = root._isSingleDependency;
+
+  const values = root._keys;
+
+  const count = isSingle ? 1 : (values as any[]).length;
+
+  const prevError: AggregateControlError | undefined = errorInternals._value;
+
+  const prevErrors = prevError && prevError.errors;
+
+  const enum Status {
+    LOADING,
+    READY,
+    ERROR_UNCHANGED,
+    ERROR_CHANGED,
+  }
+
+  let status = Status.READY;
+
+  let hadClearedError = false;
+
+  for (let i = 0; i < count; i++) {
+    if (
+      status == Status.READY &&
+      (isSingle ? values : values[i]) === undefined
+    ) {
+      status = Status.LOADING;
+    }
+
+    const err = errors[i];
+
+    if (err !== undefined) {
+      if (!prevErrors || err !== prevErrors[i]) {
+        status = Status.ERROR_CHANGED;
+
+        break;
+      } else {
+        status = Status.ERROR_UNCHANGED;
+      }
+    } else if (prevErrors && prevErrors[i] !== undefined) {
+      hadClearedError = true;
+    }
+  }
+
+  let next: any;
+
+  if (status == Status.READY) {
+    try {
+      next = isSingle ? root._mapper(values) : root._mapper(...values);
+
+      errors[count] = undefined;
+
+      if (next === undefined) {
+        status = Status.LOADING;
+      }
+    } catch (error) {
+      if (error !== errors[count]) {
+        errors[count] = error;
+
+        status = Status.ERROR_CHANGED;
+      } else {
+        status = Status.ERROR_UNCHANGED;
+      }
+    }
+  } else {
+    if (hadClearedError && status == Status.ERROR_UNCHANGED) {
+      status = Status.ERROR_CHANGED;
+    }
+
+    errors[count] = undefined;
+  }
+
+  const nextValue = commitNextValue(next, prevValue, root, lane);
 
   if (nextValue !== UNCHANGED) {
     root._value = nextValue;
 
     notify(root._listeners, root._dependents, lane, nextValue, prevValue);
+
+    if (nextValue !== undefined) {
+      settlePromise(root, true, nextValue);
+    }
   }
+
+  commitErrorValue(
+    root,
+    errorInternals,
+    status > Status.READY
+      ? status == Status.ERROR_CHANGED
+        ? new AggregateControlError(errors)
+        : prevError
+      : undefined,
+    lane
+  );
+
+  commitStatusValue(
+    root._loadingControl[INTERNALS],
+    status == Status.LOADING,
+    lane
+  );
+
+  commitStatusValue(
+    root._readyControl[INTERNALS],
+    status == Status.READY || undefined,
+    lane
+  );
 }
 
-const makeDerivedControl = (params: any[]) => {
+const makeAsyncDerivedControl = (params: any[]) => {
   const controlCount = params.length - 1;
 
-  const errorInternals: ErrorControlInternals<AsyncDerivedControlInternals> = {
-    [INTERNALS]: undefined!,
-    _attach: attach,
-    _detach: detach,
-    _dependents: EMPTY_ARR,
-    _enqueueSet: throwReadonlyError,
-    _get: readRootValue,
-    _indexMap: undefined,
-    _level: 0,
-    _listeners: EMPTY_ARR,
-    _load: true,
-    _parent: undefined!,
-    _path: undefined,
-    _value: undefined,
-  };
+  const isSingle = controlCount < 2;
 
-  const loadingInternals = makeStatusInternals(undefined!, true);
+  const sourceCount = isSingle ? 1 : controlCount;
 
-  const readyInternals = makeStatusInternals(undefined!, undefined);
+  const errors: any[] = Array(sourceCount + 1);
+
+  const values = Array(sourceCount);
+
+  const notifiers: Notifier[] = [];
+
+  const loadableRoots: ControlInternals[] = [];
+
+  const mapper = params[sourceCount] || identity;
+
+  const seenLoadableRoots = new Set<ControlInternals>();
 
   const derivedRoot: AsyncDerivedControlInternals = {
-    [INTERNALS]: undefined!,
+    _root: undefined!,
     _get: readRootValue,
     _listeners: EMPTY_ARR,
     _indexMap: undefined,
@@ -131,172 +267,144 @@ const makeDerivedControl = (params: any[]) => {
     _attach: attach,
     _detach: detach,
     _load: false,
-    _mapper: identity,
+    _mapper: mapper,
     _keys: undefined,
-    _isSingleDependency: controlCount < 2,
+    _isSingleDependency: isSingle,
     _equable: true,
-    _notifiers: undefined!,
-    _errorControl: { [INTERNALS]: errorInternals },
-    _loadingControl: { [INTERNALS]: loadingInternals },
-    _readyControl: { [INTERNALS]: readyInternals },
+    _notifiers: notifiers,
+    _errorControl: undefined!,
+    _loadingControl: undefined!,
+    _readyControl: undefined!,
     _promise: undefined,
-    _errors: undefined,
+    _errors: errors,
   };
 
   const weakRef = new WeakRef(derivedRoot);
 
   let maxLevel = 0;
 
-  let errors;
+  let isReady = true;
 
-  if (controlCount > 1) {
-    const seenLoadableRoots = new Set<ControlInternals>();
+  let isNoError = true;
 
-    const loadableRoots: Array<ControlInternals> = [];
-
-    const values = Array(controlCount);
-
-    const notifiers = Array(controlCount);
-
-    for (let i = 0; i < controlCount; i++) {
-      const internals: ChildControlNode<
-        ControlInternals | AsyncControlInternals
-      > = params[i][INTERNALS];
-
-      const root = internals[INTERNALS];
-
-      if (root._level > maxLevel) {
-        maxLevel = root._level;
-      }
-
-      if (root._load && !seenLoadableRoots.has(root)) {
-        seenLoadableRoots.add(root);
-
-        loadableRoots.push(root);
-      }
-
-      attachNotifier(
-        internals,
-        (notifiers[i] = {
-          _ref: weakRef,
-          _notify: keyNotify,
-          _index: i,
-          _current: EMPTY_ARR,
-        })
-      );
-
-      values[i] = internals._get();
-    }
-
-    const combine: (...values: any[]) => any = params[controlCount];
-
-    const loaderCount = loadableRoots.length;
-
-    derivedRoot._mapper = combine;
-
-    derivedRoot._value = combine(...values);
-
-    (derivedRoot as Mutable<typeof derivedRoot>)._notifiers = notifiers;
-
-    derivedRoot._keys = values;
-
-    if (loaderCount) {
-      if (loaderCount == 1) {
-        (derivedRoot as Mutable<typeof derivedRoot>)._load = loadableRoots[0];
-
-        derivedRoot._attach = attachSingleLoad;
-
-        derivedRoot._detach = detachSingleLoad;
-      } else {
-        (derivedRoot as Mutable<typeof derivedRoot>)._load = loadableRoots;
-
-        derivedRoot._attach = attachMultipleLoads;
-
-        derivedRoot._detach = detachMultipleLoads;
-      }
-    }
-  } else {
+  for (let i = 0; i < sourceCount; i++) {
     const internals: ChildControlNode<
       ControlInternals | AsyncControlInternals
-    > = params[0][INTERNALS];
+    > = params[i][INTERNALS];
 
-    const root = internals[INTERNALS];
+    const root = internals._root;
 
-    const keyErrorControl = (root as AsyncControlInternals)._errorControl;
+    const errorControl = (root as AsyncControlInternals)._errorControl;
 
-    maxLevel = root._level;
+    const keyValue = internals._get();
 
-    if (controlCount) {
-      const mapper = params[1];
+    values[i] = keyValue;
 
-      derivedRoot._mapper = mapper;
-
-      if (keyErrorControl) {
-        const errorValue = keyErrorControl[INTERNALS]._value;
-
-        (derivedRoot as Mutable<typeof derivedRoot>)._errors = errors = [
-          errorValue,
-          undefined,
-        ];
-
-        if (errorValue === undefined) {
-          if (root._value !== undefined) {
-            try {
-              derivedRoot._value = mapper(internals._get());
-            } catch (error) {
-              errors[1] = error;
-
-              errorInternals._value = errors.slice();
-            }
-          }
-        } else {
-          errorInternals._value = errors.slice();
-        }
-      } else if (root._value !== undefined) {
-        try {
-          derivedRoot._value = mapper(internals._get());
-        } catch (error) {
-          errorInternals._value = error;
-        }
-      }
-    } else {
-      if (keyErrorControl) {
-        const errorValue = keyErrorControl[INTERNALS]._value;
-
-        if (errorValue === undefined) {
-          derivedRoot._value = internals._get();
-        } else {
-          errorInternals._value = errorValue;
-        }
-      } else {
-        derivedRoot._value = internals._get();
-      }
+    if (isReady && keyValue === undefined) {
+      isReady = false;
     }
 
-    if (root._load) {
-      (derivedRoot as Mutable<typeof derivedRoot>)._load = root;
-
-      derivedRoot._attach = attachSingleLoad;
-
-      derivedRoot._detach = detachSingleLoad;
+    if (root._level > maxLevel) {
+      maxLevel = root._level;
     }
 
-    attachNotifier(
-      internals,
-      ((derivedRoot as Mutable<typeof derivedRoot>)._notifiers = {
+    if (root._load && !seenLoadableRoots.has(root)) {
+      seenLoadableRoots.add(root);
+
+      loadableRoots.push(root);
+    }
+
+    if (errorControl) {
+      const errorInternals = errorControl[INTERNALS];
+
+      const errorValue = errorInternals._value;
+
+      errors[i] = errorValue;
+
+      if (isNoError && errorValue !== undefined) {
+        isNoError = false;
+      }
+
+      const errorNotifier: Notifier = {
         _ref: weakRef,
-        _notify: keyNotify,
-        _index: 0,
+        _notify: keyErrorNotify,
+        _index: i,
         _current: EMPTY_ARR,
-      })
-    );
+      };
+
+      attachNotifier(errorInternals, errorNotifier);
+
+      notifiers.push(errorNotifier);
+    }
+
+    const notifier: Notifier = {
+      _ref: weakRef,
+      _notify: keyNotify,
+      _index: i,
+      _current: EMPTY_ARR,
+    };
+
+    attachNotifier(internals, notifier);
+
+    notifiers.push(notifier);
   }
 
-  (derivedRoot as Mutable<typeof derivedRoot>)._level = maxLevel + 1;
+  derivedRoot._keys = isSingle ? values[0] : values;
 
-  (derivedRoot as Mutable<typeof derivedRoot>)[INTERNALS] = derivedRoot;
+  if (isReady) {
+    try {
+      const value = isSingle ? mapper(values[0]) : mapper(...values);
+
+      derivedRoot._value = value;
+
+      if (value === undefined) {
+        isReady = false;
+      }
+    } catch (error) {
+      errors[sourceCount] = error;
+
+      isNoError = false;
+
+      isReady = false;
+    }
+  }
+
+  applyLoadWiring(derivedRoot, loadableRoots);
+
+  (derivedRoot as Mutable<typeof derivedRoot>)._root = derivedRoot;
+
+  const errorInternals: ErrorControlInternals<AsyncDerivedControlInternals> = {
+    _root: undefined!,
+    _attach: attach,
+    _detach: detach,
+    _dependents: EMPTY_ARR,
+    _enqueueSet: enqueueDerivedErrorSet,
+    _get: readRootValue,
+    _indexMap: undefined,
+    _level: ((derivedRoot as Mutable<typeof derivedRoot>)._level =
+      maxLevel + 1),
+    _listeners: EMPTY_ARR,
+    _load: derivedRoot._load !== false,
+    _parent: derivedRoot,
+    _path: undefined,
+    _value: isNoError ? undefined : new AggregateControlError(errors),
+  };
+
+  (errorInternals as Mutable<typeof errorInternals>)._root = errorInternals;
+
+  (derivedRoot as Mutable<typeof derivedRoot>)._errorControl = {
+    [INTERNALS]: errorInternals,
+  };
+
+  (derivedRoot as Mutable<typeof derivedRoot>)._loadingControl = {
+    [INTERNALS]: makeStatusInternals(derivedRoot, isNoError && !isReady),
+  };
+
+  (derivedRoot as Mutable<typeof derivedRoot>)._readyControl = {
+    [INTERNALS]: makeStatusInternals(derivedRoot, isReady || undefined),
+  };
 
   return createScope(derivedRoot);
 };
 
-export default makeDerivedControl;
+export default makeAsyncDerivedControl;

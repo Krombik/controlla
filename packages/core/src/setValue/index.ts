@@ -14,7 +14,7 @@ const setValue = <S extends Control>(
 
   const lane = getLane(scheduler);
 
-  internals[INTERNALS]._enqueueSet(
+  internals._root._enqueueSet(
     typeof value != 'function' ? value : value(internals._get()),
     lane,
     internals._path
