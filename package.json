@@ -1,22 +1,64 @@
 {
-  "private": true,
+  "name": "controlly",
+  "version": "0.0.1-alpha.44",
+  "description": "",
+  "author": "Krombik",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Krombik/react-state-forge.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Krombik/react-state-forge/issues"
+  },
+  "homepage": "https://github.com/Krombik/react-state-forge#readme",
+  "type": "module",
+  "source": "src/index.ts",
+  "engines": {
+    "node": ">=10"
+  },
   "scripts": {
-    "build": "pnpm -r build",
-    "watch": "pnpm -r --parallel dev"
+    "build": "tsup",
+    "watch": "tsup --watch",
+    "release": "tsup && npm publish ./build"
+  },
+  "peerDependencies": {
+    "@types/react": ">=17.0.0",
+    "react": ">=17.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@types/react": {
+      "optional": true
+    }
+  },
+  "keywords": [],
+  "imports": {
+    "#internal/*": "./src/core/_internal/*.ts",
+    "#core/*": "./src/core/*/index.ts",
+    "#router/internal/*": "./src/router/_internal/*.ts",
+    "#persist/internal/*": "./src/persist/_internal/*.ts",
+    "#router/types": "./src/router/types.ts",
+    "#persist/types": "./src/persist/types.ts",
+    "#router/*": "./src/router/*/index.ts",
+    "#persist/*": "./src/persist/*/index.ts",
+    "#types": "./src/core/types.ts"
+  },
+  "dependencies": {
+    "keyweaver": "^1.0.3",
+    "lodash.identity": "^3.0.0",
+    "lodash.noop": "^3.0.1",
+    "react-helpful-utils": "^1.0.6"
   },
   "devDependencies": {
     "@types/lodash.identity": "^3.0.9",
     "@types/lodash.noop": "^3.0.9",
     "@types/node": "^22.7.4",
-    "@types/react": "^19.1.7",
-    "eslint": "^9.39.2",
-    "eslint-plugin-import": "^2.32.0",
-    "eslint-import-resolver-typescript": "^4.4.4",
-    "prettier": "^3.6.2",
+    "@types/react": "^19.2.17",
+    "eslint": "^10.4.1",
+    "prettier": "3.8.4",
     "tsup": "^8.5.0",
-    "typescript-eslint": "^8.51.0",
-    "typescript": "^5.9.2",
-    "yaml": "^2.8.2"
+    "typescript-eslint": "^8.61.0",
+    "typescript": "^6.0.3"
   },
   "sideEffects": false
 }

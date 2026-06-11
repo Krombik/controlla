@@ -23,6 +23,6 @@
     "preserveConstEnums": false,
     "types": ["node"]
   },
-  "include": ["scripts"],
+  "include": ["src"],
   "exclude": ["node_modules"]
 }

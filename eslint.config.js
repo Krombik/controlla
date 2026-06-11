@@ -1,62 +1,70 @@
 import tseslint from 'typescript-eslint';
-import importPlugin from 'eslint-plugin-import';
 
-export default tseslint.config({
-  parser: '@typescript-eslint/parser',
-  env: {
-    node: true,
-    es2020: true,
-  },
-  parserOptions: {
-    ecmaVersion: 2020,
-    sourceType: 'module',
-    ecmaFeatures: {
-      jsx: true,
-    },
-    project: ['./packages/*/tsconfig.json'],
-  },
-  settings: {
-    react: {
-      version: '16',
-    },
-    'import/parsers': {
-      '@typescript-eslint/parser': ['.ts', '.tsx', '.mts', '.cts'],
-    },
-  },
-  plugins: {
-    import: importPlugin,
-  },
-  rules: {
-    'import/order': [
-      'error',
-      {
-        groups: [
-          'builtin',
-          'external',
-          'internal',
-          'parent',
-          'sibling',
-          'index',
-          'type',
-        ],
-        'newlines-between': 'always',
-        alphabetize: { order: 'asc', caseInsensitive: true },
+/** Domains with private internals; core's `_internal` (#internal/*) is shared. */
+const nonCoreDomains = ['router', 'persist'];
 
-        pathGroups: [
-          { pattern: '#utils/**', group: 'internal', position: 'after' },
-          { pattern: '#shared/**', group: 'internal', position: 'after' },
-          { pattern: '#@/**', group: 'internal', position: 'after' },
-        ],
-        pathGroupsExcludedImportTypes: ['builtin'],
-      },
-    ],
-    '@typescript-eslint/consistent-type-imports': [
-      'error',
-      {
-        prefer: 'type-imports',
-        fixStyle: 'separate-type-imports',
-        // or: "inline-type-imports"
-      },
-    ],
+const boundaries = [
+  // core is the foundation — it must not depend on any non-core domain at all
+  {
+    files: ['src/core/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: nonCoreDomains.map((domain) => ({
+            group: [`\\#${domain}/**`, `**/${domain}/**`],
+            message: `core must not depend on ${domain} — invert the dependency or move shared code to src/core.`,
+          })),
+        },
+      ],
+    },
   },
-});
+  // non-core domains must not use each other's internals
+  ...nonCoreDomains.map((domain) => ({
+    files: [`src/${domain}/**`],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: nonCoreDomains
+            .filter((other) => other !== domain)
+            .map((other) => ({
+              group: [`\\#${other}/internal/*`, `**/${other}/_internal/*`],
+              message: `${domain} must not use ${other} internals — move the util to src/core/_internal (#internal/*) if it must be shared.`,
+            })),
+        },
+      ],
+    },
+  })),
+];
+
+export default tseslint.config(
+  {
+    ignores: ['build/**', 'node_modules/**'],
+  },
+  {
+    files: ['**/*.{ts,tsx,mts,cts}'],
+    languageOptions: {
+      parser: tseslint.parser,
+      parserOptions: {
+        sourceType: 'module',
+        ecmaFeatures: {
+          jsx: true,
+        },
+      },
+    },
+    plugins: {
+      '@typescript-eslint': tseslint.plugin,
+    },
+    rules: {
+      '@typescript-eslint/consistent-type-imports': [
+        'error',
+        {
+          prefer: 'type-imports',
+          fixStyle: 'separate-type-imports',
+        },
+      ],
+    },
+  },
+  ...boundaries
+);
