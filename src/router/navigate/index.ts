@@ -1,0 +1,21 @@
+import type { NavigationTarget } from '#router/types';
+import { ROUTE_METHODS, ROUTE_PARAMS } from '#router/internal/constants';
+
+const navigate = (
+  to: NavigationTarget<true>,
+  replace?: boolean,
+  ignoreBlock?: boolean,
+  scrollToTop?: boolean,
+  scrollRestoration?: boolean
+) => {
+  to[ROUTE_METHODS]._navigate(
+    null,
+    to[ROUTE_PARAMS],
+    replace,
+    ignoreBlock,
+    scrollToTop,
+    scrollRestoration
+  );
+};
+
+export default navigate;
