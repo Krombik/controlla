@@ -1,13 +1,6 @@
-import type {
-  ControlInternals,
-  Lane,
-  PrimitiveControlInternals,
-} from '#internal/types';
+import type { Lane, PendingItem } from '#internal/types';
 
-const addToLevel = (
-  lane: Lane,
-  item: ControlInternals | PrimitiveControlInternals
-) => {
+const addToLevel = (lane: Lane, item: PendingItem) => {
   const level = item._level;
 
   if (lane._maxPendingLevel <= level) {

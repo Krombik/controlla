@@ -17,16 +17,29 @@ import type {
 import type SuspenseContext from '#internal/SuspenseContext';
 import type { PatchType } from '#internal/constants';
 
+export type PendingItem = Pick<ControlInternals, '_commitSet' | '_level'>;
+
 export type Lane = {
   _canScheduleFlush: boolean;
   _minPendingLevel: number;
   _maxPendingLevel: number;
-  readonly _patchByControl: Map<ControlInternals, PatchTreeNode> &
-    Map<PrimitiveControlInternals, any>;
+  readonly _patchByControl: Map<PendingItem, any>;
   readonly _beforeFlushHooks: Array<() => void>;
-  readonly _pendingControlLevels: Array<
-    ControlInternals | PrimitiveControlInternals
-  >[];
+  readonly _pendingControlLevels: Array<PendingItem>[];
+  //#region router-relative
+  readonly _routerParamUpdates: {
+    readonly _root: PrimitiveControlInternals;
+    readonly _path: string[] | undefined;
+    readonly _value: any;
+  }[];
+  _routerReplace: boolean;
+  _routerNavigation:
+    | {
+        _enableScrollToTop: boolean;
+        _enableScrollRestoration: boolean | undefined;
+      }
+    | undefined;
+  //#endregion
 };
 
 /** @internal */
@@ -235,11 +248,6 @@ export type PartialTuple<T extends unknown[]> = T extends [
     ? never
     : Rest | PartialTuple<Rest>
   : never;
-
-export type WithInitModule<T, Args extends any[]> = [
-  ...Args,
-  syncExternalStorage?: SyncExternalStorage<T>,
-];
 
 export type ContainerComponent =
   | ComponentType<PropsWithChildren>

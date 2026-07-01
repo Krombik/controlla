@@ -93,6 +93,10 @@ export const scheduleFlush = (lane: Lane, scheduler: Scheduler) => {
       }
     });
   }
+
+  if ('_debounce' in scheduler) {
+    scheduler._debounce!();
+  }
 };
 
 export const getCurrentLane = () => currentLane;
@@ -111,6 +115,9 @@ export const getLane = (scheduler: Scheduler) => {
     _pendingControlLevels: [],
     _minPendingLevel: Infinity,
     _maxPendingLevel: 0,
+    _routerNavigation: undefined,
+    _routerParamUpdates: [],
+    _routerReplace: true,
   };
 
   flushLanes.set(scheduler, newLane);

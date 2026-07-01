@@ -15,7 +15,7 @@ import forceRerenderReducer from '#internal/forceRerenderReducer';
 
 /**
  * Returns the values of multiple async {@link controls}, suspending until all
- * of them are loaded — requires this library's `Suspense` boundary above (not
+ * of them are ready — requires this library's `Suspense` boundary above (not
  * `React.Suspense`). Using it starts the controls' loading and subscribes to
  * changes.
  *

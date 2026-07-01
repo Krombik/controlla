@@ -54,7 +54,7 @@ type AsyncControlBase<Error> = {
 
 /**
  * A settable async control: the value arrives asynchronously (`undefined`
- * until loaded), with loading/ready/error statuses readable via
+ * until ready), with loading/ready/error statuses readable via
  * `selectLoading`/`selectReady`/`selectError`.
  */
 export type AsyncControl<Value = any, Error = any> = Control<Value> &
@@ -216,7 +216,6 @@ export type Registry<
         : never
     : BoundControl<T, K>;
   /** Returns whether an item exists under the given keys or key prefix. */
-  has(...keys: MixedKeys<Keys> | PartialTuple<MixedKeys<Keys>>): boolean;
   /**
    * Deletes a control entry from the storage associated with the given key.
    *
@@ -229,21 +228,25 @@ export type Registry<
   /** @internal */
   _bounded: WeakMap<any, any> | undefined;
   /** @internal */
-  _storage: Map<any, any>;
+  readonly _storage: Map<any, any>;
   /** @internal */
   readonly _depth: number;
   /** @internal */
-  _getItem(
+  _createControl(
     arg1: any,
-    syncExternalStorage: SyncExternalStorage | undefined,
+    externalStorage: SyncExternalStorage | undefined,
     keys: any[] | undefined
   ): Control | ControlScope | AsyncControlScope;
   /** @internal */
   readonly _arg1: any;
   /** @internal */
-  readonly _syncExternalStorage: SyncExternalStorage | undefined;
+  readonly _externalStorage: SyncExternalStorage | undefined;
   /** @internal */
   _type: ControlType;
+  /** @external */
+  readonly _keepPrev: boolean;
+  /** @external */
+  readonly _suppressError: boolean;
 } & (T extends AsyncControl
     ? {
         /** Resets all items under the given keys or key prefix (every item when called with no keys), triggering reloads for those in use. */
@@ -279,4 +282,14 @@ export type SyncExternalStorage<T = any> = (
  * scheduler are committed together when it fires (microtask by default;
  * pass a custom one to throttle or align commits).
  */
-export type Scheduler = (cb: () => void) => any;
+export type Scheduler = {
+  (cb: () => void): any;
+  /** @internal */
+  _debounce?(): void;
+};
+
+export type RegistryOptions<T = any> = {
+  externalStorage?: SyncExternalStorage<T>;
+  keepPrev?: boolean;
+  suppressError?: boolean;
+};

@@ -85,17 +85,17 @@ const internals = {
  * ```jsx
  * const Card = ({ $user }) => (
  *   <SuspenseControlConsumer
- *     control={$user || PENDING_CONTROL}
+ *     control={$user || $pending}
  *     fallback="Loading..." // shown forever while $user is absent
  *     render={(user) => <Content user={user} />}
  *   />
  * );
  * ```
  */
-const PENDING_CONTROL: AsyncControlScope = new Proxy(internals, {
+const $pending: AsyncControlScope = new Proxy(internals, {
   get(target, key, proxy) {
     return key === INTERNALS ? target : proxy;
   },
 }) as any;
 
-export default PENDING_CONTROL;
+export default $pending;

@@ -1,18 +1,22 @@
 import type { MouseEvent as ReactMouseEvent } from 'react';
-import type { ROUTE_METHODS, ROUTE_PARAMS } from '#router/internal/constants';
+import type { ROUTE_HASH, ROUTE_PARAMS } from '#router/internal/constants';
 import type {
   AsyncControlScope,
+  Control,
   ControlScope,
   ReadonlyAsyncControlScope,
   ReadonlyControl,
   ReadonlyControlScope,
+  Scheduler,
 } from '#types';
 import type {
   ControlInternals,
   AsyncControlInternals,
   PrimitiveControlInternals,
+  ChildControlNode,
 } from '#internal/types';
 import type { NavigationTarget } from '#router/types';
+import type { AnchorParam } from '#router/anchor';
 
 export type UnionToIntersection<U> = (
   U extends any ? (x: U) => void : never
@@ -39,15 +43,13 @@ export type Route<
   Paths = never,
   Params = never,
   Async extends boolean = false,
-  Controls extends Array<ReadonlyControlScope | ReadonlyAsyncControlScope> =
-    any[],
+  Anchor extends string = never,
   IsPage extends boolean = [Paths] extends [never]
     ? true
     : Paths & 1 extends 0
       ? boolean
       : false,
 > = RouteIsPage<IsPage> &
-  RouteControls<Controls> &
   RouteParams<Params, Async> &
   ([Paths] extends [never]
     ? {}
@@ -56,23 +58,15 @@ export type Route<
           infer C,
           infer P,
           any,
-          infer A
+          infer A,
+          infer H
         >
-          ? Route<
-              C,
-              P,
-              A,
-              [P] extends [never]
-                ? Controls
-                : [
-                    A extends false
-                      ? ReadonlyControlScope<P>
-                      : ReadonlyAsyncControlScope<P>,
-                    ...Controls,
-                  ]
-            >
+          ? Route<C, P, A, H>
           : never;
       }) &
+  ([Anchor] extends [never]
+    ? {}
+    : { [ROUTE_HASH]: ReadonlyControl<Anchor | undefined> }) &
   ReadonlyControl<boolean>;
 
 export type Router<Paths extends AnyPaths> = {
@@ -89,20 +83,10 @@ export type Router<Paths extends AnyPaths> = {
       infer C,
       infer P,
       any,
-      infer A
+      infer A,
+      infer H
     >
-      ? Route<
-          C,
-          P,
-          A,
-          [P] extends [never]
-            ? []
-            : [
-                A extends false
-                  ? ReadonlyControlScope<P>
-                  : ReadonlyAsyncControlScope<P>,
-              ]
-        >
+      ? Route<C, P, A, H>
       : never;
   };
   readonly navigation: {
@@ -110,9 +94,10 @@ export type Router<Paths extends AnyPaths> = {
       infer C,
       infer P,
       infer O,
-      any
+      infer A,
+      infer H
     >
-      ? Navigation<C, P, O>
+      ? Navigation<C, P, O, A, H>
       : never;
   };
   readonly navigationState: ReadonlyControl<NavigationState>;
@@ -120,24 +105,12 @@ export type Router<Paths extends AnyPaths> = {
 
 declare const IS_PAGE_MARKER: unique symbol;
 
-declare const CONTROLS_MARKER: unique symbol;
-
 export type RouteIsPage<IsPage extends boolean> = {
   [IS_PAGE_MARKER]: IsPage;
   /** @internal */
   _register(setComponents: () => void): void;
-};
-
-export type RouteControls<
-  Controls extends Array<ReadonlyControlScope | ReadonlyAsyncControlScope>,
-> = {
-  [CONTROLS_MARKER]: Controls;
   /** @internal */
-  [ROUTE_METHODS](
-    load: (
-      ...args: Array<ReadonlyControlScope | ReadonlyAsyncControlScope>
-    ) => void | Array<() => void>
-  ): void;
+  readonly _anchor: AnchorParam | undefined;
 };
 
 declare const PARAMS_MARKER: unique symbol;
@@ -152,6 +125,8 @@ export type Navigation<
   Paths extends AnyPaths = never,
   Params = never,
   OptionalParams extends string = never,
+  Async extends boolean = false,
+  Anchor extends string = never,
   Children = [Paths] extends [never]
     ? {}
     : {
@@ -159,9 +134,10 @@ export type Navigation<
           infer C,
           infer P,
           infer O,
-          any
+          infer A,
+          infer H
         >
-          ? Navigation<C, P, O>
+          ? Navigation<C, P, O, A, H>
           : never;
       },
 > = ([Paths] extends [never]
@@ -171,7 +147,11 @@ export type Navigation<
     }) &
   ([Params] extends [never]
     ? [Paths] extends [never]
-      ? { (): NavigationTarget<true> }
+      ? {
+          (
+            ...args: [Anchor] extends [never] ? [] : [anchor?: Anchor]
+          ): NavigationTarget<true>;
+        }
       : {}
     : {
         (
@@ -182,36 +162,14 @@ export type Navigation<
                 OptionalParams extends keyof Params ? OptionalParams : never
               >
             > &
-              Omit<Params, OptionalParams>
-          >
-        ): Children & NavigationTarget<true>;
-        <
-          StringifiedKeys extends keyof Params,
-          StringifiedParams extends Partial<Record<keyof Params, any>> = {
-            [key in keyof Params]:
-              | (NonNullable<Params[key]> extends string ? Params[key] : string)
-              | Extract<Params[key], undefined>;
-          },
-        >(
-          params: ProcessParams<
-            Partial<
-              Pick<
-                Params,
-                OptionalParams extends keyof Params
-                  ?
-                      | OptionalParams
-                      | (StringifiedKeys extends keyof Params
-                          ? StringifiedKeys
-                          : never)
-                  : never
-              >
-            > &
-              Omit<Params, OptionalParams | StringifiedKeys>,
-            Params
+              Omit<Params, OptionalParams>,
+            Async extends true ? undefined : never
           >,
-          stringifiedParams: Pick<StringifiedParams, StringifiedKeys>
+          ...args: [Anchor] extends [never] ? [] : [anchor?: Anchor]
         ): Children & NavigationTarget<true>;
       });
+
+export type Hash = ProcessParams<string | undefined>;
 
 export type NavigationState = {
   readonly action: 'none' | 'push' | 'replace' | 'pop';
@@ -221,72 +179,75 @@ export type NavigationState = {
 /** @internal */
 export type ParamsUpdatedData = {
   readonly _route: RouteData;
-  readonly _params: Record<string, any>;
-  readonly _currentPath: string;
-  readonly _currentSearch: string;
+  readonly _params: ProcessParams<Record<string, any>>;
+};
+
+type RouterParamsRoot = (ControlInternals | AsyncControlInternals) & {
+  readonly _route: RouteData;
 };
 
 /** @internal */
 export type RouteData = {
   readonly _selfIndex: number;
   readonly _params: ControlInternals | AsyncControlInternals | null;
-  readonly _source: AsyncControlInternals | undefined;
+  readonly _source:
+    | ChildControlNode<ControlInternals>
+    | PrimitiveControlInternals
+    | undefined;
   readonly _isMatched: PrimitiveControlInternals;
+  readonly _anchor: AnchorParam | undefined;
   readonly _pathParamsCount: number;
-  _getPath(
+  _handlePath<T extends boolean>(
     params: Record<string, any>,
-    stringifiedParams: Record<string, string>
-  ): string;
-  _getSearch(
+    typed: boolean,
+    peek: T
+  ): T extends true ? string : void;
+  _handleSearch<T extends boolean>(
     params: Record<string, any>,
-    stringifiedParams: Record<string, string>
-  ): string;
+    typed: boolean,
+    peek: T
+  ): T extends true ? string : void;
   _extractPathParams(
     target: Record<string, any>,
-    params: Record<string, any>,
-    stringifiedParams: Record<string, any>,
+    stringifiedParams: Record<string, string>,
     source: any
   ): boolean;
   _extractQueryParams(
     target: Record<string, any>,
-    params: Record<string, any>,
     stringifiedParams: Record<string, string>,
     source: any
   ): boolean;
-  _replaceDeprecatedQueryParams(searchParams: Record<string, string>): boolean;
-  _currentPath: string;
-  _currentSearch: string;
-  _load(): void;
-  _unload(): void;
+  readonly _currentPath: string;
+  readonly _currentSearch: string;
 };
 
 /** @internal */
-export type RouteParamsData = {
+export type RouterParamUpdates = {
   readonly _route: RouteData;
-  readonly _params: ProcessParams<Record<string, any>> | null;
-  readonly _stringifiedParams?: Record<string, string>;
+  readonly _params: ProcessParams<Record<string, any>>;
 };
 
 /** @internal */
 export type RouteMethods = {
   _useHref(
-    params: RouteParamsData[] | undefined,
+    params: RouterParamUpdates[] | undefined,
     useParams: (route: RouteData) => void,
     useNoop: () => void
   ): string;
   _navigate(
     event: ReactMouseEvent<HTMLAnchorElement, any> | null,
-    params?: RouteParamsData[],
+    params?: RouterParamUpdates[],
     replace?: boolean,
     ignoreBlock?: boolean,
     enableScrollToTop?: boolean,
     enableScrollRestoration?: boolean,
-    onClick?: (event: ReactMouseEvent<HTMLAnchorElement, any>) => void
+    onClick?: (event: ReactMouseEvent<HTMLAnchorElement, any>) => void,
+    hash?: Hash
   ): void;
   readonly _isMatched: PrimitiveControlInternals;
 };
 
-export type ProcessParams<O, P = O> = O | ((prev: P) => O);
+export type ProcessParams<O, P = never> = O | ((prev: O | P) => O);
 
 declare const ROUTE_MARKER: unique symbol;
 
@@ -309,7 +270,7 @@ export type HandleStringify = (value: any, key: string) => string;
 
 type ParamData<V, O extends boolean> = [V, O];
 
-type QueryParam<
+export type QueryParam<
   P extends Record<string, [value: any, optional: boolean]>,
   Source = never,
 > = {
@@ -318,21 +279,9 @@ type QueryParam<
     parsers: Map<string, HandleParse>,
     stringifies: Map<string, HandleStringify>,
     queryParams: string[]
-  ): (searchParams: Record<string, string>) => boolean;
+  ): void;
   [QUERY_PARAM_MARKER]: P;
   [SOURCE]: Source;
-};
-
-export type QueryParamWithReplace<
-  P extends Record<string, [value: any, optional: boolean]>,
-  Source = never,
-> = QueryParam<P, Source> & {
-  replace<const S extends string[]>(
-    keys: S,
-    mapper: (deprecatedValues: Partial<Record<S[number], string>>) => {
-      [key in keyof P]?: string;
-    }
-  ): QueryParam<P, Source>;
 };
 
 export type PathParam<
@@ -361,6 +310,42 @@ type ValidatePath<T> = T extends `/${string}` | `${string}/` | '' ? never : T;
 type AnyPathSegment<Source> = PathParam<Record<string, any>, Source> | string;
 
 export type CreatePath<Source = never> = {
+  <
+    P extends [
+      ...path: AnyPathSegment<Source>[],
+      query: QueryParam<Record<string, any>, Source>,
+      anchor: AnchorParam<any>,
+    ],
+  >(
+    ...path: {
+      [key in keyof P]: ValidatePath<P[key]>;
+    }
+  ): HandlePath<
+    UnionToIntersection<
+      {
+        [key in keyof P]: P[key] extends PathParam<infer K, Source>
+          ? K
+          : P[key] extends QueryParam<infer K, Source>
+            ? K
+            : never;
+      }[number]
+    >,
+    Source
+  >;
+
+  <P extends [...path: AnyPathSegment<Source>[], anchor: AnchorParam<any>]>(
+    ...path: {
+      [key in keyof P]: ValidatePath<P[key]>;
+    }
+  ): HandlePath<
+    UnionToIntersection<
+      {
+        [key in keyof P]: P[key] extends PathParam<infer K, Source> ? K : never;
+      }[number]
+    >,
+    Source
+  >;
+
   <
     P extends [
       ...path: AnyPathSegment<Source>[],
@@ -462,12 +447,14 @@ export interface Path<
   Params = never,
   OptionalParams extends string = never,
   Async extends boolean = false,
+  Anchor extends string = never,
 > {
   [ROUTE_MARKER]: [
     UnionToIntersection<Children>,
     Params,
     OptionalParams,
     Async,
+    Anchor,
   ];
   /** @internal */
   readonly _pathParams: string[];
@@ -478,17 +465,22 @@ export interface Path<
   /** @internal */
   readonly _regexStr: string;
   /** @internal */
+  readonly _anchor: AnchorParam | undefined;
+  /** @internal */
   readonly _children: AnyPaths | undefined;
   /** @internal */
-  readonly _source: AsyncControlInternals | undefined;
+  readonly _source: Control | undefined;
   /** @internal */
-  _createControlScope(): ControlScope | AsyncControlScope;
+  _createControlScope(
+    routerContext: RouterContext,
+    isMatchedRoot: PrimitiveControlInternals,
+    source: Control,
+    routeData: RouteData
+  ): ControlScope | AsyncControlScope;
   /** @internal */
   _getParse(key: string): HandleParse;
   /** @internal */
   _getStringify(key: string): (value: any, key: string) => string | undefined;
-  /** @internal */
-  _replaceDeprecatedQueryParams(params: Record<string, string>): boolean;
 }
 
 export type AnyPaths = Record<string, Path<any, {}, any, boolean>>;
@@ -528,3 +520,11 @@ export type ValidateParams<P> = keyof P extends {
 }[keyof P]
   ? unknown
   : never;
+
+export type RouterContext = {
+  _path: Record<string, string>;
+  _query: Record<string, string>;
+  _hash: string | undefined;
+  readonly _routesQueue: RouteData[][];
+  _currentIndex: number;
+};
