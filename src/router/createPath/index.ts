@@ -2,18 +2,20 @@ import handlePath from '#router/internal/handlePath';
 import type {
   Path,
   PathParam,
-  QueryParamWithReplace,
+  QueryParam,
   CreatePath,
 } from '#router/internal/types';
 import createControlScope from '#core/createControl';
+
+const makeControl = () => createControlScope();
 
 const createPath: CreatePath = (
   ...path: Array<
     | string
     | PathParam<Record<string, any>>
     | Record<string, Path>
-    | QueryParamWithReplace<Record<string, any>>
+    | QueryParam<Record<string, any>>
   >
-): any => handlePath(path, createControlScope);
+): any => handlePath(path, makeControl);
 
 export default createPath;

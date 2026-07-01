@@ -1,23 +1,23 @@
-import returnFalse from '#internal/alwaysFalse';
 import handleParse from '#router/internal/handleParse';
 import handleStringify from '#router/internal/handleStringify';
 import type {
   HandleUnknown,
   ParamOptions,
-  QueryParamWithReplace,
+  QueryParam,
   ValidateParams,
 } from '#router/internal/types';
 
 const query = ((
-  params: Record<string, ParamOptions<unknown, unknown, boolean> | boolean>
-) => {
-  let deprecatedQuery: (searchParams: Record<string, string>) => boolean =
-    returnFalse;
-
-  const handleQuery = ((parsers, stringifies, queryParams) => {
+    params: Record<string, ParamOptions<unknown, unknown, boolean> | boolean>
+  ) =>
+  (parsers, stringifies, queryParams) => {
     type Options = ParamOptions<unknown, true, any>;
 
-    for (const name in params) {
+    const keys = Object.keys(params);
+
+    for (let i = 0, l = keys.length; i < l; i++) {
+      const name = keys[i];
+
       const options = params[name] as Options;
 
       let defaultValue: Options['defaultValue'],
@@ -47,56 +47,7 @@ const query = ((
 
       queryParams.push(name);
     }
-
-    return deprecatedQuery;
-  }) as QueryParamWithReplace<Record<string, any>>;
-
-  handleQuery.replace = (keys, mapper) => {
-    deprecatedQuery = (searchParams) => {
-      let replaced = false;
-
-      const obj: Record<string, string> = {};
-
-      for (let i = 0; i < keys.length; i++) {
-        const key = keys[i];
-
-        const value = searchParams[key];
-
-        if (value) {
-          replaced = true;
-
-          obj[key] = value;
-        }
-      }
-
-      if (replaced) {
-        replaced = false;
-
-        try {
-          const params = mapper(obj as any);
-
-          for (const key in params) {
-            if (!(key in searchParams)) {
-              const param = params[key as keyof typeof params];
-
-              if (param) {
-                replaced = true;
-
-                searchParams[key] = param;
-              }
-            }
-          }
-        } catch {}
-      }
-
-      return replaced;
-    };
-
-    return handleQuery;
-  };
-
-  return handleQuery;
-}) as {
+  }) as {
   <
     const O extends { [key in keyof Values]: unknown },
     Values extends Record<string, unknown>,
@@ -111,7 +62,7 @@ const query = ((
       >;
     } & P
   ): ValidateParams<P> &
-    QueryParamWithReplace<
+    QueryParam<
       {
         [key in keyof P]: P[key] extends boolean
           ? [string | (P[key] extends true ? undefined : never), P[key]]

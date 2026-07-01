@@ -1,7 +1,7 @@
 import addToLevel from '#internal/addToLevel';
-import type { ControlInternals, Lane } from '#internal/types';
+import type { Lane, PendingItem } from '#internal/types';
 
-const addToQueue = (lane: Lane, root: ControlInternals) => {
+const addToQueue = (lane: Lane, root: PendingItem) => {
   const patchByControl = lane._patchByControl;
 
   if (!patchByControl.has(root)) {

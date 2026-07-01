@@ -1,11 +1,11 @@
-import { type PrimitiveOrNested } from 'keyweaver';
+import type { PrimitiveOrNested } from 'keyweaver';
 import type {
   Registry,
   AsyncControlOptions,
   AsyncControlScope,
   ControlScope,
-  SyncExternalStorage,
   Control,
+  RegistryOptions,
 } from '#types';
 import type {
   ErrorControlInternals,
@@ -18,12 +18,11 @@ import type {
   Lane,
   Mutable,
   Notifier,
-  WithInitModule,
   ControlInternalsBase,
 } from '#internal/types';
-import type createControl from '#core/createControl';
-import type createAsyncControl from '#core/createAsyncControl';
-import type createPrimitiveControl from '#core/createPrimitiveControl';
+import type _createControl from '#core/createControl';
+import type _createAsyncControl from '#core/createAsyncControl';
+import type _createPrimitiveControl from '#core/createPrimitiveControl';
 import invalidate from '#core/invalidate';
 import createScope from '#internal/createScope';
 import readRootValue from '#internal/readRootValue';
@@ -237,9 +236,9 @@ const getNextTarget = (registry: Registry<any, any>, keys: any[]) => {
     if (control === undefined) {
       storage.set(
         key,
-        (control = registry._getItem(
+        (control = registry._createControl(
           registry._arg1,
-          registry._syncExternalStorage,
+          registry._externalStorage,
           keys
         ))
       );
@@ -628,31 +627,6 @@ function errorDetach(
   }
 }
 
-const walkBoundedPrefix = (
-  bounded: WeakMap<any, any> | undefined,
-  keys: any[],
-  end: number
-) => {
-  for (let i = 0; i < end && bounded; i++) {
-    bounded = bounded.get(getToken(getStorageKey(keys[i])));
-  }
-
-  return bounded;
-};
-
-const walkBoundedSuffix = (
-  bounded: WeakMap<any, any> | undefined,
-  keys: any[],
-  i: number,
-  end: number
-) => {
-  while (bounded && ++i < end) {
-    bounded = bounded.get(keyToBoundedKey(keys[i]));
-  }
-
-  return bounded;
-};
-
 function _delete(this: Registry<any, any>, ...keys: any[]) {
   const self = this;
 
@@ -675,39 +649,20 @@ function _delete(this: Registry<any, any>, ...keys: any[]) {
       throwUndefinedError();
     }
 
-    const firstInternals = keyValue && keyValue[INTERNALS];
+    if (keyValue && keyValue[INTERNALS]) {
+      let bounded = self._bounded;
 
-    if (firstInternals) {
-      let bounded = walkBoundedPrefix(self._bounded, keys, i);
+      for (let j = 0; j < endIndex && bounded; j++) {
+        bounded = bounded.get(keyToBoundedKey(keys[j]));
+      }
 
       if (bounded === undefined) {
         return false;
       }
 
-      let boundedControl: ControlScope | undefined;
+      const lastKey = keyToBoundedKey(keys[endIndex]);
 
-      let lastKey;
-
-      if (i == endIndex) {
-        lastKey = firstInternals;
-
-        boundedControl = bounded.get(firstInternals);
-      } else {
-        bounded = walkBoundedSuffix(
-          bounded.get(firstInternals),
-          keys,
-          i,
-          endIndex
-        );
-
-        if (bounded === undefined) {
-          return false;
-        }
-
-        lastKey = keyToBoundedKey(keys[endIndex]);
-
-        boundedControl = bounded.get(lastKey);
-      }
+      const boundedControl: ControlScope | undefined = bounded.get(lastKey);
 
       if (boundedControl == undefined) {
         return false;
@@ -732,59 +687,6 @@ function _delete(this: Registry<any, any>, ...keys: any[]) {
 
     if (i == endIndex) {
       return storage.delete(getStorageKey(keyValue));
-    }
-
-    storage = storage.get(getStorageKey(keyValue));
-
-    if (storage === undefined) {
-      return false;
-    }
-  }
-}
-
-function has(this: Registry<any, any>, ...keys: any[]) {
-  const self = this;
-
-  const endIndex = keys.length - 1;
-
-  let storage = self._storage;
-
-  for (let i = 0; true; i++) {
-    const keyValue = keys[i];
-
-    if (keyValue === undefined) {
-      throwUndefinedError();
-    }
-
-    const firstInternals = keyValue && keyValue[INTERNALS];
-
-    if (firstInternals) {
-      let bounded = walkBoundedPrefix(self._bounded, keys, i);
-
-      if (bounded === undefined) {
-        return false;
-      }
-
-      if (i == endIndex) {
-        return bounded.has(firstInternals);
-      }
-
-      bounded = walkBoundedSuffix(
-        bounded.get(firstInternals),
-        keys,
-        i,
-        endIndex
-      );
-
-      if (bounded === undefined) {
-        return false;
-      }
-
-      return bounded.has(keyToBoundedKey(keys[endIndex]));
-    }
-
-    if (i == endIndex) {
-      return storage.has(getStorageKey(keyValue));
     }
 
     storage = storage.get(getStorageKey(keyValue));
@@ -820,26 +722,10 @@ function _invalidate(this: Registry<any, any>, ...keys: PrimitiveOrNested[]) {
     if (registryDepth == depth) {
       invalidate(storage as any);
     } else {
-      const diff = registryDepth - depth - 1;
+      let queue: Map<any, any>[] = [storage];
 
-      if (diff) {
-        let queue: Map<any, any>[] = [storage];
-
-        for (let i = 0; i < diff; i++) {
-          const nextQueue: Map<any, any>[] = [];
-
-          for (let i = 0, l = queue.length; i < l; i++) {
-            const storage = queue[i];
-
-            const it = storage.values();
-
-            for (let i = storage.size; i--; ) {
-              nextQueue.push(it.next().value);
-            }
-          }
-
-          queue = nextQueue;
-        }
+      for (let i = 0, diff = registryDepth - depth - 1; i < diff; i++) {
+        const nextQueue: Map<any, any>[] = [];
 
         for (let i = 0, l = queue.length; i < l; i++) {
           const storage = queue[i];
@@ -847,10 +733,16 @@ function _invalidate(this: Registry<any, any>, ...keys: PrimitiveOrNested[]) {
           const it = storage.values();
 
           for (let i = storage.size; i--; ) {
-            invalidate(it.next().value);
+            nextQueue.push(it.next().value);
           }
         }
-      } else {
+
+        queue = nextQueue;
+      }
+
+      for (let i = 0, l = queue.length; i < l; i++) {
+        const storage = queue[i];
+
         const it = storage.values();
 
         for (let i = storage.size; i--; ) {
@@ -944,7 +836,7 @@ function get(this: Registry<any, any>, ...keys: any[]): any {
   if (control === undefined) {
     storage.set(
       storageKey,
-      (control = self._getItem(self._arg1, self._syncExternalStorage, keys))
+      (control = self._createControl(self._arg1, self._externalStorage, keys))
     );
 
     if (self._type == ControlType.UNDEFINED) {
@@ -1147,9 +1039,9 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
               if (!control) {
                 storage.set(
                   storageKey,
-                  (control = self._getItem(
+                  (control = self._createControl(
                     self._arg1,
-                    self._syncExternalStorage,
+                    self._externalStorage,
                     keys
                   ))
                 );
@@ -1168,7 +1060,7 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
               attachNotifierWithoutCurrentChange(targetInternals, rootNotifier);
             } else if (controlType == ControlType.UNDEFINED) {
               self._type = controlType = getControlType(
-                self._getItem(self._arg1, undefined, undefined)[
+                self._createControl(self._arg1, undefined, undefined)[
                   INTERNALS
                 ] as ControlInternals
               );
@@ -1325,13 +1217,9 @@ const createRegistry: {
    * ```
    */
   <T, Keys extends Exclude<PrimitiveOrNested, undefined>[], E = any>(
-    ...args: WithInitModule<
-      T | undefined,
-      [
-        createAsyncControl: typeof createAsyncControl,
-        options?: AsyncControlOptions<T, E, Keys>,
-      ]
-    >
+    createAsyncControl: typeof _createAsyncControl,
+    options?: AsyncControlOptions<T, E, Keys>,
+    registryOptions?: RegistryOptions<T | undefined>
   ): Registry<AsyncControlScope<T, E>, Keys>;
   /**
    * Creates a {@link Registry registry} of sync {@link ControlScope controls}
@@ -1346,13 +1234,9 @@ const createRegistry: {
    * ```
    */
   <T, Keys extends Exclude<PrimitiveOrNested, undefined>[]>(
-    ...args: WithInitModule<
-      T,
-      [
-        createControl: typeof createControl,
-        defaultValue?: T | ((...keys: Keys) => T),
-      ]
-    >
+    createControl: typeof _createControl,
+    defaultValue?: T | ((...keys: Keys) => T),
+    registryOptions?: RegistryOptions<T>
   ): Registry<ControlScope<T>, Keys>;
   /**
    * Creates a {@link Registry registry} of primitive {@link Control controls}
@@ -1372,19 +1256,11 @@ const createRegistry: {
    * ```
    */
   <T, Keys extends Exclude<PrimitiveOrNested, undefined>[]>(
-    ...args: WithInitModule<
-      T,
-      [
-        createPrimitiveControl: typeof createPrimitiveControl,
-        defaultValue?: T | ((...keys: Keys) => T),
-      ]
-    >
+    createControl: typeof _createPrimitiveControl,
+    defaultValue?: T | ((...keys: Keys) => T),
+    registryOptions?: RegistryOptions<T>
   ): Registry<Control<T>, Keys>;
-} = (
-  getItem: any,
-  arg1?: unknown,
-  syncExternalStorage?: SyncExternalStorage
-): any =>
+} = (createControl: any, arg1?: unknown, options?: RegistryOptions): any =>
   ({
     _storage: new Map(),
     _bounded: undefined,
@@ -1392,13 +1268,14 @@ const createRegistry: {
     get,
     bind,
     invalidate: _invalidate,
-    has,
     clear,
-    _getItem: getItem,
+    _createControl: createControl,
     _arg1: arg1,
-    _syncExternalStorage: syncExternalStorage,
+    _externalStorage: options && options.externalStorage,
     _type: ControlType.UNDEFINED,
     _depth: 0,
+    _keepPrev: (options && options.keepPrev) || false,
+    _suppressError: (options && options.suppressError) || false,
   }) as Registry<any, any[]>;
 
 export default createRegistry;

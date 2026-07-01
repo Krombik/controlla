@@ -1,7 +1,7 @@
 import tseslint from 'typescript-eslint';
 
 /** Domains with private internals; core's `_internal` (#internal/*) is shared. */
-const nonCoreDomains = ['router', 'persist'];
+const nonCoreDomains = ['router', 'persist', 'scheduler', 'dom'];
 
 const boundaries = [
   // core is the foundation — it must not depend on any non-core domain at all

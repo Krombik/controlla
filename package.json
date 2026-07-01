@@ -41,6 +41,7 @@
     "#persist/types": "./src/persist/types.ts",
     "#router/*": "./src/router/*/index.ts",
     "#persist/*": "./src/persist/*/index.ts",
+    "#scheduler/*": "./src/scheduler/*/index.ts",
     "#types": "./src/core/types.ts"
   },
   "dependencies": {

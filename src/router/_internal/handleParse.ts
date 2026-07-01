@@ -1,7 +1,7 @@
 import identity from 'lodash.identity';
 import nonUndefinedIdentity from '#router/internal/nonUndefinedIdentity';
 import simpleParse from '#router/internal/simpleParse';
-import returnTrue from '#internal/alwaysTrue';
+import alwaysTrue from '#internal/alwaysTrue';
 import type { HandleParse } from '#router/internal/types';
 
 const handleParse = (
@@ -24,7 +24,7 @@ const handleParse = (
 
   parse ||= identity;
 
-  isValid ||= returnTrue;
+  isValid ||= alwaysTrue;
 
   const getFallbackValue = (
     typeof fallbackValue != 'function'

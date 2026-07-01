@@ -1,14 +1,17 @@
 import noop from 'lodash.noop';
-import returnFalse from '#internal/alwaysFalse';
 import { INTERNALS } from '#internal/constants';
 import type {
   HandleParse,
   HandleStringify,
   Path,
   PathParam,
-  QueryParamWithReplace,
+  QueryParam,
+  RouteData,
+  RouterContext,
 } from '#router/internal/types';
+import type { AnchorParam } from '#router/anchor';
 import type { AsyncControl, Control } from '#types';
+import type { PrimitiveControlInternals } from '#internal/types';
 
 const handleSegment = (segment: string, path: string[]) => {
   segment = `/${segment}`;
@@ -29,9 +32,15 @@ const handlePath = (
     | string
     | PathParam<Record<string, any>>
     | Record<string, Path>
-    | QueryParamWithReplace<Record<string, any>>
+    | QueryParam<Record<string, any>>
+    | AnchorParam
   >,
-  createControlScope: () => AsyncControl | Control,
+  createControlScope: (
+    routerContext: RouterContext,
+    isMatchedRoot: PrimitiveControlInternals,
+    source: Control,
+    routeData: RouteData
+  ) => AsyncControl | Control,
   source?: AsyncControl
 ): Path => {
   const parsers = new Map<string, HandleParse>();
@@ -44,64 +53,44 @@ const handlePath = (
 
   const queryParams: string[] = [];
 
-  const l = path.length - 2;
+  let end = path.length;
 
   let children: Record<string, Path> | undefined;
 
+  let anchorParam: AnchorParam | undefined;
+
   let regexStr = '';
 
-  let replaceDeprecatedQueryParams: Path['_replaceDeprecatedQueryParams'] =
-    returnFalse;
+  // trailing slots, scanned from the end: [...segments, query?, anchor?, children?]
+  if (end) {
+    let last = path[end - 1];
 
-  if (l > -2) {
-    if (l > -1) {
-      for (let i = 0; i < l; i++) {
-        let segment = path[i] as string | PathParam<Record<string, any>>;
+    if (typeof last == 'object' && !('_anchor' in last)) {
+      children = last as Record<string, Path>;
 
-        regexStr +=
-          typeof segment == 'string'
-            ? handleSegment(segment, _path)
-            : segment(parsers, stringifies, pathParams, _path);
-      }
-
-      const penultimate = path[l];
-
-      if (typeof penultimate == 'string') {
-        regexStr += handleSegment(penultimate, _path);
-      } else if (penultimate.length == 4) {
-        regexStr += (penultimate as PathParam<{}>)(
-          parsers,
-          stringifies,
-          pathParams,
-          _path
-        );
-      } else {
-        replaceDeprecatedQueryParams = (
-          penultimate as QueryParamWithReplace<{}>
-        )(parsers, stringifies, queryParams);
-      }
+      last = path[--end - 1];
     }
 
-    const last = path[l + 1];
+    if (end && typeof last == 'object' && '_anchor' in last) {
+      anchorParam = last as AnchorParam;
 
-    if (typeof last == 'object') {
-      children = last;
-    } else if (typeof last == 'string') {
-      regexStr += handleSegment(last, _path);
-    } else if (last.length == 4) {
-      regexStr += (last as PathParam<{}>)(
-        parsers,
-        stringifies,
-        pathParams,
-        _path
-      );
-    } else {
-      replaceDeprecatedQueryParams = (last as QueryParamWithReplace<{}>)(
-        parsers,
-        stringifies,
-        queryParams
-      );
+      last = path[--end - 1];
     }
+
+    if (end && typeof last == 'function' && last.length == 3) {
+      (last as QueryParam<{}>)(parsers, stringifies, queryParams);
+
+      end--;
+    }
+  }
+
+  for (let i = 0; i < end; i++) {
+    const segment = path[i] as string | PathParam<Record<string, any>>;
+
+    regexStr +=
+      typeof segment == 'string'
+        ? handleSegment(segment, _path)
+        : segment(parsers, stringifies, pathParams, _path);
   }
 
   return {
@@ -109,10 +98,10 @@ const handlePath = (
     _children: children,
     _getParse: parsers.size ? parsers.get.bind(parsers) : noop,
     _getStringify: stringifies.size ? stringifies.get.bind(stringifies) : noop,
-    _replaceDeprecatedQueryParams: replaceDeprecatedQueryParams,
     _pathParams: pathParams,
     _queryParams: queryParams,
     _path,
+    _anchor: anchorParam,
     _source: source && source[INTERNALS],
     _createControlScope: createControlScope,
   } as Path;

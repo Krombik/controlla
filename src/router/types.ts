@@ -1,10 +1,15 @@
 import type { ReadonlyAsyncControlScope, ReadonlyControlScope } from '#types';
 import type {
+  Hash,
   RouteMethods,
   RouteParams,
-  RouteParamsData,
+  RouterParamUpdates,
 } from '#router/internal/types';
-import type { ROUTE_METHODS, ROUTE_PARAMS } from '#router/internal/constants';
+import type {
+  ROUTE_METHODS,
+  ROUTE_PARAMS,
+  ROUTE_HASH,
+} from '#router/internal/constants';
 
 declare const NAVIGATION_MARKER: unique symbol;
 
@@ -12,7 +17,9 @@ export type NavigationTarget<Navigable extends boolean = true> = {
   /** @internal */
   readonly [ROUTE_METHODS]: RouteMethods;
   /** @internal */
-  readonly [ROUTE_PARAMS]?: RouteParamsData[];
+  readonly [ROUTE_PARAMS]?: RouterParamUpdates[];
+  /** @internal */
+  readonly [ROUTE_HASH]?: Hash;
   [NAVIGATION_MARKER]: Navigable;
 };
 

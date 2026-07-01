@@ -38,9 +38,7 @@ const handleRouter = (
 
     const subscribe = (_onValueChange: () => void) => {
       onValueChange = () => {
-        batch(() => {
-          _onValueChange;
-        });
+        batch(_onValueChange);
       };
 
       return () => {

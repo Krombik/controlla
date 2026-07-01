@@ -11,13 +11,9 @@ type Listener = (value: string | undefined) => void;
  * All subscriptions share a single `storage` event listener, attached while at
  * least one key is observed.
  */
-const makeSafeStorage = (type: 'local' | 'session') => {
-  let storage: Storage;
-
+const makeSafeStorage = (storage: Storage) => {
   try {
-    storage = window[`${type}Storage`];
-
-    const testKey = `__${type}Test__`;
+    const testKey = '__storage_test__';
 
     storage.setItem(testKey, '');
 

@@ -229,23 +229,16 @@ function commitAsyncSet(
 
 const createAsyncControl: {
   /**
-   * Creates an {@link AsyncControlScope async control} — a control for a value
-   * that arrives asynchronously, with `loading`, `ready` and `error` statuses
-   * (read them via `selectLoading`/`selectReady`/`selectError`).
+   * Creates an {@link AsyncControlScope async control} for a value that
+   * arrives asynchronously, with loading / ready / error status (ready = has a
+   * value) — read via `selectLoading`/`selectReady`/`selectError`.
    *
-   * The control is always in one of three states: loading (no value, no
-   * error), loaded (value, no error) or error (error, no value).
+   * Pass {@link AsyncControlOptions.load load} (usually from a loader like
+   * `requestLoader`/`pollLoader`) to make it loadable: loading starts on first
+   * use (value hooks, Consumer components, the `load` method — not plain
+   * listeners). Without `load`, push the value with `setValue`.
    *
-   * Pass {@link AsyncControlOptions.load load} (usually built by a loader
-   * such as `requestLoader` or `pollLoader`) to make the control loadable.
-   * Loading starts on the first use of the control: the `load` method, value
-   * hooks or Consumer components. Plain listeners like `onValueChange` don't
-   * trigger it. Without `load`, supply the value manually via `setValue`.
-   *
-   * The value can't be set to `undefined` — call `invalidate` to reset the
-   * control and trigger a reload. {@link AsyncControlOptions.isLoaded isLoaded}
-   * tells when a value counts as final; until then the control keeps loading
-   * (e.g. for multi-attempt or streamed values).
+   * Can't be set to `undefined` — call `invalidate` to reset and reload.
    *
    * @example
    * ```ts

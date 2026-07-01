@@ -8,11 +8,13 @@ import removeFromArray from '#internal/removeFromArray';
 
 type Subscription = {
   _level: number;
-  _onChange: (values?: any[], prevValues?: any[]) => void;
+  _callback(values?: any[], prevValues?: any[]): void | (() => void);
   /** `undefined` if the callback takes no arguments */
   readonly _values: any[] | undefined;
   /** `false` if previous values aren't tracked, `undefined` between flushes */
   _prevValues: any[] | false | undefined;
+  /** cleanup returned by the last call, run before the next one and on teardown */
+  _cleanup(): void;
   _commitSet(data: null, lane: Lane): void;
 };
 
@@ -44,16 +46,19 @@ function commitSet(this: Subscription) {
     this._prevValues = undefined;
   }
 
-  this._onChange(this._values, prevValues || undefined);
+  this._cleanup();
+
+  this._cleanup = this._callback(this._values, prevValues || undefined) || noop;
 }
 
-const onValuesChange = ((
+const watchValues = ((
   controls: ReadonlyControl[],
-  onChange: (values?: any[], prevValues?: any[]) => void
+  callback: (values?: any[], prevValues?: any[]) => void | (() => void),
+  immediate?: boolean
 ): (() => void) => {
   const count = controls.length;
 
-  const callbackArity = onChange.length;
+  const callbackArity = callback.length;
 
   const notifiers: Notifier[] = Array(count);
 
@@ -61,15 +66,16 @@ const onValuesChange = ((
 
   const sub: Subscription = {
     _level: 0,
-    _onChange: onChange,
+    _callback: callback,
     _values: values,
     _prevValues: callbackArity > 1 ? undefined : false,
+    _cleanup: noop,
     _commitSet: commitSet,
   };
 
   const weakRef = new WeakRef(sub);
 
-  const notify = values ? valuesNotify : plainNotify;
+  const notify = callbackArity ? valuesNotify : plainNotify;
 
   let maxLevel = 0;
 
@@ -82,8 +88,8 @@ const onValuesChange = ((
       maxLevel = root._level;
     }
 
-    if (values) {
-      values[i] = internals._get();
+    if (callbackArity) {
+      values![i] = internals._get();
     }
 
     attachNotifier(
@@ -99,26 +105,49 @@ const onValuesChange = ((
 
   sub._level = maxLevel + 1;
 
+  if (immediate) {
+    sub._cleanup =
+      callback(values, callbackArity > 1 ? Array(count) : undefined) || noop;
+  }
+
   return () => {
-    sub._onChange = noop;
+    sub._callback = noop;
 
     for (let i = 0; i < count; i++) {
       const notifier = notifiers[i];
 
       removeFromArray(notifier._current!, notifier);
     }
+
+    sub._cleanup();
+
+    sub._cleanup = noop;
   };
 }) as {
   /**
-   * Registers a callback invoked with the new and previous values whenever
-   * any of the {@link controls} change. Changes committed in the same flush
-   * produce a single call. A plain listener — it doesn't trigger loading.
+   * Runs the {@link callback} with the new and previous values whenever any of
+   * the {@link controls} change; changes committed in the same flush produce a
+   * single call. Pass {@link immediate} to also run it right away with the
+   * current values (previous values all `undefined`). A plain listener — it
+   * doesn't trigger loading.
+   *
+   * The callback may return a cleanup function, run before the next call and
+   * on unsubscribe.
    *
    * @returns a function to remove the callback.
+   *
+   * @example
+   * ```ts
+   * const unsubscribe = watchValues([$roomId, $userId], ([roomId, userId]) => {
+   *   const socket = connect(roomId, userId);
+   *
+   *   return () => socket.close();
+   * }, true);
+   * ```
    */
-  <const S extends ReadonlyControl[]>(
+  <const S extends ReadonlyControl[], I extends boolean = false>(
     controls: S,
-    onChange: (
+    callback: (
       values: {
         [index in keyof S]: S[index] extends ReadonlyControl<infer K>
           ? K | (S[index] extends ReadonlyAsyncControl ? undefined : never)
@@ -126,11 +155,18 @@ const onValuesChange = ((
       },
       prevValues: {
         [index in keyof S]: S[index] extends ReadonlyControl<infer K>
-          ? K | (S[index] extends ReadonlyAsyncControl ? undefined : never)
+          ?
+              | K
+              | (I extends false
+                  ? S[index] extends ReadonlyAsyncControl
+                    ? undefined
+                    : never
+                  : undefined)
           : never;
       }
-    ) => void
+    ) => void | (() => void),
+    immediate?: I
   ): () => void;
 };
 
-export default onValuesChange;
+export default watchValues;
