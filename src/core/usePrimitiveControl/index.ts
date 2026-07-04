@@ -1,6 +1,8 @@
-import createControl from '#core/createControl';
+import createPrimitiveControl from '#core/createPrimitiveControl';
 import makeUseControl from '#internal/makeUseControl';
 
-const useControl: typeof createControl = makeUseControl(createControl);
+const usePrimitiveControl: typeof createPrimitiveControl = makeUseControl(
+  createPrimitiveControl
+);
 
-export default useControl;
+export default usePrimitiveControl;

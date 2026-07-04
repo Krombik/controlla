@@ -56,7 +56,7 @@ const ControlConsumer = ((
    * {@link useValue} hook that keeps the subscription and rerenders inside
    * this component instead of the parent.
    *
-   * For an async control the value is `undefined` until it loads.
+   * For an async control the value is `undefined` until ready.
    *
    * @example
    * ```jsx
@@ -73,8 +73,8 @@ const ControlConsumer = ((
    *
    * @example
    * ```jsx
-   * <ControlConsumer control={$isOpen}>
-   *   <Modal />
+   * <ControlConsumer control={$saved}>
+   *   <p>Saved ✓</p>
    * </ControlConsumer>
    * ```
    */

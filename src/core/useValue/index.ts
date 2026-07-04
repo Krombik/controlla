@@ -22,7 +22,7 @@ const useValue = ((control: AsyncControl | Falsy) => {
   /**
    * Returns the current value of the given {@link control}, rerendering the
    * component whenever it changes. For an async control the value is
-   * `undefined` until it loads; using the hook starts the loading. The
+   * `undefined` until ready; using the hook starts the loading. The
    * {@link control} may be falsy — the hook returns `undefined`.
    *
    * @example

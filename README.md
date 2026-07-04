@@ -1,12 +1,12 @@
-<h1 align="center">controlly</h1>
+<h1 align="center">controlla</h1>
 
 <p align="center">Fine-grained reactive state for React — async, derived, persisted, and keyed, with surgical re-renders.</p>
 
 <p align="center">
-  <img alt="npm" src="https://img.shields.io/npm/v/controlly.svg" />
-  <img alt="bundle" src="https://img.shields.io/bundlephobia/minzip/controlly.svg" />
-  <img alt="types" src="https://img.shields.io/npm/types/controlly.svg" />
-  <img alt="license" src="https://img.shields.io/npm/l/controlly.svg" />
+  <img alt="npm" src="https://img.shields.io/npm/v/controlla.svg" />
+  <img alt="bundle" src="https://img.shields.io/bundlephobia/minzip/controlla.svg" />
+  <img alt="types" src="https://img.shields.io/npm/types/controlla.svg" />
+  <img alt="license" src="https://img.shields.io/npm/l/controlla.svg" />
 </p>
 
 A **control** is a reactive value you read, write, derive from, persist, and subscribe to. Writes notify only the paths that actually changed — no selectors, no context, no re-render storms.
@@ -20,7 +20,7 @@ A **control** is a reactive value you read, write, derive from, persist, and sub
 - 🌳 **Tree-shakeable & typed** — every export is its own import, no barrel.
 
 ```bash
-npm i controlly      # peer: react >= 17
+npm i controlla      # peer: react >= 17
 ```
 
 ## Quick start
@@ -28,9 +28,9 @@ npm i controlly      # peer: react >= 17
 A control lives **outside React** — no provider, no context. It's a tree of controls: every nested field (`$form.name`, `$form.address.city`) is a control of its own, and a component subscribes to exactly the one it reads. Write a field and **only the components reading that field re-render** — siblings don't:
 
 ```tsx
-import createControl from 'controlly/core/createControl';
-import useValue from 'controlly/core/useValue';
-import setValue from 'controlly/core/setValue';
+import createControl from 'controlla/core/createControl';
+import useValue from 'controlla/core/useValue';
+import setValue from 'controlla/core/setValue';
 
 const $form = createControl({ name: '', email: '', agree: false });
 
@@ -50,11 +50,11 @@ No reducers, no selectors, no memoization — `setValue($form.name, …)` notifi
 Async is **built-in state**, not glue. A `createRegistry` of async controls gives you one cached, self-fetching resource per key — fetched on first use, deduped, suspendable, refetchable:
 
 ```tsx
-import createRegistry from 'controlly/core/createRegistry';
-import createAsyncControl from 'controlly/core/createAsyncControl';
-import requestLoader from 'controlly/loader/requestLoader';
-import SuspenseControlConsumer from 'controlly/core/SuspenseControlConsumer';
-import invalidate from 'controlly/core/invalidate';
+import createRegistry from 'controlla/core/createRegistry';
+import createAsyncControl from 'controlla/core/createAsyncControl';
+import requestLoader from 'controlla/loader/requestLoader';
+import SuspenseControlConsumer from 'controlla/core/SuspenseControlConsumer';
+import invalidate from 'controlla/core/invalidate';
 
 const users = createRegistry(
   createAsyncControl,
@@ -65,7 +65,7 @@ function UserCard({ id }: { id: number }) {
   return (
     <SuspenseControlConsumer
       control={users.get(id)}                 // fetches on first render, cached after
-      fallback={<Spinner />}
+      fallback={<p>Loading…</p>}
       render={(user) => <h2>{user.name}</h2>}
     />
   );
@@ -74,7 +74,7 @@ function UserCard({ id }: { id: number }) {
 const refresh = (id: number) => invalidate(users.get(id));   // refetch one user
 ```
 
-> Every export is its own subpath import (`controlly/<domain>/<name>`) — no barrel, fully tree-shakeable. Controls are conventionally named with a leading `$`. The **router** module isn't documented here yet.
+> Every export is its own subpath import (`controlla/<domain>/<name>`) — no barrel, fully tree-shakeable. Controls are conventionally named with a leading `$`. The **router** module isn't documented here yet.
 
 ---
 
@@ -83,11 +83,11 @@ const refresh = (id: number) => invalidate(users.get(id));   // refetch one user
 - **Controls** — [`createControl`](#createcontrol--usecontrol), [`createPrimitiveControl`](#createprimitivecontrol--useprimitivecontrol), [`createAsyncControl`](#createasynccontrol--useasynccontrol), [`createDerivedControl`](#createderivedcontrol--usederivedcontrol), [`createAsyncDerivedControl`](#createasyncderivedcontrol--useasyncderivedcontrol)
 - **Reading values** — [`getValue`](#getvaluecontrol), [`useValue`](#usevaluecontrol), [`toPromise`](#topromisecontrol), [`useSuspenseValue`](#usesuspensevaluecontrol-safe), [`useSuspenseValues`](#usesuspensevaluescontrols-safe), [`useInfiniteValues`](#useinfinitevaluescontrols)
 - **Writing values** — [`setValue`](#setvaluecontrol-value-scheduler), [`invalidate`](#invalidatecontrol-silentorscheduler)
-- **Subscribing** — [`watchValue`](#watchvaluecontrol-callback-immediate), [`watchValues`](#watchvaluescontrols-callback-immediate), [`load`](#loadcontrol), [`onSlowLoading`](#onslowloadingcontrol-callback)
+- **Subscribing** — [`watchValue`](#watchvaluecontrol-callback-immediate), [`watchValues`](#watchvaluescontrols-callback-immediate), [`load`](#loadcontrol), [`watchSlowLoading`](#watchslowloadingcontrol-callback)
 - **Async status** — [`selectLoading`](#selectloadingcontrol), [`selectReady`](#selectreadycontrol), [`selectError`](#selecterrorcontrol)
 - **Components** — [`ControlConsumer`](#controlconsumer), [`ControlsConsumer`](#controlsconsumer), [`InfiniteControlsConsumer`](#infinitecontrolsconsumer), [`Suspense`](#suspense), [`SuspenseControlConsumer`](#suspensecontrolconsumer), [`SuspenseControlsConsumer`](#suspensecontrolsconsumer), [`wrapErrorBoundary`](#wraperrorboundaryboundarycomponent)
 - **Utils** — [`$pending`](#pending), [`isAggregateControlError`](#isaggregatecontrolerrorerr)
-- **Registry** — [`createRegistry`](#createregistrycreate-initargs)
+- **Registry** — [`createRegistry`](#createregistrycreate-initarg-options)
 - **Loaders** — [`requestLoader`](#requestloaderfetch-options-scheduler), [`pollLoader`](#pollloaderfetch-options-scheduler)
 - **Persistence** — [`getPersistStorage`](#getpersiststorageoptions), [`safeLocalStorage`](#safelocalstorage), [`safeSessionStorage`](#safesessionstorage)
 - **DOM** — [`mediaQuery`](#mediaqueryquery), [`$online`](#online), [`$pageVisible`](#pagevisible), [`$windowSize`](#windowsize)
@@ -97,25 +97,25 @@ const refresh = (id: number) => invalidate(users.get(id));   // refetch one user
 
 ## Controls
 
-Each creator has a `use*` twin (`controlly/core/use*`) that does the same but binds the control to a React component — created on first render, the same instance afterwards. Pass a factory (`() => …`) to build it once when the argument is expensive.
+Each creator has a `use*` twin (`controlla/core/use*`) that does the same but binds the control to a React component — created on first render, the same instance afterwards. Pass a factory (`() => …`) to build it once when the argument is expensive.
 
 ### `createControl` / `useControl`
 
 A control with **granular reactivity**: nested fields are reachable as controls of their own via property access, and a change notifies only the paths it actually touched.
 
 ```ts
-createControl(value?, syncExternalStorage?)
-useControl(value?, syncExternalStorage?)
+createControl(value?, externalStorage?)
+useControl(value?, externalStorage?)
 ```
 
 | Parameter | Type | Description |
 |---|---|---|
 | `value?` | `T` or `() => T` | Initial value, or a lazy initializer. |
-| `syncExternalStorage?` | `SyncExternalStorage` | Storage (from [`getPersistStorage`](#getpersiststorageoptions)) to persist the value and, if observable, pick up external changes. |
+| `externalStorage?` | `SyncExternalStorage` | External storage backing the value: the control starts from the stored value, writes changes back and, if the storage is observable, picks up external changes. Any storage with sync reads works — e.g. one from [`getPersistStorage`](#getpersiststorageoptions). |
 
 ```ts
 const $user = createControl({ profile: { name: 'John', age: 30 } });   // value
-const $draft = createControl(() => makeEmptyDraft());                  // lazy initializer
+const $draft = createControl(() => ({ id: crypto.randomUUID(), text: '' }));   // lazy initializer
 const $note = createControl<string>();                                 // empty (undefined)
 
 const $name = $user.profile.name;     // nested field = its own control
@@ -129,14 +129,14 @@ const $local = useControl(0);         // component-scoped (inside a component)
 A lightweight control whose value is **opaque** — no nested-path access, changes detected by reference (`!==`). Cheaper than `createControl`; replace objects instead of mutating them.
 
 ```ts
-createPrimitiveControl(value?, syncExternalStorage?)
-usePrimitiveControl(value?, syncExternalStorage?)
+createPrimitiveControl(value?, externalStorage?)
+usePrimitiveControl(value?, externalStorage?)
 ```
 
 | Parameter | Type | Description |
 |---|---|---|
 | `value?` | `T` or `() => T` | Initial value, or a lazy initializer. |
-| `syncExternalStorage?` | `SyncExternalStorage` | Persist storage. |
+| `externalStorage?` | `SyncExternalStorage` | External storage backing the value, as in [`createControl`](#createcontrol--usecontrol). |
 
 ```ts
 const $count = createPrimitiveControl(0);                       // value
@@ -149,14 +149,14 @@ const $id = usePrimitiveControl(() => crypto.randomUUID());     // component-sco
 A control for an **asynchronously-arriving** value, with loading / ready / error status (`ready` = has a value; see [`selectReady`](#selectreadycontrol)).
 
 ```ts
-createAsyncControl(options?, syncExternalStorage?)
-useAsyncControl(options?, syncExternalStorage?)   // options or () => options
+createAsyncControl(options?, externalStorage?)
+useAsyncControl(options?, externalStorage?)   // options or () => options
 ```
 
 | Parameter | Type | Description |
 |---|---|---|
 | `options?` | `AsyncControlOptions` | See below. |
-| `syncExternalStorage?` | `SyncExternalStorage` | Persist storage. |
+| `externalStorage?` | `SyncExternalStorage` | External storage backing the value, as in [`createControl`](#createcontrol--usecontrol). |
 
 **`AsyncControlOptions`**
 
@@ -168,7 +168,7 @@ useAsyncControl(options?, syncExternalStorage?)   // options or () => options
 | `reloadIfStale?` | `number` (ms) | Reload on use if this long passed since the last load. |
 | `reloadOnFocus?` | `number` (ms) | Reload on tab focus if this long passed. |
 | `revalidate?` | `boolean` | Reload on use even when a value already exists (e.g. from storage). |
-| `loadingTimeout?` | `number` (ms) | After this, [`onSlowLoading`](#onslowloadingcontrol-callback) fires. |
+| `loadingTimeout?` | `number` (ms) | After this, [`watchSlowLoading`](#watchslowloadingcontrol-callback) fires. |
 
 **`load` handle**
 
@@ -186,8 +186,8 @@ const $products = createAsyncControl(
 );
 
 // manual — value pushed from outside
-const $socketStatus = createAsyncControl<string>();
-setValue($socketStatus, 'connected');
+const $position = createAsyncControl<GeolocationPosition>();
+navigator.geolocation.watchPosition((pos) => setValue($position, pos));
 
 // component-scoped — factory builds the loader once
 const $me = useAsyncControl(() =>
@@ -237,7 +237,7 @@ useAsyncDerivedControl(...controls, mapper?)
 const $mirror = createAsyncDerivedControl($asyncSource);                  // mirror an async source
 const $fromSync = createAsyncDerivedControl($syncSource);                 // sync → async (ready once value !== undefined)
 const $userName = createAsyncDerivedControl($user, (user) => user.name);  // map one source
-const $total = createAsyncDerivedControl($cart, $rates, (cart, rates) => applyRates(cart, rates)); // combine many
+const $total = createAsyncDerivedControl($cart, $rates, (cart, rates) => cart.total * rates.usd); // combine many
 ```
 
 ---
@@ -299,6 +299,10 @@ Like `useSuspenseValue` for an array — suspends until **all** are ready. Array
 | `controls` | `ReadonlyAsyncControl[]` | The async controls. |
 | `safe?` | `boolean` | If `true`, returns `[values, errors]`. |
 
+```ts
+const [user, cart] = useSuspenseValues([$user, $cart]);
+```
+
 ### `useInfiniteValues(controls)`
 
 Current values of a **dynamic-length** list of same-typed controls (the array may grow/shrink between renders) — for paginated/infinite data. Async controls provide `value` or `undefined` and start loading when consumed.
@@ -352,19 +356,18 @@ invalidate($user, true);   // keep value while reloading
 
 ### `watchValue(control, callback, immediate?)`
 
-Runs `callback` on every value change. Returns an **unsubscribe** function.
+Runs `callback` on every value change. Returns an **unwatch** function.
 
 | Parameter | Type | Description |
 |---|---|---|
 | `control` | `ReadonlyControl` | The control. |
-| `callback` | `(value, prevValue) => void` | May return a cleanup, run before the next call and on unsubscribe. |
+| `callback` | `(value, prevValue) => void` | May return a cleanup, run before the next call and on unwatch. |
 | `immediate?` | `boolean` | If `true`, also runs now with the current value (previous = `undefined`). |
 
 ```ts
-const off = watchValue($roomId, (roomId) => {
-  const socket = openRoom(roomId);
-  return () => socket.close();
-}, true);
+const unwatch = watchValue($theme, (theme, prevTheme) => {
+  console.log(`theme: ${prevTheme} -> ${theme}`);
+});
 ```
 
 ### `watchValues(controls, callback, immediate?)`
@@ -374,8 +377,14 @@ Like `watchValue` for multiple controls — one call per flush.
 | Parameter | Type | Description |
 |---|---|---|
 | `controls` | `ReadonlyControl[]` | The controls. |
-| `callback` | `(values, prevValues) => void` | Positional values; may return a cleanup. |
+| `callback` | `(values, prevValues) => void` | Positional value arrays; may return a cleanup. |
 | `immediate?` | `boolean` | Also run now with current values (previous = all `undefined`). |
+
+```ts
+const unwatch = watchValues([$query, $page], ([query, page]) => {
+  console.log(`search: "${query}", page ${page}`);
+});
+```
 
 ### `load(control)`
 
@@ -389,9 +398,9 @@ Marks the control **in use** → starts its loading (and that of its loadable so
 const release = load($products);
 ```
 
-### `onSlowLoading(control, callback)`
+### `watchSlowLoading(control, callback)`
 
-Calls `callback` when a load exceeds the control's `loadingTimeout`. Returns an **unsubscribe**. Throws if the control was created without `loadingTimeout`.
+Calls `callback` when a load exceeds the control's `loadingTimeout`. Returns an **unwatch** function. Throws if the control was created without `loadingTimeout`.
 
 | Parameter | Type | Description |
 |---|---|---|
@@ -399,7 +408,7 @@ Calls `callback` when a load exceeds the control's `loadingTimeout`. Returns an 
 | `callback` | `() => void` | Run when a load is slow. |
 
 ```ts
-const off = onSlowLoading($products, () => showToast('Still loading…'));
+const unwatch = watchSlowLoading($products, () => console.warn('products are slow to load'));
 ```
 
 ---
@@ -423,7 +432,7 @@ Returns a `true`/`undefined` control — `true` once the control has a value (re
 | `control` | `ReadonlyAsyncControl` | The async control. |
 
 ### `selectError(control)`
-Returns the control holding the latest error, or `undefined`.
+Returns a control with the current error (`undefined` while error-free).
 
 | Parameter | Type | Description |
 |---|---|---|
@@ -431,7 +440,9 @@ Returns the control holding the latest error, or `undefined`.
 
 ```ts
 const loading = useValue(selectLoading($products));
+const error = useValue(selectError($products));
 ```
+
 ---
 
 ## Components
@@ -448,7 +459,7 @@ Renders a control's value, **scoping the subscription** (and re-renders) to this
 
 ```jsx
 <ControlConsumer control={$name} render={(name) => <div>{name}</div>} />   {/* render */}
-<ControlConsumer control={$isOpen}><Modal /></ControlConsumer>             {/* truthy gate */}
+<ControlConsumer control={$saved}><p>Saved ✓</p></ControlConsumer>          {/* truthy gate */}
 <span>Total: <ControlConsumer control={$total} /></span>                   {/* primitive display */}
 ```
 
@@ -464,7 +475,7 @@ Multi-control `ControlConsumer`.
 ```jsx
 <ControlsConsumer
   controls={[$user, $cart]}
-  render={(user, cart) => <Summary user={user} cart={cart} />}
+  render={(user, cart) => <p>{user.name} — {cart.length} items</p>}
 />
 ```
 
@@ -487,8 +498,13 @@ Drop-in replacement for `React.Suspense`, **required** around components that us
 | `children` | `ReactNode` | The subtree. |
 
 ```jsx
-<Suspense fallback={<Spinner />}>
-  <UserCard />   {/* uses useSuspenseValue($user) */}
+function User() {
+  const user = useSuspenseValue($user);
+  return <h2>{user.name}</h2>;
+}
+
+<Suspense fallback={<p>Loading…</p>}>
+  <User />
 </Suspense>
 ```
 
@@ -509,18 +525,18 @@ Renders an async control with **its own** `Suspense` boundary (no outer one need
 {/* render */}
 <SuspenseControlConsumer
   control={$user}
-  fallback={<Spinner />}
-  render={(user) => <UserCard user={user} />}
-  renderIfError={(error) => <ErrorMessage error={error} />}
+  fallback={<p>Loading…</p>}
+  render={(user) => <h2>{user.name}</h2>}
+  renderIfError={(error) => <p>{String(error)}</p>}
 />
 
 {/* truthy gate */}
-<SuspenseControlConsumer control={$flag} fallback={<Spinner />}>
-  <Content />
+<SuspenseControlConsumer control={$flag} fallback={<p>Loading…</p>}>
+  <p>Feature enabled</p>
 </SuspenseControlConsumer>
 
 {/* primitive display */}
-<SuspenseControlConsumer control={$total} fallback={<Spinner />} />
+<SuspenseControlConsumer control={$total} fallback="…" />
 ```
 
 ### `<SuspenseControlsConsumer>`
@@ -534,6 +550,7 @@ Multi-control `SuspenseControlConsumer` — suspends until all are ready.
 | `fallback` | `ReactNode` | Shown while loading. |
 | `renderIfError?` | render fn, `ReactNode`, or `true` | Render on any error. |
 | `container?` | `ContainerComponent` | Wraps content/fallback when non-empty. |
+
 ### `wrapErrorBoundary(BoundaryComponent)`
 
 Wraps a class error boundary so that, when it catches an error, the loadings started by components suspended beneath it are **released** (otherwise they leak — a thrown component never commits, so React can't clean them up).
@@ -555,7 +572,12 @@ export default wrapErrorBoundary(ErrorBoundary);
 An async control stuck **loading forever** (value `undefined`, never settles, writes are no-ops). A placeholder where a control is expected but not yet available.
 
 ```jsx
-<SuspenseControlConsumer control={$user || $pending} fallback="Loading…" render={…} />
+{/* $user may be undefined until selected — $pending keeps the fallback shown */}
+<SuspenseControlConsumer
+  control={$user || $pending}
+  fallback={<p>Loading…</p>}
+  render={(user) => <h2>{user.name}</h2>}
+/>
 ```
 
 ### `isAggregateControlError(err)`
@@ -568,7 +590,7 @@ Type guard for `AggregateControlError` — the error of a derived/bound control.
 
 ```ts
 if (isAggregateControlError(err)) {
-  err.errors.forEach((e, i) => e && report(i, e));
+  err.errors.forEach((e, i) => e && console.error(i, e));
 }
 ```
 
@@ -576,20 +598,30 @@ if (isAggregateControlError(err)) {
 
 ## Registry
 
-### `createRegistry(create, ...initArgs)`
+### `createRegistry(create, initArg?, options?)`
 
 A **keyed collection** of controls — one control per distinct key tuple, created and cached lazily on first access.
 
 | Parameter | Type | Description |
 |---|---|---|
 | `create` | `createControl`, `createPrimitiveControl`, or `createAsyncControl` | The control constructor. |
-| `...initArgs` | constructor's args | The remaining args for `create`; value-producing args may be `(...keys) => value` to resolve per key (for async, an `AsyncControlOptions`). |
+| `initArg?` | constructor's arg | For async, an `AsyncControlOptions` (its `value` and a loader's `fetch` receive the item's keys); otherwise a default value or `(...keys) => value`. |
+| `options?` | `RegistryOptions` | See below. |
+
+**`RegistryOptions`**
+
+| Field | Type | Description |
+|---|---|---|
+| `externalStorage?` | `SyncExternalStorage` | External storage backing each item's value (receives the item's keys) — any storage with sync reads; persisting via [`getPersistStorage`](#getpersiststorageoptions) is one use of it. |
+| `keepPrev?` | `boolean` or `boolean[]` | For bound controls: keep showing the previous value while a re-targeted item loads, instead of blanking to `undefined`. An array decides per key — e.g. `[false, true]` keeps the value on the second key's changes but blanks on the first's; when several keys change at once, every changed key must allow keeping. The held value is replaced once the item produces one. |
+| `suppressError?` | `boolean` | For bound controls: swallow an error while there is a previous value to show — it surfaces only when there's nothing to hold. On re-targets it applies only where `keepPrev` holds. |
 
 ```ts
 // async controls
 const userRegistry = createRegistry(
   createAsyncControl,
-  requestLoader((id: number) => fetch(`/api/users/${id}`).then((r) => r.json()))
+  requestLoader((id: number) => fetch(`/api/users/${id}`).then((r) => r.json())),
+  { keepPrev: true } // bound controls keep the last user while the next one loads
 );
 
 // sync controls
@@ -604,14 +636,17 @@ const expandedRegistry = createRegistry(createPrimitiveControl, (sectionId: stri
 | Method | Returns | Description |
 |---|---|---|
 | `get(...keys)` | the item | The control for the keys, created on first access. Keys compared structurally (objects/arrays allowed). |
-| `bind(...keys)` | a bound control | Like `get`, but keys may be **controls**; re-targets to the item under their current values when a key control changes, aggregating key-control errors with the item's own. |
+| `bind(...keys)` | a bound control | Like `get`, but keys may be **controls**; re-targets to the item under their current values when a key control changes, aggregating key-control errors with the item's own. `keepPrev` controls what it shows while re-targeting. |
 | `invalidate(...keys)` | `void` | Reset items under the keys or a key prefix (async registries only). |
 | `delete(...keys)` | `boolean` | Remove an item (doesn't reset the control itself). |
 | `clear()` | `void` | Remove all items. |
 
 ```ts
 const $user = userRegistry.get(42);
-const $selected = userRegistry.bind($selectedId);
+
+const $selectedId = createPrimitiveControl(42);
+const $selectedUser = userRegistry.bind($selectedId);   // retargets when $selectedId changes
+
 userRegistry.invalidate(42);
 ```
 
@@ -710,7 +745,7 @@ A `sessionStorage`-backed storage (observable within browsing contexts sharing t
 
 ## DOM
 
-Ready-made controls bound to browser state — import and read, no setup. Each is `undefined`-safe on the server (defaults, no listeners).
+Ready-made controls bound to browser state — import and read, no setup. Safe to import on the server (default values, no listeners attached).
 
 ### `mediaQuery(query)`
 
@@ -721,32 +756,32 @@ Returns a boolean control tracking whether the media `query` matches, kept in sy
 | `query` | `string` | A media query string (as passed to [`matchMedia`](https://developer.mozilla.org/en-US/docs/Web/API/Window/matchMedia)). |
 
 ```tsx
-import mediaQuery from 'controlly/dom/mediaQuery';
-import useValue from 'controlly/core/useValue';
+import mediaQuery from 'controlla/dom/mediaQuery';
+import useValue from 'controlla/core/useValue';
 
 function Nav() {
   const isMobile = useValue(mediaQuery('(max-width: 600px)'));
-  return isMobile ? <Burger /> : <Tabs />;
+  return <nav className={isMobile ? 'drawer' : 'tabs'} />;
 }
 ```
 
 ### `$online`
-Connectivity as an **async control** — `true` while online, `undefined` while offline (offline = not ready). So `useValue($online) === undefined` means offline, [`toPromise`](#topromisecontrol)`($online)` awaits the next reconnection, and [`useSuspenseValue`](#usesuspensevaluecontrol-safe)`($online)` suspends a component until online.
+An **async control** of connectivity: `true` while online, `undefined` while offline. Since offline means "not ready", the async tooling just works — [`toPromise`](#topromisecontrol)`($online)` waits for reconnection, [`useSuspenseValue`](#usesuspensevaluecontrol-safe)`($online)` suspends a component while offline.
 
 ```ts
 await toPromise($online);   // wait until back online, then retry
 ```
 
 ### `$pageVisible`
-A `boolean` control — `true` while the page is visible (tab focused / not hidden).
+A `boolean` control — `true` while the tab is visible, `false` while hidden.
 
 ### `$windowSize`
 A `{ width, height }` control of the window's inner size, kept in sync with `resize` and `orientationchange` (committed once per animation frame). `width` and `height` are nested controls — subscribe to one without re-rendering on the other.
 
 ```tsx
-import $online from 'controlly/dom/online';
-import $windowSize from 'controlly/dom/windowSize';
-import useValue from 'controlly/core/useValue';
+import $online from 'controlla/dom/online';
+import $windowSize from 'controlla/dom/windowSize';
+import useValue from 'controlla/core/useValue';
 
 function StatusBar() {
   const isOnline = useValue($online);
@@ -783,11 +818,12 @@ Coalescing only happens between `batch` and writes on the **same scheduler** (sa
 | `scheduler?` | `Scheduler` | Schedules the flush (microtask by default). |
 
 ```tsx
-const [toggler, setToggler] = useState(true);
+// inside a component
+const [open, setOpen] = useState(false);
 
 const select = (id: number) => {
-  setValue($selectedId, id);     // update the shared control
-  batch(() => setToggler(false));   // close the dropdown in the same flush → one re-render
+  setValue($selectedId, id);       // control write
+  batch(() => setOpen(false));     // this setState joins the same flush → one re-render
 };
 ```
 
@@ -805,7 +841,7 @@ setValue($filters.minPrice, 10, scheduler);
 setValue($filters.maxPrice, 50, scheduler);
 setValue($filters.inStock, true, scheduler);
 
-onSearchClick(() => scheduler.flush());   // one commit → one fetch → one re-render
+const onSearch = () => scheduler.flush();   // one commit → one re-render
 ```
 
 ### `createThrottleScheduler(ms)`
@@ -817,6 +853,14 @@ Delays the flush by `ms`, batching all updates in the window into one commit.
 | `ms` | `number` | Window in milliseconds. |
 
 **Returns** — a `Scheduler` with `flush(): boolean` (force the pending commit now).
+
+```ts
+const throttle = createThrottleScheduler(100);
+
+window.addEventListener('pointermove', (e) => {
+  setValue($cursor, { x: e.clientX, y: e.clientY }, throttle);   // ≤1 commit per 100ms
+});
+```
 
 ### `createDebounceScheduler(ms)`
 

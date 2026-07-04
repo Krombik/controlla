@@ -6,16 +6,16 @@ import { INTERNALS } from '#internal/constants';
  * exceeds its `loadingTimeout`. Throws if the control was created without
  * `loadingTimeout`.
  *
- * @returns a function to remove the callback.
+ * @returns a function to stop watching.
  *
  * @example
  * ```ts
- * const unsubscribe = onSlowLoading($products, () => {
- *   showToast('Loading is taking longer than expected...');
+ * const unwatch = watchSlowLoading($products, () => {
+ *   console.warn('products are slow to load');
  * });
  * ```
  */
-const onSlowLoading = (control: AsyncControl, cb: () => void) => {
+const watchSlowLoading = (control: AsyncControl, cb: () => void) => {
   const slowLoadMonitor = control[INTERNALS]._root._load!._slowLoadMonitor;
 
   if (!slowLoadMonitor) {
@@ -31,4 +31,4 @@ const onSlowLoading = (control: AsyncControl, cb: () => void) => {
   };
 };
 
-export default onSlowLoading;
+export default watchSlowLoading;

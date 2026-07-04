@@ -111,8 +111,14 @@ const Fallback: FC<PropsWithChildren<{ _ctx: Ctx }>> = (props) => {
  *
  * @example
  * ```tsx
- * <Suspense fallback={<div>Loading...</div>}>
- *   <UserCard />  // uses useSuspenseValue($user)
+ * const User = () => {
+ *   const user = useSuspenseValue($user);
+ *
+ *   return <h2>{user.name}</h2>;
+ * };
+ *
+ * <Suspense fallback={<p>Loading...</p>}>
+ *   <User />
  * </Suspense>
  * ```
  */

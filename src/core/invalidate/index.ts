@@ -6,7 +6,7 @@ import { RELOAD, SILENT_RELOAD, INTERNALS } from '#internal/constants';
 const invalidate: {
   /**
    * Resets the given async {@link control} — clears its value, error and
-   * loaded status — and triggers a reload if the control is in use. Pass
+   * ready status — and triggers a reload if the control is in use. Pass
    * {@link silent} as `true` to keep the current value while reloading
    * (stale-while-revalidate).
    */

@@ -9,9 +9,11 @@ export type ThrottleScheduler = FlushableScheduler;
  *
  * @example
  * ```ts
- * const scheduler = createThrottleScheduler(300);
+ * const scheduler = createThrottleScheduler(100);
  *
- * setValue($value, next, scheduler);
+ * window.addEventListener('pointermove', (e) => {
+ *   setValue($cursor, { x: e.clientX, y: e.clientY }, scheduler); // ≤1 commit per 100ms
+ * });
  * ```
  */
 const createThrottleScheduler = (ms: number): ThrottleScheduler => {

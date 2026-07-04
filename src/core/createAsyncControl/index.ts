@@ -248,8 +248,8 @@ const createAsyncControl: {
    * );
    *
    * // manual — value is pushed from outside
-   * const $socketStatus = createAsyncControl<string>();
-   * setValue($socketStatus, 'connected');
+   * const $position = createAsyncControl<GeolocationPosition>();
+   * navigator.geolocation.watchPosition((pos) => setValue($position, pos));
    * ```
    */
   <T, E = any>(

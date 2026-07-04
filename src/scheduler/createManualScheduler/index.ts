@@ -11,8 +11,8 @@ export type ManualScheduler = FlushableScheduler;
  * ```ts
  * const scheduler = createManualScheduler();
  *
- * setValue($a, 1, scheduler);
- * setValue($b, 2, scheduler);
+ * setValue($filters.minPrice, 10, scheduler);
+ * setValue($filters.inStock, true, scheduler);
  *
  * scheduler.flush(); // both commit now
  * ```
