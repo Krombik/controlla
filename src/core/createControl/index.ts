@@ -46,8 +46,9 @@ function commitSet(
  * access, and a change notifies only the paths it actually touched.
  *
  * The initial {@link value} can be a plain value or a lazy initializer.
- * Pass a {@link syncExternalStorage} to persist the value (and, if the
- * storage is observable, pick up external changes).
+ * Pass a {@link syncExternalStorage} to back the value with an external
+ * storage — the control starts from the stored value and writes changes
+ * back (and, if the storage is observable, picks up external changes).
  *
  * For simple values that don't need nested access, prefer
  * `createPrimitiveControl` — it skips the scope proxy entirely.
@@ -62,7 +63,8 @@ function commitSet(
  * setValue($name, 'Jane');          // notifies $name (and $user) listeners,
  *                                   // but not $user.profile.age
  *
- * const $draft = createControl(() => makeEmptyDraft());   // lazy initializer
+ * // lazy initializer
+ * const $draft = createControl(() => ({ id: crypto.randomUUID(), text: '' }));
  * ```
  */
 const createControl: {

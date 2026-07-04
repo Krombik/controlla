@@ -20,9 +20,9 @@ if (typeof window !== 'undefined') {
 }
 
 /**
- * Connectivity as an async control: `true` while online, `undefined` while
- * offline (offline = not ready). `useValue` reads `true`/`undefined`;
- * `toPromise($online)` resolves on the next reconnection, and
- * `useSuspenseValue($online)` suspends a component until online.
+ * An async control of connectivity: `true` while online, `undefined` while
+ * offline. Since offline means "not ready", the async tooling just works —
+ * `toPromise($online)` waits for reconnection, `useSuspenseValue($online)`
+ * suspends a component while offline.
  */
 export default $online as ReadonlyAsyncControl<true, never>;

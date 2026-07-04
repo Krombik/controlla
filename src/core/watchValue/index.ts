@@ -11,17 +11,15 @@ const watchValue: {
    * listener — it doesn't trigger loading of a loadable control.
    *
    * The callback may return a cleanup function, run before the next call and
-   * on unsubscribe.
+   * on unwatch.
    *
-   * @returns a function to remove the callback.
+   * @returns a function to stop watching.
    *
    * @example
    * ```ts
-   * const unsubscribe = watchValue($roomId, (roomId) => {
-   *   const socket = openRoom(roomId);
-   *
-   *   return () => socket.close();
-   * }, true);
+   * const unwatch = watchValue($theme, (theme, prevTheme) => {
+   *   console.log(`theme: ${prevTheme} -> ${theme}`);
+   * });
    * ```
    */
   <T>(
@@ -38,9 +36,9 @@ const watchValue: {
    * it right away with the current value (previous value `undefined`).
    *
    * The callback may return a cleanup function, run before the next call and
-   * on unsubscribe.
+   * on unwatch.
    *
-   * @returns a function to remove the callback.
+   * @returns a function to stop watching.
    */
   <T, I extends boolean = false>(
     control: ReadonlyControl<T>,

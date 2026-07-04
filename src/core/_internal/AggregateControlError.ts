@@ -29,9 +29,9 @@ export class AggregateControlError<Errors extends any[] = any[]> extends Error {
  *
  * @example
  * ```ts
- * onValueChange(selectError($total), (error) => {
+ * watchValue(selectError($total), (error) => {
  *   if (isAggregateControlError(error)) {
- *     error.errors.forEach((sourceError, i) => sourceError && report(i, sourceError));
+ *     error.errors.forEach((sourceError, i) => sourceError && console.error(i, sourceError));
  *   }
  * });
  * ```

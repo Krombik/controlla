@@ -51,7 +51,7 @@ const SuspendingControlsConsumer: FC<Props<any[]>> = ({
 /**
  * Renders the values of multiple async {@link Props.controls controls} via
  * the {@link Props.render render} prop, showing the
- * {@link Props.fallback fallback} until all of them are loaded. Includes its
+ * {@link Props.fallback fallback} until all of them are ready. Includes its
  * own {@link Suspense} boundary — no outer one is needed. Using it starts the
  * controls' loading; an entry may be falsy (its value is `undefined`).
  *
@@ -65,9 +65,9 @@ const SuspendingControlsConsumer: FC<Props<any[]>> = ({
  * ```jsx
  * <SuspenseControlsConsumer
  *   controls={[$user, $cart]}
- *   fallback={<Spinner />}
- *   render={(user, cart) => <Summary user={user} cart={cart} />}
- *   renderIfError={(errors) => <ErrorMessage error={errors.find(Boolean)} />}
+ *   fallback={<p>Loading...</p>}
+ *   render={(user, cart) => <p>{user.name} — {cart.length} items</p>}
+ *   renderIfError={(errors) => <p>{String(errors.find(Boolean))}</p>}
  * />
  * ```
  */

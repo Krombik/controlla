@@ -132,17 +132,15 @@ const watchValues = ((
    * doesn't trigger loading.
    *
    * The callback may return a cleanup function, run before the next call and
-   * on unsubscribe.
+   * on unwatch.
    *
-   * @returns a function to remove the callback.
+   * @returns a function to stop watching.
    *
    * @example
    * ```ts
-   * const unsubscribe = watchValues([$roomId, $userId], ([roomId, userId]) => {
-   *   const socket = connect(roomId, userId);
-   *
-   *   return () => socket.close();
-   * }, true);
+   * const unwatch = watchValues([$query, $page], ([query, page]) => {
+   *   console.log(`search: "${query}", page ${page}`);
+   * });
    * ```
    */
   <const S extends ReadonlyControl[], I extends boolean = false>(

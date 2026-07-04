@@ -75,7 +75,7 @@ const createAsyncDerivedControl: {
    * const $total = createAsyncDerivedControl(
    *   $cart,
    *   $rates,
-   *   (cart, rates) => applyRates(cart, rates)
+   *   (cart, rates) => cart.total * rates.usd
    * );
    * ```
    */

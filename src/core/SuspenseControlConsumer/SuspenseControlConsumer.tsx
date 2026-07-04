@@ -85,16 +85,16 @@ const SuspenseControlConsumer: {
    * <SuspenseControlConsumer
    *   control={$user}
    *   container="div"
-   *   fallback={<Spinner />}
-   *   render={(user) => <UserCard user={user} />}
-   *   renderIfError={(error) => <ErrorMessage error={error} />}
+   *   fallback={<p>Loading...</p>}
+   *   render={(user) => <h2>{user.name}</h2>}
+   *   renderIfError={(error) => <p>{String(error)}</p>}
    * />
    * ```
    */
   <S extends ReadonlyAsyncControl>(props: RenderProps<S>): JSX.Element;
   /**
    * Renders {@link TruthyGateProps.children children} once the async
-   * {@link TruthyGateProps.control control} is loaded and its value is truthy,
+   * {@link TruthyGateProps.control control} is ready and its value is truthy,
    * showing the {@link Props.fallback fallback} while it loads.
    */
   <E>(props: TruthyGateProps<E>): JSX.Element;

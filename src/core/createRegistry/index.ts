@@ -56,6 +56,7 @@ type Undefinable<O extends {}> = {
 interface BoundedInternals
   extends ControlInternals, Undefinable<AsyncThings<BoundedInternals>> {
   _activeCount: number;
+  _holding: boolean;
   _target: ControlInternals | AsyncControlInternals | undefined;
   readonly _activeNodes: BoundedInternalsChild[];
   readonly _changedNodes: BoundedInternalsChild[];
@@ -187,6 +188,17 @@ function keyChangeNotify(
 ) {
   root._keys[this._index] = value;
 
+  // seed the hold decision on the episode's first change (target still
+  // attached), AND further changes into it; a stale false when targetless
+  // and not holding is harmless — the value is already undefined
+  if (root._target || root._holding) {
+    const keepPrev = root._registry._keepPrev;
+
+    root._holding =
+      keepPrev &&
+      (typeof keepPrev == 'boolean' ? keepPrev : keepPrev[this._index]);
+  }
+
   cleanupPrevTarget(root);
 
   addToQueue(lane, root);
@@ -261,34 +273,52 @@ function commitSet(this: BoundedInternals, _: any, lane: Lane) {
 
   const isRetargeted = !currentTarget;
 
+  // keepPrev/suppressError: hold the last value instead of showing undefined
+  let heldPrev = false;
+
   if (currentTarget) {
     const changedNodes = root._changedNodes;
 
     const value = currentTarget._value;
 
     if (value !== prevValue) {
-      for (let i = 0, l = changedNodes.length; i < l; i++) {
-        const node = changedNodes[i];
+      if (
+        value === undefined &&
+        registry._type != ControlType.SYNC &&
+        ((currentTarget as AsyncControlInternals)._errorControl[INTERNALS]
+          ._value !== undefined
+          ? registry._suppressError
+          : root._holding)
+      ) {
+        // hold the last value while the target is not ready (error →
+        // suppressError; a later reload continues an ongoing hold)
+        heldPrev = true;
 
-        const data = node._data!;
+        changedNodes.length = 0;
+      } else {
+        for (let i = 0, l = changedNodes.length; i < l; i++) {
+          const node = changedNodes[i];
 
-        const { _prevValue: prevValue, _value: nextValue } = data;
+          const data = node._data!;
 
-        data._prevValue = undefined;
+          const { _prevValue: prevValue, _value: nextValue } = data;
 
-        data._value = undefined;
+          data._prevValue = undefined;
 
-        notify(node._listeners, node._dependents, lane, nextValue, prevValue);
-      }
+          data._value = undefined;
 
-      changedNodes.length = 0;
+          notify(node._listeners, node._dependents, lane, nextValue, prevValue);
+        }
 
-      root._value = value;
+        changedNodes.length = 0;
 
-      notify(root._listeners, root._dependents, lane, value, prevValue);
+        root._value = value;
 
-      if (value !== undefined) {
-        settlePromise(root, true, value);
+        notify(root._listeners, root._dependents, lane, value, prevValue);
+
+        if (value !== undefined) {
+          settlePromise(root, true, value);
+        }
       }
     }
   } else {
@@ -312,20 +342,46 @@ function commitSet(this: BoundedInternals, _: any, lane: Lane) {
       root._target = currentTarget;
     }
 
-    const nextValue = commitNextValue(
-      currentTarget && currentTarget._value,
-      prevValue,
-      root,
-      lane
-    );
+    const newValue = currentTarget && currentTarget._value;
 
-    if (nextValue !== UNCHANGED) {
-      root._value = nextValue;
+    if (
+      errors &&
+      root._holding &&
+      newValue === undefined &&
+      prevValue !== undefined
+    ) {
+      if (currentTarget) {
+        heldPrev =
+          registry._suppressError ||
+          registry._type == ControlType.SYNC ||
+          (currentTarget as AsyncControlInternals)._errorControl[INTERNALS]
+            ._value === undefined;
+      } else {
+        heldPrev = true;
 
-      notify(root._listeners, root._dependents, lane, nextValue, prevValue);
+        if (!registry._suppressError) {
+          for (let i = registry._depth; i--; ) {
+            if (errors[i] !== undefined) {
+              heldPrev = false;
 
-      if (nextValue !== undefined) {
-        settlePromise(root, true, nextValue);
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    if (!heldPrev) {
+      const nextValue = commitNextValue(newValue, prevValue, root, lane);
+
+      if (nextValue !== UNCHANGED) {
+        root._value = nextValue;
+
+        notify(root._listeners, root._dependents, lane, nextValue, prevValue);
+
+        if (nextValue !== undefined) {
+          settlePromise(root, true, nextValue);
+        }
       }
     }
   }
@@ -424,6 +480,15 @@ function commitSet(this: BoundedInternals, _: any, lane: Lane) {
           }
         }
       }
+    }
+
+    root._holding = heldPrev;
+
+    if (heldPrev) {
+      // showing a held value: it's ready and its error is swallowed
+      nextErrorValue = undefined;
+
+      nextReadyValue = true;
     }
 
     commitErrorValue(root, errorInternals, nextErrorValue, lane);
@@ -913,6 +978,7 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
         _attach: attach,
         _detach: detach,
         _activeCount: 0,
+        _holding: false,
         _activeNodes: [],
         _changedNodes: [],
         _notifiers: notifiers,
@@ -1199,8 +1265,9 @@ const createRegistry: {
    * Keys are compared structurally, so objects and arrays are valid keys.
    * `bind(...keys)` also accepts controls as keys: it returns a control that
    * mirrors the item under their current values and rebinds when a key
-   * control changes. `invalidate(...keys)` resets all items under the given
-   * key prefix.
+   * control changes — the {@link registryOptions} `keepPrev` option keeps it
+   * showing the previous value while the new item loads.
+   * `invalidate(...keys)` resets all items under the given key prefix.
    *
    * @example
    * ```ts
@@ -1219,7 +1286,7 @@ const createRegistry: {
   <T, Keys extends Exclude<PrimitiveOrNested, undefined>[], E = any>(
     createAsyncControl: typeof _createAsyncControl,
     options?: AsyncControlOptions<T, E, Keys>,
-    registryOptions?: RegistryOptions<T | undefined>
+    registryOptions?: RegistryOptions<T | undefined, Keys>
   ): Registry<AsyncControlScope<T, E>, Keys>;
   /**
    * Creates a {@link Registry registry} of sync {@link ControlScope controls}
@@ -1236,7 +1303,7 @@ const createRegistry: {
   <T, Keys extends Exclude<PrimitiveOrNested, undefined>[]>(
     createControl: typeof _createControl,
     defaultValue?: T | ((...keys: Keys) => T),
-    registryOptions?: RegistryOptions<T>
+    registryOptions?: RegistryOptions<T, Keys>
   ): Registry<ControlScope<T>, Keys>;
   /**
    * Creates a {@link Registry registry} of primitive {@link Control controls}
@@ -1258,7 +1325,7 @@ const createRegistry: {
   <T, Keys extends Exclude<PrimitiveOrNested, undefined>[]>(
     createControl: typeof _createPrimitiveControl,
     defaultValue?: T | ((...keys: Keys) => T),
-    registryOptions?: RegistryOptions<T>
+    registryOptions?: RegistryOptions<T, Keys>
   ): Registry<Control<T>, Keys>;
 } = (createControl: any, arg1?: unknown, options?: RegistryOptions): any =>
   ({

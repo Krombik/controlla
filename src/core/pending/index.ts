@@ -87,7 +87,7 @@ const internals = {
  *   <SuspenseControlConsumer
  *     control={$user || $pending}
  *     fallback="Loading..." // shown forever while $user is absent
- *     render={(user) => <Content user={user} />}
+ *     render={(user) => <h2>{user.name}</h2>}
  *   />
  * );
  * ```

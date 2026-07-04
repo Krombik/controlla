@@ -39,7 +39,9 @@ const ControlsConsumer: {
    * <ControlsConsumer
    *   controls={[$user, $cart, hasPromo && $promo]}
    *   render={(user, cart, promo) => (
-   *     <Summary user={user} cart={cart} promo={promo} />
+   *     <p>
+   *       {user.name} — {cart.length} items {promo && `(${promo.code})`}
+   *     </p>
    *   )}
    * />
    * ```

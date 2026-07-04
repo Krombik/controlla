@@ -198,7 +198,11 @@ export type Registry<
   /**
    * Returns a control bound to the given keys, where keys can be controls:
    * it mirrors the registry item under the keys' current values and rebinds
-   * to another item when a key control's value changes.
+   * to another item when a key control's value changes. While the new item
+   * has no value yet, it shows `undefined` — or keeps the previous value if
+   * the registry was created with the {@link RegistryOptions.keepPrev
+   * keepPrev} option ({@link RegistryOptions.suppressError suppressError}
+   * additionally holds it through errors).
    */
   bind<const K extends MixedKeys<Keys>>(
     ...keys: K
@@ -215,7 +219,6 @@ export type Registry<
               : never
         : never
     : BoundControl<T, K>;
-  /** Returns whether an item exists under the given keys or key prefix. */
   /**
    * Deletes a control entry from the storage associated with the given key.
    *
@@ -243,9 +246,9 @@ export type Registry<
   readonly _externalStorage: SyncExternalStorage | undefined;
   /** @internal */
   _type: ControlType;
-  /** @external */
-  readonly _keepPrev: boolean;
-  /** @external */
+  /** @internal */
+  readonly _keepPrev: boolean | readonly boolean[];
+  /** @internal */
   readonly _suppressError: boolean;
 } & (T extends AsyncControl
     ? {
@@ -258,7 +261,7 @@ export type Registry<
 export type ExternalStorageInstance<T = any> = {
   /** Returns the stored value, or `undefined` if there is none. */
   get(): T | undefined;
-  /** Persists the given value. */
+  /** Stores the given value. */
   set(value: T): void;
   /**
    * Subscribes to external changes of the stored value (e.g. another browser
@@ -269,9 +272,11 @@ export type ExternalStorageInstance<T = any> = {
 };
 
 /**
- * A factory creating a storage instance for a control — used to persist the
- * control's value (e.g. in `localStorage`, see the persist module). Receives
- * the control's registry keys, if any.
+ * A factory creating a storage instance for a control — the control takes
+ * its initial value from the storage and writes every change back to it.
+ * Any storage with sync reads works; persisting to `localStorage` (see the
+ * persist module) is one use of it. Receives the control's registry keys,
+ * if any.
  */
 export type SyncExternalStorage<T = any> = (
   keys?: PrimitiveOrNested[]
@@ -288,8 +293,25 @@ export type Scheduler = {
   _debounce?(): void;
 };
 
-export type RegistryOptions<T = any> = {
+export type RegistryOptions<T = any, Keys extends any[] = any[]> = {
+  /**
+   * External storage backing each item's value — any storage with sync reads
+   * (persisting is one use of it). Receives the item's keys.
+   */
   externalStorage?: SyncExternalStorage<T>;
-  keepPrev?: boolean;
+  /**
+   * For bound controls: keep showing the previous value while a re-targeted
+   * item loads, instead of blanking to `undefined`. Pass an array to decide
+   * per key — e.g. `[false, true]` keeps the value on the second key's
+   * changes but blanks on the first's; when several keys change at once,
+   * every changed key must allow keeping. The held value is replaced as
+   * soon as the current item produces one.
+   */
+  keepPrev?: boolean | { [index in keyof Keys]: boolean };
+  /**
+   * For bound controls: swallow an error while there is a previous value to
+   * show — it surfaces only when there is nothing to hold. On re-targets it
+   * applies only where {@link keepPrev} holds.
+   */
   suppressError?: boolean;
 };

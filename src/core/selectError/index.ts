@@ -3,8 +3,8 @@ import { INTERNALS } from '#internal/constants';
 
 /**
  * Returns the error control of the given async {@link control} — its value is
- * the latest loading error, or `undefined` while there is none. Usable like
- * any control (`useValue`, `onValueChange`, Consumer components).
+ * the current error, or `undefined` while there is none. Usable like
+ * any control (`useValue`, `watchValue`, Consumer components).
  */
 const selectError = <E>(
   control: ReadonlyAsyncControl<any, E>
