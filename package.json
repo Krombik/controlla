@@ -1,17 +1,17 @@
 {
   "name": "controlla",
   "version": "0.0.1-alpha.44",
-  "description": "",
+  "description": "Fine-grained reactive state for React — async, derived, persisted, and keyed, with surgical re-renders",
   "author": "Krombik",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Krombik/react-state-forge.git"
+    "url": "git+https://github.com/Krombik/controlla.git"
   },
   "bugs": {
-    "url": "https://github.com/Krombik/react-state-forge/issues"
+    "url": "https://github.com/Krombik/controlla/issues"
   },
-  "homepage": "https://github.com/Krombik/react-state-forge#readme",
+  "homepage": "https://github.com/Krombik/controlla#readme",
   "type": "module",
   "source": "src/index.ts",
   "engines": {
@@ -47,8 +47,7 @@
   "dependencies": {
     "keyweaver": "^1.0.3",
     "lodash.identity": "^3.0.0",
-    "lodash.noop": "^3.0.1",
-    "react-helpful-utils": "^1.0.6"
+    "lodash.noop": "^3.0.1"
   },
   "devDependencies": {
     "@types/lodash.identity": "^3.0.9",
