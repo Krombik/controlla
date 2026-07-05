@@ -5,9 +5,9 @@ import type {
 } from '#internal/types';
 import readRootValue from '#internal/readRootValue';
 import { EMPTY_ARR } from '#internal/constants';
-import notify from '#internal/notify';
 import addToLevel from '#internal/addToLevel';
 import { attach, detach } from '#internal/syncLifecycle';
+import { notify } from '#internal/flushQueue';
 
 function enqueueSet(this: ControlInternals, value: any, lane: Lane) {
   const patchByControl = lane._patchByControl;

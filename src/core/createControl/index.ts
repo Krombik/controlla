@@ -5,9 +5,9 @@ import { commitPatchNode, UNCHANGED } from '#internal/commitPatchNode';
 import initControl from '#internal/initControl';
 import readRootValue from '#internal/readRootValue';
 import { EMPTY_ARR } from '#internal/constants';
-import notify from '#internal/notify';
 import runPatching from '#internal/runPatching';
 import { attach, detach } from '#internal/syncLifecycle';
+import { notify } from '#internal/flushQueue';
 
 function enqueueSet(
   this: ControlInternals,

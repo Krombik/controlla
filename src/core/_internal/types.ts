@@ -181,10 +181,11 @@ export interface AsyncControlInternals
         _loadedAt: number;
         readonly _keys?: any[];
         readonly _source: AsyncControlOptions<any, any, any[]>;
-        readonly _slowLoadMonitor: {
-          _timerId: ReturnType<typeof setTimeout> | undefined;
-          readonly _listeners: Set<() => void>;
-        } | null;
+        readonly _slowLoadMonitor:
+          | (Listeners<() => void> & {
+              _timerId: ReturnType<typeof setTimeout> | undefined;
+            })
+          | null;
       }
     | undefined;
 }

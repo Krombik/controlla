@@ -9,10 +9,11 @@ import {
   addListener,
   getCurrentLane,
   getLane,
+  notify,
   removeListener,
   scheduleFlush,
 } from '#internal/flushQueue';
-import { SILENT_RELOAD, INTERNALS } from '#internal/constants';
+import { EMPTY_ARR, SILENT_RELOAD, INTERNALS } from '#internal/constants';
 
 const visibilityChangeQueue: AsyncControlInternals[] = [];
 
@@ -100,7 +101,14 @@ export const triggerLoad = (internals: AsyncControlInternals) => {
 
   if (_slowLoadMonitor) {
     _slowLoadMonitor._timerId = setTimeout(() => {
-      _slowLoadMonitor._listeners.forEach((listener) => listener());
+      // no dependents — the lane is never read
+      notify(
+        _slowLoadMonitor._listeners,
+        EMPTY_ARR,
+        null!,
+        undefined,
+        undefined
+      );
     }, data._source.loadingTimeout!);
   }
 };

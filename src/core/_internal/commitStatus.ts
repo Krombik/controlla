@@ -4,8 +4,8 @@ import type {
   Lane,
   Notifier,
 } from '#internal/types';
-import notify from '#internal/notify';
 import settlePromise from '#internal/settlePromise';
+import { notify } from '#internal/flushQueue';
 
 type StatusInternals = {
   _value: any;

@@ -35,12 +35,12 @@ import {
   errorDetachAsync,
   triggerLoad,
 } from './utils';
-import notify from '#internal/notify';
 import addToLevel from '#internal/addToLevel';
 import { attach, detach } from '#internal/syncLifecycle';
 import makeStatusInternals from '#internal/makeStatusInternals';
 import settlePromise from '#internal/settlePromise';
 import { commitErrorValue, commitStatusValue } from '#internal/commitStatus';
+import { notify } from '#internal/flushQueue';
 
 const throwIfUndefined = () => {
   throw new Error(
@@ -315,7 +315,8 @@ const createAsyncControl: {
         _slowLoadMonitor: options.loadingTimeout
           ? {
               _timerId: undefined,
-              _listeners: new Set(),
+              _indexMap: undefined,
+              _listeners: EMPTY_ARR,
             }
           : null,
       },

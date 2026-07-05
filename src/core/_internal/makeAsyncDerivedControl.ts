@@ -19,7 +19,6 @@ import {
   commitPatchNode,
   UNCHANGED,
 } from '#internal/commitPatchNode';
-import notify from '#internal/notify';
 import { attach, detach } from '#internal/syncLifecycle';
 import attachNotifier from '#internal/attachNotifier';
 import {
@@ -34,6 +33,7 @@ import throwReadonlyError from '#internal/throwReadonlyError';
 import settlePromise from '#internal/settlePromise';
 import addToQueue from '#internal/addToQueue';
 import { AggregateControlError } from '#internal/AggregateControlError';
+import { notify } from '#internal/flushQueue';
 
 interface AsyncDerivedControlInternals
   extends DerivedControlInternals, AsyncThings<AsyncDerivedControlInternals> {

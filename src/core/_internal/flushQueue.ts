@@ -1,13 +1,80 @@
-import type { Lane, Listeners, Mutable } from '#internal/types';
+import type {
+  ChangeListener,
+  Lane,
+  Listeners,
+  Mutable,
+  Notifier,
+} from '#internal/types';
 import type { Scheduler } from '#types';
 
 let currentLane: Lane | null = null;
 
-const deferredListenerChanges: {
-  readonly _listeners: Listeners<Function>;
-  readonly _listener: Function;
-  readonly _shouldExist: boolean;
-}[] = [];
+const NOT_ITERATED: readonly Function[] = [];
+
+/** the listeners array being iterated by {@link notify} right now */
+let iteratedListeners = NOT_ITERATED;
+
+/** deferred listener changes — flat `[apply, internals, listener]` triples */
+const deferredListenerChanges: any[] = [];
+
+export const notify = (
+  listeners: ChangeListener[],
+  dependents: Notifier[],
+  lane: Lane,
+  value: any,
+  prevValue: any
+) => {
+  const listenersCount = listeners.length;
+
+  if (listenersCount) {
+    iteratedListeners = listeners;
+
+    try {
+      for (let i = 0; i < listenersCount; i++) {
+        listeners[i](value, prevValue);
+      }
+    } finally {
+      iteratedListeners = NOT_ITERATED;
+
+      const l = deferredListenerChanges.length;
+
+      if (l) {
+        for (let i = 0; i < l; i += 3) {
+          deferredListenerChanges[i](
+            deferredListenerChanges[i + 1],
+            deferredListenerChanges[i + 2]
+          );
+        }
+
+        deferredListenerChanges.length = 0;
+      }
+    }
+  }
+
+  let l = dependents.length;
+
+  if (l) {
+    for (let i = 0, item = dependents[0]; ; ) {
+      const control = item._ref.deref();
+
+      if (control) {
+        item._notify(lane, control, value, prevValue);
+
+        if (++i == l) {
+          return;
+        }
+
+        item = dependents[i];
+      } else {
+        item = dependents.pop()!;
+
+        if (i == --l) {
+          return;
+        }
+      }
+    }
+  }
+};
 
 const flushLanes = new WeakMap<Scheduler, Lane>();
 
@@ -75,21 +142,6 @@ export const scheduleFlush = (lane: Lane, scheduler: Scheduler) => {
         lane._maxPendingLevel = 0;
 
         lane._canScheduleFlush = true;
-
-        const l = deferredListenerChanges.length;
-
-        if (l) {
-          for (let i = 0; i < l; i++) {
-            const item = deferredListenerChanges[i];
-
-            (item._shouldExist ? addListener : removeListener)(
-              item._listeners,
-              item._listener
-            );
-          }
-
-          deferredListenerChanges.length = 0;
-        }
       }
     });
   }
@@ -129,7 +181,7 @@ export const addListener = <T extends Function>(
   internals: Listeners<T>,
   listener: T
 ) => {
-  if (!currentLane) {
+  if (internals._listeners != iteratedListeners) {
     const indexMap = internals._indexMap;
 
     if (indexMap) {
@@ -146,11 +198,7 @@ export const addListener = <T extends Function>(
       (internals as Mutable<typeof internals>)._listeners = [listener];
     }
   } else {
-    deferredListenerChanges.push({
-      _shouldExist: true,
-      _listeners: internals,
-      _listener: listener,
-    });
+    deferredListenerChanges.push(addListener, internals, listener);
   }
 };
 
@@ -158,7 +206,7 @@ export const removeListener = <T extends Function>(
   internals: Listeners<T>,
   listener: T
 ) => {
-  if (!currentLane) {
+  if (internals._listeners != iteratedListeners) {
     const indexMap = internals._indexMap!;
 
     if (indexMap.has(listener)) {
@@ -177,10 +225,6 @@ export const removeListener = <T extends Function>(
       indexMap.delete(listener);
     }
   } else {
-    deferredListenerChanges.push({
-      _shouldExist: false,
-      _listeners: internals,
-      _listener: listener,
-    });
+    deferredListenerChanges.push(removeListener, internals, listener);
   }
 };
