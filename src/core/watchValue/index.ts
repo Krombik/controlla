@@ -73,7 +73,7 @@ const watchValue: {
 
     cleanup();
 
-    cleanup = noop;
+    cleanup = callback = noop;
   };
 };
 

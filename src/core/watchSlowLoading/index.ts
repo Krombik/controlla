@@ -1,5 +1,6 @@
 import type { AsyncControl } from '#types';
 import { INTERNALS } from '#internal/constants';
+import { addListener, removeListener } from '#internal/flushQueue';
 
 /**
  * Registers a callback invoked when a loading of the given {@link control}
@@ -22,12 +23,10 @@ const watchSlowLoading = (control: AsyncControl, cb: () => void) => {
     throw new Error('slow loading timeout was not provided');
   }
 
-  const listeners = slowLoadMonitor._listeners;
-
-  listeners.add(cb);
+  addListener(slowLoadMonitor, cb);
 
   return () => {
-    listeners.delete(cb);
+    removeListener(slowLoadMonitor, cb);
   };
 };
 

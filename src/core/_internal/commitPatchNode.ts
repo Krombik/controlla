@@ -1,9 +1,9 @@
-import notify from '#internal/notify';
 import type {
   PatchTreeNode,
   Lane,
   ControlInternalsChild,
 } from '#internal/types';
+import { notify } from '#internal/flushQueue';
 
 export const UNCHANGED = Symbol();
 

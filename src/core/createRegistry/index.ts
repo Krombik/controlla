@@ -34,10 +34,9 @@ import {
   SILENT_RELOAD,
 } from '#internal/constants';
 import append from '#internal/append';
-import { addListener, removeListener } from '#internal/flushQueue';
+import { addListener, notify, removeListener } from '#internal/flushQueue';
 import addToQueue from '#internal/addToQueue';
 import { commitNextValue, UNCHANGED } from '#internal/commitPatchNode';
-import notify from '#internal/notify';
 import removeFromArray from '#internal/removeFromArray';
 import attachNotifier from '#internal/attachNotifier';
 import makeChildNode from '#internal/makeChildNode';

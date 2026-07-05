@@ -15,7 +15,6 @@ import {
   commitPatchNode,
   UNCHANGED,
 } from '#internal/commitPatchNode';
-import notify from '#internal/notify';
 import { attach, detach } from '#internal/syncLifecycle';
 import attachNotifier from '#internal/attachNotifier';
 import {
@@ -26,6 +25,7 @@ import {
   keyNotify,
   type DerivedControlInternals,
 } from '#internal/derivedControlUtils';
+import { notify } from '#internal/flushQueue';
 
 function commitSet(
   this: DerivedControlInternals,
