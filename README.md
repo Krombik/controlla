@@ -1,4 +1,4 @@
-<h1 align="center">controlla</h1>
+<h1 align="center">🎮 controlla</h1>
 
 <p align="center">Fine-grained reactive state for React — async, derived, persisted, and keyed, with surgical re-renders.</p>
 
@@ -12,7 +12,7 @@
 A **control** is a reactive value you read, write, derive from, persist, and subscribe to. Writes notify only the paths that actually changed — no selectors, no context, no re-render storms.
 
 - 🎯 **Fine-grained** — a write touches only the fields that changed; `$user.profile.name` is its own control.
-- ⚡ **Async, built in** — loading / ready / error states, Suspense, request & polling loaders.
+- ⚡ **Built-in async** — loading / ready / error states, Suspense, request & polling loaders.
 - 🔗 **Derived & combined** — controls that recompute only when their sources are ready.
 - 🗂️ **Keyed registries** — one control per key, created on demand.
 - 💾 **Persistence** — `localStorage` / `sessionStorage`, observable across tabs.
@@ -20,8 +20,18 @@ A **control** is a reactive value you read, write, derive from, persist, and sub
 - 🌳 **Tree-shakeable & typed** — every export is its own import, no barrel.
 
 ```bash
-npm i controlla      # peer: react >= 17
+pnpm add controlla
 ```
+
+```bash
+yarn add controlla
+```
+
+```bash
+npm install --save controlla
+```
+
+> Requires React 17 or above.
 
 ## Quick start
 
@@ -34,20 +44,20 @@ import setValue from 'controlla/core/setValue';
 
 const $form = createControl({ name: '', email: '', agree: false });
 
-function NameInput() {
+const NameInput = () => {
   const name = useValue($form.name);     // subscribes to .name only
   return <input value={name} onChange={(e) => setValue($form.name, e.target.value)} />;
-}
+};
 
-function Submit() {
+const Submit = () => {
   const agree = useValue($form.agree);   // typing in NameInput never re-renders this
   return <button disabled={!agree}>Submit</button>;
-}
+};
 ```
 
 No reducers, no selectors, no memoization — `setValue($form.name, …)` notifies `.name` (and `$form`), nothing else.
 
-Async is **built-in state**, not glue. A `createRegistry` of async controls gives you one cached, self-fetching resource per key — fetched on first use, deduped, suspendable, refetchable:
+Async data is **state too**, not fetch-glue in components. A `createRegistry` of async controls gives you one cached, self-fetching resource per key — fetched on first use, deduped, suspendable, refetchable:
 
 ```tsx
 import createRegistry from 'controlla/core/createRegistry';
@@ -61,15 +71,13 @@ const users = createRegistry(
   requestLoader((id: number) => fetch(`/api/users/${id}`).then((r) => r.json()))
 );
 
-function UserCard({ id }: { id: number }) {
-  return (
-    <SuspenseControlConsumer
-      control={users.get(id)}                 // fetches on first render, cached after
-      fallback={<p>Loading…</p>}
-      render={(user) => <h2>{user.name}</h2>}
-    />
-  );
-}
+const UserCard = ({ id }: { id: number }) => (
+  <SuspenseControlConsumer
+    control={users.get(id)}                 // fetches on first render, cached after
+    fallback={<p>Loading…</p>}
+    render={(user) => <h2>{user.name}</h2>}
+  />
+);
 
 const refresh = (id: number) => invalidate(users.get(id));   // refetch one user
 ```
@@ -498,10 +506,10 @@ Drop-in replacement for `React.Suspense`, **required** around components that us
 | `children` | `ReactNode` | The subtree. |
 
 ```jsx
-function User() {
+const User = () => {
   const user = useSuspenseValue($user);
   return <h2>{user.name}</h2>;
-}
+};
 
 <Suspense fallback={<p>Loading…</p>}>
   <User />
@@ -759,10 +767,10 @@ Returns a boolean control tracking whether the media `query` matches, kept in sy
 import mediaQuery from 'controlla/dom/mediaQuery';
 import useValue from 'controlla/core/useValue';
 
-function Nav() {
+const Nav = () => {
   const isMobile = useValue(mediaQuery('(max-width: 600px)'));
   return <nav className={isMobile ? 'drawer' : 'tabs'} />;
-}
+};
 ```
 
 ### `$online`
@@ -783,11 +791,11 @@ import $online from 'controlla/dom/online';
 import $windowSize from 'controlla/dom/windowSize';
 import useValue from 'controlla/core/useValue';
 
-function StatusBar() {
+const StatusBar = () => {
   const isOnline = useValue($online);
   const width = useValue($windowSize.width);   // re-renders on width, not height
   return <span>{isOnline ? 'online' : 'offline'} · {width}px</span>;
-}
+};
 ```
 
 ---
