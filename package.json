@@ -1,17 +1,17 @@
 {
-  "name": "react-state-forge",
-  "version": "0.0.1-alpha.3",
-  "description": "",
+  "name": "controlla",
+  "version": "0.0.1-alpha.44",
+  "description": "Fine-grained reactive state for React — async, derived, persisted, and keyed, with surgical re-renders",
   "author": "Krombik",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Krombik/react-state-forge.git"
+    "url": "git+https://github.com/Krombik/controlla.git"
   },
   "bugs": {
-    "url": "https://github.com/Krombik/react-state-forge/issues"
+    "url": "https://github.com/Krombik/controlla/issues"
   },
-  "homepage": "https://github.com/Krombik/react-state-forge#readme",
+  "homepage": "https://github.com/Krombik/controlla#readme",
   "type": "module",
   "source": "src/index.ts",
   "engines": {
@@ -23,29 +23,42 @@
     "release": "tsup && npm publish ./build"
   },
   "peerDependencies": {
-    "@types/react": ">=16.8.0",
-    "react": ">=16.8.0"
+    "@types/react": ">=17.0.0",
+    "react": ">=17.0.0"
   },
   "peerDependenciesMeta": {
     "@types/react": {
       "optional": true
     }
   },
+  "keywords": [],
+  "imports": {
+    "#internal/*": "./src/core/_internal/*.ts",
+    "#core/*": "./src/core/*/index.ts",
+    "#router/internal/*": "./src/router/_internal/*.ts",
+    "#persist/internal/*": "./src/persist/_internal/*.ts",
+    "#router/types": "./src/router/types.ts",
+    "#persist/types": "./src/persist/types.ts",
+    "#router/*": "./src/router/*/index.ts",
+    "#persist/*": "./src/persist/*/index.ts",
+    "#scheduler/*": "./src/scheduler/*/index.ts",
+    "#types": "./src/core/types.ts"
+  },
+  "dependencies": {
+    "keyweaver": "^1.0.3",
+    "lodash.identity": "^3.0.0",
+    "lodash.noop": "^3.0.1"
+  },
   "devDependencies": {
     "@types/lodash.identity": "^3.0.9",
     "@types/lodash.noop": "^3.0.9",
     "@types/node": "^22.7.4",
-    "@types/react": "^18.3.10",
-    "prettier": "^3.4.2",
-    "tsup": "^8.3.5",
-    "typescript": "^5.7.2"
+    "@types/react": "^19.2.17",
+    "eslint": "^10.4.1",
+    "prettier": "3.8.4",
+    "tsup": "^8.5.0",
+    "typescript-eslint": "^8.61.0",
+    "typescript": "^6.0.3"
   },
-  "keywords": [],
-  "sideEffects": false,
-  "dependencies": {
-    "keyweaver": "^1.0.3",
-    "lodash.identity": "^3.0.0",
-    "lodash.noop": "^3.0.1",
-    "react-helpful-utils": "^1.0.6"
-  }
+  "sideEffects": false
 }
