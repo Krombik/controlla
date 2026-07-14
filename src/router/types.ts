@@ -1,4 +1,4 @@
-import type { ReadonlyAsyncControlScope, ReadonlyControlScope } from '#types';
+import type { AsyncControlScope, Control, ControlScope } from '#types';
 import type {
   Hash,
   RouteMethods,
@@ -23,9 +23,12 @@ export type NavigationTarget<Navigable extends boolean = true> = {
   [NAVIGATION_MARKER]: Navigable;
 };
 
-export type ParamsOf<R extends RouteParams<any, any>> =
-  R extends RouteParams<infer P, infer A>
+export type SelectParams<R extends RouteParams<any, any, any>> =
+  R extends RouteParams<infer P, infer A, any>
     ? A extends false
-      ? ReadonlyControlScope<P>
-      : ReadonlyAsyncControlScope<P>
+      ? ControlScope<P>
+      : AsyncControlScope<P>
     : never;
+
+export type SelectAnchor<R extends RouteParams<any, any, string>> =
+  R extends RouteParams<any, any, infer A> ? Control<A | ''> : never;

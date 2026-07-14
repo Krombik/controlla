@@ -1,4 +1,4 @@
-import type { PageRoute } from '#router/internal/types';
+import type { PageRoute, RouteParams } from '#router/internal/types';
 import type { Control } from '#types';
 
 /**
@@ -7,14 +7,16 @@ import type { Control } from '#types';
  * `setValue`/`replaceValue` or scroll spy), an empty string when there is none.
  * Throws if the route's path was created without `anchor()`.
  */
-const selectAnchor = (route: PageRoute<true>): Control<string> => {
+const selectAnchor = <A extends string>(
+  route: PageRoute<true> & RouteParams<any, any, A>
+) => {
   const anchorParam = route._anchor;
 
   if (!anchorParam) {
     throw new Error('the route has no anchor');
   }
 
-  return anchorParam._hashControl;
+  return anchorParam._hashControl as Control<A | ''>;
 };
 
 export default selectAnchor;

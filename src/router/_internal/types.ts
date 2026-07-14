@@ -42,7 +42,7 @@ export type Route<
       ? boolean
       : false,
 > = PageRoute<IsPage> &
-  RouteParams<Params, Async> &
+  RouteParams<Params, Async, Anchor> &
   ([Paths] extends [never]
     ? {}
     : {
@@ -107,10 +107,10 @@ export type PageRoute<IsPage extends boolean> = {
 
 declare const PARAMS_MARKER: unique symbol;
 
-export type RouteParams<Params, Async> = {
+export type RouteParams<Params, Async, Anchor> = {
   /** @internal */
   [ROUTE_PARAMS]: ControlScope;
-  [PARAMS_MARKER]: [Params, Async];
+  [PARAMS_MARKER]: [Params, Async, Anchor];
 };
 
 export type Navigation<
@@ -268,7 +268,6 @@ export type RouterControlRoot = (
   | AsyncControlInternals
   | PrimitiveControlInternals
 ) & {
-  _route?: RouteData;
   /** the raw `_enqueueSet` — internal router writes bypass the patch */
   _set?: PrimitiveControlInternals['_enqueueSet'];
 };
@@ -529,8 +528,7 @@ export type ParamOptions<Value, O = false, Source = never> = {
     | Value;
   isValid?(value: NoInfer<Value>, source: Source): boolean;
 } & (O extends true
-  ? // mutually exclusive: a default keeps the param out of the URL, an
-      // initial one is applied (and written to the URL) only on the boot parse
+  ?
       | {
           defaultValue?: Value | ((source: Source) => Value);
           initialValue?: never;

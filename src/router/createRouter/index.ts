@@ -559,8 +559,6 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
           INTERNALS
         ] as ControlInternals | AsyncControlInternals;
 
-        (paramsRoot as RouterControlRoot)._route = routeData;
-
         wrapRoot(paramsRoot, routeData, false);
 
         paramsRoot._setExternal = (value) => {
@@ -577,8 +575,6 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
       }
 
       if (_anchor) {
-        (_anchor._hash as RouterControlRoot)._route = routeData;
-
         wrapRoot(_anchor._hash as RouterControlRoot, routeData, true);
       }
 
