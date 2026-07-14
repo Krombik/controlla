@@ -8,7 +8,9 @@ import type { Control } from '#types';
  * Throws if the route's path was created without `anchor()`.
  */
 const selectAnchor = <A extends string>(
-  route: PageRoute<true> & RouteParams<any, any, A>
+  route: [A] extends [never]
+    ? never
+    : PageRoute<true> & RouteParams<any, any, A>
 ) => {
   const anchorParam = route._anchor;
 

@@ -1,4 +1,4 @@
-import type { ROUTE_HASH, ROUTE_PARAMS } from '#router/internal/constants';
+import type { ROUTE_PARAMS } from '#router/internal/constants';
 import type {
   AsyncControlScope,
   Control,
@@ -56,9 +56,6 @@ export type Route<
           ? Route<C, P, A, H>
           : never;
       }) &
-  ([Anchor] extends [never]
-    ? {}
-    : { [ROUTE_HASH]: ReadonlyControl<Anchor | ''> }) &
   ReadonlyControl<boolean>;
 
 export type Router<Paths extends AnyPaths> = {
@@ -367,7 +364,9 @@ export type CreatePath<Source = never> = {
           ? K
           : never;
     }[number],
-    Source
+    Source,
+    never,
+    P extends [...unknown[], AnchorParam<infer A>] ? A : never
   >;
 
   <P extends [...path: AnyPathSegment<Source>[], anchor: AnchorParam<any>]>(
@@ -378,7 +377,9 @@ export type CreatePath<Source = never> = {
     {
       [key in keyof P]: P[key] extends PathParam<infer K, Source> ? K : never;
     }[number],
-    Source
+    Source,
+    never,
+    P extends [...unknown[], AnchorParam<infer A>] ? A : never
   >;
 
   <
@@ -456,6 +457,7 @@ type HandlePath<
   P extends Record<string, ParamData<any, boolean>>,
   S,
   C extends AnyPaths = never,
+  A extends string = never,
 > = Path<
   C,
   [keyof P] extends [never] ? never : { [key in keyof P]: P[key][0] },
@@ -466,7 +468,8 @@ type HandlePath<
         : never
       : never;
   }[keyof P],
-  [S] extends [never] ? false : true
+  [S] extends [never] ? false : true,
+  A
 >;
 
 export interface Path<
@@ -504,7 +507,7 @@ export interface Path<
   readonly _stringifies: Record<string, ParamStringifier>;
 }
 
-export type AnyPaths = Record<string, Path<any, {}, any, boolean>>;
+export type AnyPaths = Record<string, Path<any, {}, any, boolean, string>>;
 
 export type OneOfOptions<V extends string[], O> = {
   variants: V;
