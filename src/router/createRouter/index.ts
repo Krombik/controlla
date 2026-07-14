@@ -53,7 +53,6 @@ import enqueue from '#internal/enqueue';
 type HistoryState = {
   idx?: number;
   scroll?: [x: number, y: number];
-  /** `initialValue`s were already applied within this session */
   init?: 1;
 };
 
@@ -65,6 +64,16 @@ const beforeUnloadListener = (e: BeforeUnloadEvent) => {
   e.preventDefault();
 
   e.returnValue = true;
+};
+
+const saveScroll = (state: HistoryState | null) => {
+  history.replaceState(
+    {
+      ...state,
+      scroll: [window.scrollX, window.scrollY],
+    } satisfies HistoryState,
+    ''
+  );
 };
 
 const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
@@ -115,7 +124,6 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
   const historyLane = getLane(historyEventScheduler);
 
-  /** Runs the route matching for the current URL and flushes it right away. */
   const runHistoryMatching = (
     pathname: string,
     searchParams: Record<string, string>,
@@ -152,12 +160,6 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
       }
     };
 
-  /**
-   * Reroutes the control's `_enqueueSet` through the router patch — a
-   * `setValue` on a params/hash control becomes an accumulated router write
-   * (push, or replace via `replaceValue`) that also syncs the URL; internal
-   * router writes use the saved raw `_set`.
-   */
   const wrapRouterRoot = (
     root: RouterControlRoot,
     route: RouteData,
@@ -228,15 +230,63 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
       const nextAnchor = nextRoutes[nextRoutesCount - 1]._anchor;
 
+      const currentRoutes =
+        currentRouteIndex < 0
+          ? (EMPTY_ARR as RouteData[])
+          : routesQueue[currentRouteIndex];
+
+      const isNewPage = currentRoutes != nextRoutes;
+
       let u = 0;
 
-      if (currentRouteIndex < 0) {
-        for (let i = 0; i < nextRoutesCount; i++) {
-          const nextRoute = nextRoutes[i];
+      let l = nextRoutesCount;
 
-          nextRoute._isMatched._value = true;
+      if (isNewPage) {
+        nav._isNewPage = true;
 
-          const item = u < updatesCount ? updates[u] : undefined;
+        const prevRoutesCount = currentRoutes.length;
+
+        if (prevRoutesCount > l) {
+          l = prevRoutesCount;
+        }
+
+        const prevAnchor =
+          prevRoutesCount && currentRoutes[prevRoutesCount - 1]._anchor;
+
+        if (prevAnchor) {
+          prevAnchor._clear(lane);
+        }
+
+        if (nextAnchor) {
+          nextAnchor._activate();
+        }
+      }
+
+      for (let i = 0; i < l; i++) {
+        const nextRoute = nextRoutes[i];
+
+        if (isNewPage) {
+          const currRoute = currentRoutes[i];
+
+          if (currRoute !== nextRoute) {
+            if (nextRoute) {
+              nextRoute._isMatched._enqueueSet(true, lane);
+            }
+
+            if (currRoute) {
+              currRoute._isMatched._enqueueSet(false, lane);
+
+              const params = currRoute._params;
+
+              if (params) {
+                (params as RouterControlRoot)._set!(undefined, lane);
+              }
+            }
+          }
+        }
+
+        if (nextRoute) {
+          const item = updates[u];
 
           if (item && item._root == nextRoute._params) {
             u++;
@@ -244,79 +294,10 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
             (nextRoute._params as RouterControlRoot)._set!(item._params, lane);
           }
         }
+      }
 
-        if (nextAnchor) {
-          nextAnchor._activate();
-        }
-
+      if (isNewPage) {
         currentRouteIndex = methods._index;
-      } else {
-        const currentRoutes = routesQueue[currentRouteIndex];
-
-        const isNewPage = currentRoutes != nextRoutes;
-
-        let l = nextRoutesCount;
-
-        if (isNewPage) {
-          nav._isNewPage = true;
-
-          const prevRoutesCount = currentRoutes.length;
-
-          if (prevRoutesCount > l) {
-            l = prevRoutesCount;
-          }
-
-          const prevAnchor = currentRoutes[prevRoutesCount - 1]._anchor;
-
-          if (prevAnchor) {
-            prevAnchor._clear(lane);
-          }
-
-          if (nextAnchor) {
-            nextAnchor._activate();
-          }
-        }
-
-        for (let i = 0; i < l; i++) {
-          const nextRoute = nextRoutes[i];
-
-          if (isNewPage) {
-            const currRoute = currentRoutes[i];
-
-            if (currRoute !== nextRoute) {
-              if (nextRoute) {
-                nextRoute._isMatched._enqueueSet(true, lane);
-              }
-
-              if (currRoute) {
-                currRoute._isMatched._enqueueSet(false, lane);
-
-                const params = currRoute._params;
-
-                if (params) {
-                  (params as RouterControlRoot)._set!(undefined, lane);
-                }
-              }
-            }
-          }
-
-          if (nextRoute) {
-            const item = u < updatesCount ? updates[u] : undefined;
-
-            if (item && item._root == nextRoute._params) {
-              u++;
-
-              (nextRoute._params as RouterControlRoot)._set!(
-                item._params,
-                lane
-              );
-            }
-          }
-        }
-
-        if (isNewPage) {
-          currentRouteIndex = methods._index;
-        }
       }
 
       if (u < updatesCount) {
@@ -356,7 +337,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
     let route;
 
-    let anchorValue: string;
+    let anchorValue = '';
 
     for (let i = 0; i < routes.length; i++) {
       route = routes[i];
@@ -383,15 +364,9 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
       scrollToAnchor = patch._toAnchor && !!anchorValue;
 
-      if (anchorValue) {
-        path += '#' + anchorValue;
-      }
+      path += anchorValue && '#' + anchorValue;
     } else {
-      anchorValue = location.hash;
-
-      if (anchorValue) {
-        path += anchorValue;
-      }
+      path += location.hash;
     }
 
     if (path != location.pathname + location.search + location.hash) {
@@ -413,13 +388,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
             ? nav._isNewPage
             : nav._enableScrollRestoration)
         ) {
-          history.replaceState(
-            {
-              ...state,
-              scroll: [window.scrollX, window.scrollY],
-            } satisfies HistoryState,
-            ''
-          );
+          saveScroll(state);
         }
 
         history.pushState(
@@ -787,7 +756,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
             },
             _paramUpdates: updates,
             _replace: true,
-            _toAnchor: initial && !savedScroll,
+            _toAnchor: initial,
           });
         };
 
@@ -920,13 +889,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
       isPopTriggeredByScrollSaving = true;
 
-      history.replaceState(
-        {
-          ...state,
-          scroll: [window.scrollX, window.scrollY],
-        } satisfies HistoryState,
-        ''
-      );
+      saveScroll(state);
 
       history.go(delta);
     } else if (nextHistoryIndex != currentHistoryIndex) {
@@ -943,13 +906,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
             isRouterBlockPopupAllowed = false;
 
             if (scroll) {
-              history.replaceState(
-                {
-                  ...state,
-                  scroll: [window.scrollX, window.scrollY],
-                } satisfies HistoryState,
-                ''
-              );
+              saveScroll(state);
             }
 
             history.go(delta);
@@ -1014,19 +971,19 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
   const applyInitial = !state || !state.init;
 
-  if (!state || state.idx == null) {
+  if (state && state.idx != null) {
+    currentHistoryIndex = state.idx;
+  }
+
+  if (applyInitial || state!.idx == null) {
     history.replaceState(
-      (state && typeof state == 'object'
-        ? { ...state, idx: 0, init: 1 }
-        : { idx: 0, init: 1 }) satisfies HistoryState,
+      {
+        ...(typeof state == 'object' ? state : null),
+        idx: currentHistoryIndex,
+        init: 1,
+      } satisfies HistoryState,
       ''
     );
-  } else {
-    currentHistoryIndex = state.idx;
-
-    if (applyInitial) {
-      history.replaceState({ ...state, init: 1 } satisfies HistoryState, '');
-    }
   }
 
   runHistoryMatching(pathname, searchParams, applyInitial);
@@ -1066,13 +1023,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
   }
 
   const pageHideListener = () => {
-    history.replaceState(
-      {
-        ...(history.state as HistoryState),
-        scroll: [window.scrollX, window.scrollY],
-      } satisfies HistoryState,
-      ''
-    );
+    saveScroll(history.state);
   };
 
   window.addEventListener('popstate', popStateListener);

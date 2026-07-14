@@ -8,12 +8,6 @@ import { getSchedulerLane, scheduleFlush } from '#internal/flushQueue';
 import queueRouterPatch from '#router/internal/queueRouterPatch';
 import { clearUpdateLanes, paramsHandler } from '#router/internal/state';
 
-/**
- * Navigates to the target described by {@link methods} — resolves the param
- * updates, stores the payload in the lane and queues the router's params
- * handler; kept out of `createRouter` so only `navigate`/`useLink` consumers
- * pay for it.
- */
 const navigateRoute = (
   methods: RouteMethods,
   params: RouterParamUpdates[] | undefined,

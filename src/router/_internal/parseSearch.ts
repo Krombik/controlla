@@ -1,9 +1,5 @@
 import { EMPTY_OBJECT } from '#router/internal/constants';
 
-/**
- * Parses `location.search` into a decoded key-value map; entries with an
- * empty or missing value are dropped.
- */
 const parseSearch = (search: string): Record<string, string> => {
   if (search) {
     const params: Record<string, string> = {};
