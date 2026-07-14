@@ -13,7 +13,9 @@ import type { ReadonlyControlScope } from '#types';
  * ```
  */
 const selectRegisteredAnchors = <A extends string>(
-  route: PageRoute<true> & RouteParams<any, any, A>
+  route: [A] extends [never]
+    ? never
+    : PageRoute<true> & RouteParams<any, any, A>
 ): ReadonlyControlScope<Record<A, true | undefined>> => {
   const anchorParam = route._anchor;
 
