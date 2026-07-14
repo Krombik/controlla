@@ -20,77 +20,80 @@ export type Container = [
   children: Array<Page | Container>,
 ];
 
+type Slot = {
+  _component: ComponentType;
+  _notify(): void;
+};
+
+const slots: Slot[] = [];
+
+const routers: Array<() => ReactElement> = [];
+
+const getRouter = (level: number) => {
+  if (level < routers.length) {
+    return routers[level];
+  }
+
+  const slot: Slot = { _component: noop as any, _notify: noop };
+
+  const subscribe = (onValueChange: () => void) => {
+    slot._notify = () => {
+      batch(onValueChange);
+    };
+
+    return () => {
+      slot._notify = noop;
+    };
+  };
+
+  const getComponent = () => slot._component;
+
+  const Router = () =>
+    jsx(useSyncExternalStore(subscribe, getComponent), EMPTY_OBJECT);
+
+  slots.push(slot);
+
+  routers.push(Router);
+
+  return Router;
+};
+
+const setSlot = (slot: Slot, Component: ComponentType) => {
+  if (slot._component != Component) {
+    slot._component = Component;
+
+    slot._notify();
+  }
+};
+
 const handleRouter = (
   level: number,
   routes: Array<Page | Container>,
-  components: ComponentType[],
-  setComponentsArr: Array<(Component: ComponentType) => void>,
-  routers: Array<() => ReactElement>
+  components: ComponentType[]
 ) => {
-  let Router: () => ReactElement;
-
-  if (level < setComponentsArr.length) {
-    Router = routers[level];
-  } else {
-    let onValueChange: () => void = noop;
-
-    let CurrentComponent: ComponentType = noop as any;
-
-    const subscribe = (_onValueChange: () => void) => {
-      onValueChange = () => {
-        batch(_onValueChange);
-      };
-
-      return () => {
-        _onValueChange = onValueChange = noop;
-      };
-    };
-
-    const getComponent = () => CurrentComponent;
-
-    Router = () =>
-      jsx(useSyncExternalStore(subscribe, getComponent), EMPTY_OBJECT);
-
-    setComponentsArr.push((Component) => {
-      CurrentComponent = Component;
-
-      onValueChange();
-    });
-
-    routers.push(Router);
-  }
+  const Router = getRouter(level);
 
   for (let i = 0; i < routes.length; i++) {
     const [arg1, arg2] = routes[i];
 
     if (Array.isArray(arg2)) {
-      const Router = handleRouter(
+      const Child = handleRouter(
         level + 1,
         arg2,
         append(components, () =>
-          jsx(arg1 as ComponentType, { children: jsx(Router, EMPTY_OBJECT) })
-        ),
-        setComponentsArr,
-        routers
+          jsx(arg1 as ComponentType, { children: jsx(Child, EMPTY_OBJECT) })
+        )
       );
     } else {
-      const l = components.length;
+      const count = components.length;
 
-      const last = setComponentsArr[l];
+      (arg1 as RouteIsPage<true>)._register(() => {
+        for (let i = 0; i < count; i++) {
+          setSlot(slots[i], components[i]);
+        }
 
-      (arg1 as RouteIsPage<true>)._register(
-        l
-          ? () => {
-              for (let i = 0; i < l; i++) {
-                setComponentsArr[i](components[i]);
-              }
-
-              last(arg2);
-            }
-          : () => {
-              last(arg2);
-            }
-      );
+        setSlot(slots[count], arg2);
+      });
     }
   }
 
@@ -98,6 +101,6 @@ const handleRouter = (
 };
 
 const createRouterView = (routes: Array<Page | Container>) =>
-  handleRouter(0, routes, EMPTY_ARR, [], []);
+  handleRouter(0, routes, EMPTY_ARR);
 
 export default createRouterView;
