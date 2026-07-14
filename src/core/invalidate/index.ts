@@ -1,7 +1,6 @@
 import type { AsyncControl, Scheduler } from '#types';
-import scheduleMicrotask from '#internal/scheduleMicrotask';
-import { getLane, scheduleFlush } from '#internal/flushQueue';
 import { RELOAD, SILENT_RELOAD, INTERNALS } from '#internal/constants';
+import enqueue from '#internal/enqueue';
 
 const invalidate: {
   /**
@@ -16,16 +15,11 @@ const invalidate: {
 } = (control: AsyncControl, schedulerOrKeepPrevValue?: Scheduler | boolean) => {
   const isLoud = schedulerOrKeepPrevValue !== true;
 
-  const scheduler = (isLoud && schedulerOrKeepPrevValue) || scheduleMicrotask;
-
-  const lane = getLane(scheduler);
-
-  control[INTERNALS]._root._errorControl[INTERNALS]._enqueueSet(
+  enqueue(
+    control[INTERNALS]._root._errorControl[INTERNALS],
     isLoud ? RELOAD : SILENT_RELOAD,
-    lane
+    (isLoud && schedulerOrKeepPrevValue) || undefined
   );
-
-  scheduleFlush(lane, scheduler);
 };
 
 export default invalidate;

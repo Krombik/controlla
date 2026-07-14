@@ -1,18 +1,17 @@
-import type { MouseEvent as ReactMouseEvent } from 'react';
 import type {
-  UnionToIntersection,
-  ParamsUpdatedData,
   ProcessParams,
   Hash,
   Navigation,
+  ResolvedParamUpdate,
   RouteData,
   RouteMethods,
-  RouterParamUpdates,
+  RouterControlRoot,
+  RouterPatch,
   Router,
   NavigationState,
   Route,
   AnyPaths,
-  RouterContext,
+  HandleParse,
 } from '#router/internal/types';
 
 import noop from 'lodash.noop';
@@ -26,205 +25,35 @@ import {
 import makePrimitiveInternals from '#internal/makePrimitiveInternals';
 import append from '#internal/append';
 
-import returnFalse from '#internal/alwaysFalse';
 import NOT_FOUND from '#router/NOT_FOUND';
-import prepend from '#router/internal/prepend';
-import { INTERNALS, EMPTY_ARR, RELOAD } from '#internal/constants';
-import { getCurrentLane, getLane, scheduleFlush } from '#internal/flushQueue';
+import { INTERNALS, EMPTY_ARR } from '#internal/constants';
+import { getLane, getSchedulerLane, scheduleFlush } from '#internal/flushQueue';
 import addToQueue from '#internal/addToQueue';
-import scheduleMicrotask from '#internal/scheduleMicrotask';
-import type {
-  AsyncControl,
-  AsyncControlScope,
-  Control,
-  ControlScope,
-  Scheduler,
-} from '#types';
+import type { AsyncControlScope, ControlScope } from '#types';
 import type {
   AsyncControlInternals,
   ControlInternals,
-  Lane,
   Mutable,
-  PendingItem,
-  PrimitiveControlInternals,
 } from '#internal/types';
 import type { NavigationTarget } from '#router/types';
 import createManualScheduler from '#scheduler/createManualScheduler';
+import parseSearch from '#router/internal/parseSearch';
+import addToLevel from '#internal/addToLevel';
+import {
+  clearNavigation,
+  clearUpdateLanes,
+  paramsHandler,
+  updateFinalizer,
+} from '#router/internal/state';
+import queueRouterPatch from '#router/internal/queueRouterPatch';
+import enqueue from '#internal/enqueue';
 
 type HistoryState = {
   idx?: number;
   scroll?: [x: number, y: number];
-  /** User data attached to the history entry; preserved across the router's own rewrites. */
-  data?: unknown;
 };
 
-/**
- * Commits a value on the given lane, or on the shared microtask lane
- * (joining the current flush if one is running).
- */
-const enqueue = (
-  internals: Pick<PrimitiveControlInternals, '_enqueueSet'>,
-  value: any,
-  lane?: Lane
-) => {
-  if (lane) {
-    internals._enqueueSet(value, lane);
-  } else {
-    const currentLane = getCurrentLane();
-
-    if (currentLane) {
-      internals._enqueueSet(value, currentLane);
-    } else {
-      const microtaskLane = getLane(scheduleMicrotask);
-
-      internals._enqueueSet(value, microtaskLane);
-
-      scheduleFlush(microtaskLane, scheduleMicrotask);
-    }
-  }
-};
-
-const handleParamUpdates = (queue: ParamsUpdatedData[], lane?: Lane) => {
-  for (let i = 0; i < queue.length; i++) {
-    const { _route, _params } = queue[i];
-
-    const control = _route._params!;
-
-    enqueue(control, _params, lane);
-  }
-};
-
-const handleHref = (
-  routes: RouteData[],
-  updatedParams?: RouterParamUpdates[],
-  maxControls?: number,
-  isMutableOrUseParams?: true | ((route: RouteData) => void),
-  useNoop?: () => void,
-  lane?: Lane
-) => {
-  let path = '';
-
-  let search = '';
-
-  let routeIndex = 0;
-
-  const handleRoute = (route: RouteData) => {
-    if (route._params) {
-      if (!route._isMatched._value) {
-        throw new Error('route not mounted');
-      }
-
-      if (maxControls) {
-        (isMutableOrUseParams as (route: RouteData) => void)(route);
-
-        maxControls--;
-      }
-    }
-
-    path += route._currentPath;
-
-    if (route._currentSearch) {
-      if (search) {
-        search += '&' + route._currentSearch;
-      } else {
-        search = '?' + route._currentSearch;
-      }
-    }
-  };
-
-  if (updatedParams) {
-    const updateQueue =
-      isMutableOrUseParams === true && ([] as ParamsUpdatedData[]);
-
-    const updatedParamsLastRoute =
-      updatedParams[updatedParams.length - 1]._route;
-
-    const updatedParamsLastRouteIndex = updatedParamsLastRoute._selfIndex;
-
-    if (
-      updatedParamsLastRouteIndex != routes.length - 1 &&
-      updatedParamsLastRoute != routes[updatedParamsLastRouteIndex]
-    ) {
-      throw new Error('route not mounted');
-    }
-
-    for (let i = 0; i < updatedParams.length; i++) {
-      const {
-        _route: route,
-        _params,
-        _stringifiedParams = EMPTY_OBJECT,
-      } = updatedParams[i];
-
-      const max = route._selfIndex;
-
-      for (; routeIndex < max; routeIndex++) {
-        handleRoute(routes[routeIndex]);
-      }
-
-      const params =
-        typeof _params == 'object'
-          ? _params || EMPTY_OBJECT
-          : _params!(route._params!._value);
-
-      const nextSearch = route._getSearch(params, _stringifiedParams);
-
-      const nextPath = route._getPath(params, _stringifiedParams);
-
-      if (updateQueue) {
-        const source = route._source && route._source._get();
-
-        const target = {};
-
-        route._extractPathParams(target, params, _stringifiedParams, source);
-
-        route._extractQueryParams(target, params, _stringifiedParams, source);
-
-        updateQueue.push({
-          _route: route,
-          _params: target,
-        });
-      } else if (maxControls) {
-        if (typeof _params == 'function') {
-          (isMutableOrUseParams as (route: RouteData) => void)(route);
-        } else {
-          useNoop!();
-        }
-
-        maxControls--;
-      }
-
-      path += nextPath;
-
-      if (nextSearch) {
-        if (search) {
-          search += '&' + nextSearch;
-        } else {
-          search = '?' + nextSearch;
-        }
-      }
-
-      routeIndex++;
-    }
-
-    if (updateQueue) {
-      handleParamUpdates(updateQueue, lane);
-    }
-  }
-
-  for (; routeIndex < routes.length; routeIndex++) {
-    handleRoute(routes[routeIndex]);
-  }
-
-  if (maxControls) {
-    while (maxControls--) {
-      useNoop!();
-    }
-  }
-
-  return (path || '/') + search;
-};
-
-let popStateListener: undefined | ((e: PopStateEvent) => void);
+let devPopStateListener: undefined | ((e: PopStateEvent) => void);
 
 const beforeUnloadListener = (e: BeforeUnloadEvent) => {
   e.preventDefault();
@@ -232,11 +61,16 @@ const beforeUnloadListener = (e: BeforeUnloadEvent) => {
   e.returnValue = true;
 };
 
-const createRouter = <Paths extends AnyPaths>(
-  paths: Paths
-): Router<UnionToIntersection<Paths>> => {
-  if (popStateListener) {
-    window.removeEventListener('popstate', popStateListener);
+const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
+  // the router is a singleton — a second call happens only on dev hot reload
+  if (process.env.NODE_ENV !== 'production') {
+    if (devPopStateListener) {
+      window.removeEventListener('popstate', devPopStateListener);
+    }
+
+    clearUpdateLanes();
+
+    clearNavigation();
   }
 
   if ('scrollRestoration' in history) {
@@ -245,75 +79,289 @@ const createRouter = <Paths extends AnyPaths>(
 
   const routesQueue: RouteData[][] = [];
 
-  const routerContext: RouterContext = {
-    _hash: undefined,
-    _path: EMPTY_OBJECT,
-    _query: EMPTY_OBJECT,
-    _routesQueue: routesQueue,
-    _currentIndex: -1,
+  const findCurrentRouteArr: Array<
+    (path: string, searchParams: Record<string, string>) => boolean
+  > = [];
+
+  let currentRouteIndex = -1;
+
+  let maxLinkSlots = 0;
+
+  const asyncStrings: Record<string, string | undefined> = {};
+
+  const storeAsyncString = (key: string, value: string | undefined) => {
+    asyncStrings[key] = value;
+  };
+
+  const getMaxLinkSlots = () => maxLinkSlots;
+
+  const currentChainMethods: RouteMethods = {
+    _routes: () => routesQueue[currentRouteIndex],
+    _maxSlots: getMaxLinkSlots,
+    _index: -1,
+    _setComponents: noop,
   };
 
   const historyEventScheduler = createManualScheduler();
 
-  const paramsHandler: PendingItem = {
-    _level: 0,
-    _commitSet(_, lane) {
-      const isNavigate = lane._routerNavigation;
+  const historyLane = getLane(historyEventScheduler);
 
-      const routerParamUpdates = lane._routerParamUpdates;
+  /** Runs the route matching for the current URL and flushes it right away. */
+  const runHistoryMatching = (
+    pathname: string,
+    searchParams: Record<string, string>
+  ) => {
+    for (
+      let i = 0;
+      i < findCurrentRouteArr.length &&
+      findCurrentRouteArr[i](pathname, searchParams);
+      i++
+    ) {}
 
-      for (let i = 0, l = routerParamUpdates.length; i < l; i++) {
-        const item = routerParamUpdates[i];
+    scheduleFlush(historyLane);
 
-        item._root._enqueueSet(item._value, lane, item._path);
-      }
-
-      addToQueue(lane, updateFinalizer);
-    },
+    historyEventScheduler.flush();
   };
 
-  const updateFinalizer: PendingItem = {
-    _level: 0,
-    _commitSet(_, lane) {
-      const routes = routesQueue[routerContext._currentIndex];
+  const makeExtract = (keys: string[], parsers: Record<string, HandleParse>) =>
+    keys.length
+      ? (
+          target: Record<string, any>,
+          stringifiedParams: Record<string, string | undefined>,
+          source: any
+        ) => {
+          for (let i = 0; i < keys.length; i++) {
+            const key = keys[i];
 
-      let path = '';
-
-      let search = '';
-
-      for (let i = 0; i < routes.length; i++) {
-        const route = routes[i];
-
-        const currentSearch = route._currentSearch;
-
-        path += route._currentPath;
-
-        if (currentSearch) {
-          if (search) {
-            search += '&' + currentSearch;
-          } else {
-            search = '?' + currentSearch;
+            parsers[key](
+              target,
+              key,
+              stringifiedParams[key] || undefined,
+              source
+            );
           }
         }
-      }
+      : noop;
 
-      // if (hash) {
-      //   href += '#' + hash;
-      // }
+  paramsHandler._commitSet = (patch: RouterPatch | undefined, lane) => {
+    // no patch = the lane's updates were dropped by a later navigation
+    if (!patch) {
+      return;
+    }
 
-      if (path == location.pathname && search == location.search) {
+    const nav = patch._navigation;
+
+    if (nav) {
+      paramsHandler._hasNavigation = false;
+
+      paramsHandler._navLane = undefined;
+
+      if (!isRouterAvailable && !nav._ignoreBlock && !nav._isHistoryEvent) {
+        nav._ignoreBlock = true;
+
+        allowNavigate = () => {
+          const nextLane = getSchedulerLane();
+
+          // the re-dispatch is a new navigation — updates accumulated while
+          // parked die the same way
+          clearUpdateLanes();
+
+          paramsHandler._navLane = nextLane;
+
+          paramsHandler._hasNavigation = true;
+
+          queueRouterPatch(nextLane, paramsHandler, patch);
+
+          scheduleFlush(nextLane);
+        };
+
+        isLeaveControl._enqueueSet(true, lane);
+
         return;
       }
 
+      const methods = nav._methods;
+
+      const nextRoutes = methods._routes();
+
+      const nextAnchor = nextRoutes[nextRoutes.length - 1]._anchor;
+
+      if (currentRouteIndex < 0) {
+        for (let i = 0; i < nextRoutes.length; i++) {
+          nextRoutes[i]._isMatched._value = true;
+        }
+
+        if (nextAnchor) {
+          nextAnchor._activate();
+        }
+
+        currentRouteIndex = methods._index;
+      } else {
+        const currentRoutes = routesQueue[currentRouteIndex];
+
+        if (currentRoutes != nextRoutes) {
+          nav._isNewPage = true;
+
+          const prevAnchor = currentRoutes[currentRoutes.length - 1]._anchor;
+
+          if (prevAnchor) {
+            prevAnchor._clear(lane);
+          }
+
+          if (nextAnchor) {
+            nextAnchor._activate();
+          }
+
+          const maxLength = Math.max(nextRoutes.length, currentRoutes.length);
+
+          for (let i = 0; i < maxLength; i++) {
+            const currRoute = currentRoutes[i];
+
+            const nextRoute = nextRoutes[i];
+
+            if (currRoute != nextRoute) {
+              if (nextRoute) {
+                nextRoute._isMatched._enqueueSet(true, lane);
+              }
+
+              if (currRoute) {
+                currRoute._isMatched._enqueueSet(false, lane);
+
+                const params = currRoute._params;
+
+                if (params) {
+                  params._enqueueSet(undefined, lane);
+                }
+              }
+            }
+          }
+
+          currentRouteIndex = methods._index;
+        }
+      }
+
+      const updates = nav._updates;
+
+      for (let i = 0; i < updates.length; i++) {
+        const item = updates[i];
+
+        item._route._params!._enqueueSet(item._params, lane);
+      }
+
+      methods._setComponents();
+    } else {
+      // this lane's accumulated updates commit now — unregister it
+      const lanes = paramsHandler._updateLanes;
+
+      const index = lanes.indexOf(lane);
+
+      if (~index) {
+        lanes[index] = lanes[lanes.length - 1];
+
+        lanes.pop();
+      }
+
+      const queue = patch._paramUpdates;
+
+      for (let i = 0; i < queue.length; i++) {
+        const { _route, _params } = queue[i];
+
+        if (_route._isMatched._value) {
+          _route._params!._enqueueSet(
+            typeof _params == 'function'
+              ? _params(_route._params!._value)
+              : _params,
+            lane
+          );
+        }
+      }
+    }
+
+    if (!lane._patchByControl.has(updateFinalizer)) {
+      addToLevel(lane, updateFinalizer);
+    }
+
+    lane._patchByControl.set(updateFinalizer, patch);
+  };
+
+  updateFinalizer._commitSet = (patch: RouterPatch | null, lane) => {
+    const nav = patch && patch._navigation;
+
+    const routes = routesQueue[currentRouteIndex];
+
+    let path = '';
+
+    let search = '';
+
+    for (let i = 0; i < routes.length; i++) {
+      const route = routes[i];
+
+      const paramsRoot = route._params;
+
+      if (paramsRoot && route._isMatched._value) {
+        const value = paramsRoot._value;
+
+        if (value !== undefined) {
+          route._handlePath(value, true, false);
+
+          route._handleSearch(value, true, false);
+        }
+      }
+
+      path += route._currentPath;
+
+      const currentSearch = route._currentSearch;
+
+      if (currentSearch) {
+        if (search) {
+          search += '&' + currentSearch;
+        } else {
+          search = '?' + currentSearch;
+        }
+      }
+    }
+
+    const anchorParam = routes[routes.length - 1]._anchor;
+
+    const rawHash = patch ? patch._hash : undefined;
+
+    let anchorValue: string = anchorParam ? anchorParam._hash._value : '';
+
+    let scrollToAnchor = false;
+
+    if (rawHash !== undefined) {
+      anchorValue =
+        typeof rawHash == 'function' ? rawHash(anchorValue) : rawHash;
+
+      scrollToAnchor = !!anchorValue;
+
+      if (anchorParam) {
+        anchorParam._hash._enqueueSet(anchorValue, lane);
+      }
+    }
+
+    const replace = !patch || patch._replace;
+
+    const href = (path || '/') + search + (anchorValue && '#' + anchorValue);
+
+    if (href != location.pathname + location.search + location.hash) {
       const state = history.state;
 
       if (replace) {
         history.replaceState(state, '', href);
 
-        enqueue(navigationStateRoot, { action: 'replace', delta: 0 }, lane);
+        if (!nav || !nav._isHistoryEvent) {
+          navigationStateRoot._enqueueSet(
+            { action: 'replace', delta: 0 },
+            lane
+          );
+        }
       } else {
         if (
-          enableScrollRestoration == null ? isNewPage : enableScrollRestoration
+          nav &&
+          (nav._enableScrollRestoration == null
+            ? nav._isNewPage
+            : nav._enableScrollRestoration)
         ) {
           history.replaceState(
             {
@@ -333,19 +381,18 @@ const createRouter = <Paths extends AnyPaths>(
           href
         );
 
-        enqueue(navigationStateRoot, { action: 'push', delta: 1 }, lane);
+        navigationStateRoot._enqueueSet({ action: 'push', delta: 1 }, lane);
       }
+    }
 
-      if (hash) {
-        const anchorParam = routes[routes.length - 1]._anchor;
-
-        if (anchorParam) {
-          anchorParam._scrollTo(hash);
-        }
-      } else if (enableScrollToTop == null ? isNewPage : enableScrollToTop) {
-        window.scroll(0, 0);
-      }
-    },
+    if (scrollToAnchor && anchorParam) {
+      anchorParam._scrollTo(anchorValue);
+    } else if (
+      nav &&
+      (nav._enableScrollToTop == null ? nav._isNewPage : nav._enableScrollToTop)
+    ) {
+      window.scroll(0, 0);
+    }
   };
 
   let maxParamControlLevel = 0;
@@ -354,8 +401,6 @@ const createRouter = <Paths extends AnyPaths>(
     routes: Route<any, any, any>,
     navigations: Record<string, Navigation<AnyPaths, any>>,
     paths: AnyPaths,
-    findCurrentRouteArr: Array<(path: string, search: string) => boolean>,
-    dataQueue: RouteData[][],
     data: RouteData[],
     parentRegexStr: string,
     paramsCount: number,
@@ -368,38 +413,12 @@ const createRouter = <Paths extends AnyPaths>(
     }
 
     for (let i = 0; i < keys.length; i++) {
-      function extractParams(
-        this: string[],
-        target: Record<string, any>,
-        stringifiedParams: Record<string, string>,
-        source: any
-      ) {
-        let updated = false;
-
-        for (let i = 0; i < this.length; i++) {
-          const key = this[i];
-
-          if (
-            _getParse(key)(
-              target,
-              key,
-              stringifiedParams[key] || undefined,
-              source
-            )
-          ) {
-            updated = true;
-          }
-        }
-
-        return updated;
-      }
-
       const key = keys[i] as string;
 
       const {
         _children,
-        _getParse,
-        _getStringify,
+        _parsers,
+        _stringifies,
         _path,
         _pathParams,
         _queryParams,
@@ -415,20 +434,22 @@ const createRouter = <Paths extends AnyPaths>(
 
       const l = _path.length;
 
-      const path0 = _path[0];
-
       const isMatchedRoot = makePrimitiveInternals(false);
 
       const regexStr =
         parentRegexStr + (pathParamsCount ? `(${_regexStr})` : _regexStr);
 
+      const storeString = _source ? storeAsyncString : noop;
+
       const routeData: RouteData = {
-        _pathParamsCount: pathParamsCount,
-        _currentPath: pathParamsCount || !l ? '' : path0,
+        _currentPath: pathParamsCount || !l ? '' : _path[0],
         _currentSearch: '',
-        _selfIndex: data.length,
         _handlePath: pathParamsCount
           ? (params, typed, peek) => {
+              // `peek` is constant per call — pick the store once, keep the
+              // loop branch-free (a real store only exists on async routes)
+              const store = peek ? noop : storeString;
+
               let str = '';
 
               for (let i = 0; i < l; i++) {
@@ -440,11 +461,10 @@ const createRouter = <Paths extends AnyPaths>(
                   const param = params[item];
 
                   const value = typed
-                    ? _getStringify(item)(
-                        param !== '' ? param : undefined,
-                        item
-                      )
+                    ? _stringifies[item](param !== '' ? param : undefined, item)
                     : param || undefined;
+
+                  store(item, value);
 
                   if (value !== undefined) {
                     str += '/' + value;
@@ -461,6 +481,8 @@ const createRouter = <Paths extends AnyPaths>(
           : (noop as any),
         _handleSearch: queryParamsCount
           ? (params, typed, peek) => {
+              const store = peek ? noop : storeString;
+
               let search = '';
 
               for (let i = 0; i < queryParamsCount; i++) {
@@ -469,8 +491,10 @@ const createRouter = <Paths extends AnyPaths>(
                 const param = params[name];
 
                 const value = typed
-                  ? _getStringify(name)(param !== '' ? param : undefined, name)
+                  ? _stringifies[name](param !== '' ? param : undefined, name)
                   : param || undefined;
+
+                store(name, value);
 
                 if (value !== undefined) {
                   if (search) {
@@ -488,19 +512,14 @@ const createRouter = <Paths extends AnyPaths>(
               (routeData as Mutable<RouteData>)._currentSearch = search;
             }
           : (noop as any),
-        _extractPathParams: pathParamsCount
-          ? extractParams.bind(_pathParams)
-          : returnFalse,
-        _extractQueryParams: queryParamsCount
-          ? extractParams.bind(_queryParams)
-          : returnFalse,
+        _extractPathParams: makeExtract(_pathParams, _parsers),
+        _extractQueryParams: makeExtract(_queryParams, _parsers),
         _isMatched: isMatchedRoot,
         _anchor: _anchor,
         _params: null,
-        _source: _source && _source[INTERNALS],
       };
 
-      const _withPathParams = withPathParams || !!pathParamsCount;
+      withPathParams ||= !!pathParamsCount;
 
       const routesData = append(data, routeData);
 
@@ -510,19 +529,25 @@ const createRouter = <Paths extends AnyPaths>(
 
       if (pathParamsCount || queryParamsCount) {
         paramsControl = _createControlScope(
-          routerContext,
           isMatchedRoot,
           _source!,
-          routeData
+          routeData,
+          asyncStrings!
         );
 
         (routeData as Mutable<RouteData>)._params = paramsRoot = paramsControl[
           INTERNALS
         ] as ControlInternals | AsyncControlInternals;
 
+        (paramsRoot as RouterControlRoot)._route = routeData;
+
         if (paramsRoot._level > maxParamControlLevel) {
           maxParamControlLevel = paramsRoot._level;
         }
+      }
+
+      if (_anchor) {
+        (_anchor._hash as RouterControlRoot)._route = routeData;
       }
 
       let _paramsCount = paramsCount;
@@ -536,62 +561,10 @@ const createRouter = <Paths extends AnyPaths>(
       const route = {
         [INTERNALS]: isMatchedRoot,
         [ROUTE_PARAMS]: paramsControl,
-        _update(
-          params: ProcessParams<Record<string, any>>,
-          hash?: Hash,
-          replace?: boolean,
-          scheduler?: Scheduler
-        ) {
-          if (!paramsRoot || !isMatchedRoot._value) {
-            if (process.env.NODE_ENV !== 'production') {
-              console.warn(
-                '[router] updateParams on an unmatched or paramless route was ignored.'
-              );
-            }
-
-            return;
-          }
-
-          const usedScheduler = scheduler || scheduleMicrotask;
-
-          const lane = getLane(usedScheduler);
-
-          const currentRoutes = routesQueue[currentRouteIndex];
-
-          const href = handleHref(
-            currentRoutes,
-            [{ _params: params, _route: routeData }],
-            0,
-            true,
-            undefined,
-            lane
-          );
-
-          queueHistorySync(
-            lane,
-            currentRoutes,
-            currentRouteIndex,
-            href,
-            replace,
-            false,
-            false,
-            false,
-            // hash omitted -> keep the current one (updateParams updates only
-            // what was passed)
-            arguments.length > 1
-              ? resolveHash(currentRoutes, hash, lane)
-              : currentHash(currentRoutes)
-          );
-
-          scheduleFlush(lane, usedScheduler);
-        },
       } as unknown as Route<any, any, any>;
 
-      if (
-        (pathParamsCount || queryParamsCount) &&
-        ++_paramsCount > maxParamsPerRoute
-      ) {
-        maxParamsPerRoute = _paramsCount;
+      if (pathParamsCount || queryParamsCount) {
+        _paramsCount++;
       }
 
       if (_children) {
@@ -601,57 +574,19 @@ const createRouter = <Paths extends AnyPaths>(
           route,
           childrenNavigation,
           _children,
-          findCurrentRouteArr,
-          dataQueue,
           routesData,
           regexStr,
           _paramsCount,
-          _withPathParams
+          withPathParams
         );
 
         if (paramsControl) {
-          const methods: RouteMethods = {
-            _navigate(
-              event,
-              params,
-              replace,
-              ignoreBlock,
-              enableScrollToTop,
-              enableScrollRestoration,
-              onClick,
-              hash
-            ) {
-              navigate(
-                currentRouteIndex,
-                dataQueue[currentRouteIndex],
-                noop,
-                event,
-                params,
-                replace,
-                ignoreBlock,
-                enableScrollToTop,
-                enableScrollRestoration,
-                onClick,
-                hash
-              );
-            },
-            _useHref: (params, useParams, useNoop) =>
-              handleHref(
-                dataQueue[currentRouteIndex],
-                params,
-                maxParamsPerRoute,
-                useParams,
-                useNoop
-              ),
-            _isMatched: isMatchedRoot,
-          };
-
           navigation = function (params) {
             return (
               params !== undefined
                 ? {
                     ...childrenNavigation,
-                    [ROUTE_METHODS]: methods,
+                    [ROUTE_METHODS]: currentChainMethods,
                     [ROUTE_PARAMS]:
                       ROUTE_PARAMS in this
                         ? append(this[ROUTE_PARAMS]!, {
@@ -688,58 +623,27 @@ const createRouter = <Paths extends AnyPaths>(
       } else {
         const regex = new RegExp(`^${regexStr || '/'}$`);
 
-        const testRegex = regex[_withPathParams ? 'exec' : 'test'].bind(regex);
+        const testRegex = regex[withPathParams ? 'exec' : 'test'].bind(regex);
 
-        const routeIndex = dataQueue.length;
+        const routeIndex = routesQueue.length;
 
         const methods: RouteMethods = {
-          _navigate(
-            event,
-            params,
-            replace,
-            ignoreBlock,
-            enableScrollToTop,
-            enableScrollRestoration,
-            onClick,
-            hash
-          ) {
-            navigate(
-              routeIndex,
-              routesData,
-              setComponents,
-              event,
-              params,
-              replace,
-              ignoreBlock,
-              enableScrollToTop,
-              enableScrollRestoration,
-              onClick,
-              hash
-            );
-          },
-          _useHref: (params, useParams, useNoop) =>
-            handleHref(
-              routesData,
-              params,
-              maxParamsPerRoute,
-              useParams,
-              useNoop
-            ),
-          _isMatched: isMatchedRoot,
+          _routes: () => routesData,
+          _maxSlots: getMaxLinkSlots,
+          _index: routeIndex,
+          _setComponents: noop,
         };
 
         const res = {
           [ROUTE_METHODS]: methods,
         } as NavigationTarget<boolean>;
 
-        let setComponents: () => void = noop;
-
-        route._register = (_setComponents) => {
+        route._register = (setComponents) => {
           if (currentRouteIndex == routeIndex) {
-            _setComponents();
+            setComponents();
           }
 
-          setComponents = _setComponents;
+          methods._setComponents = setComponents;
         };
 
         (route as Mutable<typeof route>)._anchor = _anchor;
@@ -789,149 +693,91 @@ const createRouter = <Paths extends AnyPaths>(
               ) as NavigationTarget<boolean>;
             };
 
-        dataQueue.push(routesData);
+        if (routesData.length > maxLinkSlots) {
+          maxLinkSlots = routesData.length;
+        }
+
+        routesQueue.push(routesData);
+
+        const queueMatch = (updates: ResolvedParamUpdate[]) => {
+          // the history event already happened — every pending intent dies
+          clearUpdateLanes();
+
+          clearNavigation();
+
+          queueRouterPatch(historyLane, paramsHandler, {
+            _navigation: {
+              _updates: updates,
+              _methods: methods,
+              _isNewPage: false,
+              _isHistoryEvent: true,
+              _ignoreBlock: false,
+              _enableScrollToTop: false,
+              _enableScrollRestoration: false,
+            },
+            _paramUpdates: EMPTY_ARR,
+            _replace: true,
+            _hash: location.hash.slice(1),
+          });
+        };
 
         findCurrentRouteArr.push(
           _paramsCount
-            ? (path, search) => {
+            ? (path, searchParams) => {
                 const isMatched = testRegex(path);
 
                 if (isMatched) {
-                  let isUrlChanged = false;
-
-                  const searchParams: Record<string, string> = {};
-
-                  const pathParams: Record<string, string> = _withPathParams
+                  const pathParams: Record<string, string> = withPathParams
                     ? (isMatched as RegExpExecArray).groups!
                     : EMPTY_OBJECT;
 
-                  const currentParamsQueue: ParamsUpdatedData[] = [];
+                  const updates: ResolvedParamUpdate[] = [];
 
-                  if (search) {
-                    const arr = search.slice(1).split('&');
-
-                    for (let i = 0; i < arr.length; i++) {
-                      const t = arr[i].split('=');
-
-                      const value = t[1];
-
-                      if (value) {
-                        searchParams[t[0]] = decodeURIComponent(value);
-                      }
-                    }
-                  }
-
-                  for (
-                    let i = 0, pathSegmentIndex = 1;
-                    i < routesData.length;
-                    i++
-                  ) {
+                  for (let i = 0; i < routesData.length; i++) {
                     const route = routesData[i];
 
                     const paramsControl = route._params;
 
                     if (paramsControl) {
-                      const source = route._source;
+                      route._handlePath(pathParams, false, false);
 
-                      const currentPath = route._pathParamsCount
-                        ? (isMatched as RegExpExecArray)[
-                            (pathSegmentIndex += route._pathParamsCount)
-                          ]
-                        : route._currentPath;
+                      route._handleSearch(searchParams, false, false);
 
-                      if (!source || source._get() !== undefined) {
-                        const value = source && source._get();
+                      if ('_equable' in paramsControl) {
+                        paramsControl._equable = false;
 
+                        addToQueue(historyLane, paramsControl);
+                      } else {
                         const params = {};
 
-                        let paramsWasReplaced = false;
-
                         try {
-                          if (
-                            route._extractPathParams(params, pathParams, value)
-                          ) {
-                            paramsWasReplaced = true;
-                          }
+                          route._extractPathParams(
+                            params,
+                            pathParams,
+                            undefined
+                          );
 
-                          if (
-                            route._extractQueryParams(
-                              params,
-                              searchParams,
-                              value
-                            )
-                          ) {
-                            paramsWasReplaced = true;
-                          }
-                        } catch (err) {
-                          if (source) {
-                            enqueue(
-                              (paramsControl as AsyncControlInternals)
-                                ._errorControl[INTERNALS],
-                              err
-                            );
-
-                            continue;
-                          }
-
+                          route._extractQueryParams(
+                            params,
+                            searchParams,
+                            undefined
+                          );
+                        } catch {
                           return true;
                         }
 
-                        if (paramsWasReplaced) {
-                          isUrlChanged = true;
-
-                          currentParamsQueue.push({
-                            _params: params,
-                            _route: route,
-                          });
-                        } else {
-                          currentParamsQueue.push({
-                            _params: params,
-                            _route: route,
-                          });
-                        }
-                      } else {
-                        currentParamsQueue.push({
-                          _params: undefined!,
-                          _route: route,
-                        });
+                        updates.push({ _route: route, _params: params });
                       }
                     }
                   }
 
-                  handleParamUpdates(currentParamsQueue);
-
-                  const urlHash = location.hash.slice(1) || undefined;
-
-                  for (let i = 0; i < routesData.length; i++) {
-                    routesData[i]._anchor?._commit(
-                      urlHash,
-                      enqueue,
-                      currentRouteIndex < 0
-                    );
-                  }
-
-                  handleMatching(routesData, setComponents);
-
-                  if (isUrlChanged) {
-                    history.replaceState(
-                      history.state,
-                      '',
-                      handleHref(routesData)
-                    );
-                  }
+                  queueMatch(updates);
                 }
 
                 return !isMatched;
               }
-            : (path) => {
-                const isMatched = testRegex(path) as boolean;
-
-                if (isMatched) {
-                  handleMatching(routesData, setComponents);
-                }
-
-                return !isMatched;
-              }
+            : (path) =>
+                testRegex(path) ? (queueMatch(EMPTY_ARR), false) : true
         );
       }
 
@@ -940,249 +786,6 @@ const createRouter = <Paths extends AnyPaths>(
       navigations[key] = navigation as Navigation<any, any, any, any>;
     }
   };
-
-  const handleMatching = (
-    nextRoutes: RouteData[],
-    setComponents: () => void,
-    lane?: Lane
-  ) => {
-    if (currentRouteIndex >= 0) {
-      const currentRoutes = routesQueue[currentRouteIndex];
-
-      if (currentRoutes != nextRoutes) {
-        const maxLength = Math.max(nextRoutes.length, currentRoutes.length);
-
-        for (let i = 0; i < maxLength; i++) {
-          const currRoute = currentRoutes[i];
-
-          const nextRoute = nextRoutes[i];
-
-          if (currRoute != nextRoute) {
-            if (nextRoute) {
-              enqueue(nextRoute._isMatched, true, lane);
-
-              nextRoute._anchor?._activate(enqueue);
-            }
-
-            if (currRoute) {
-              enqueue(currRoute._isMatched, false, lane);
-
-              currRoute._anchor?._clear(enqueue, lane);
-
-              const params = currRoute._params;
-
-              if (params) {
-                // a real commit (not a silent clear) so dependents — bound
-                // registry items, derived controls — unbind and release loads
-                if ('_errorControl' in params) {
-                  enqueue(params._errorControl[INTERNALS], RELOAD, lane);
-                } else {
-                  enqueue(params, undefined, lane);
-                }
-              }
-            }
-          }
-        }
-      }
-    } else {
-      // initial matching runs before any listener can exist — write directly
-      // so first-render href reads see the matched state
-      for (let i = 0; i < nextRoutes.length; i++) {
-        nextRoutes[i]._isMatched._value = true;
-
-        nextRoutes[i]._anchor?._activate(enqueue);
-      }
-    }
-
-    setComponents();
-  };
-
-  /** Current committed hash of the chain's anchor route, if any. */
-  const currentHash = (routes: RouteData[]): string | undefined => {
-    for (let i = routes.length; i--; ) {
-      const anchorParam = routes[i]._anchor;
-
-      if (anchorParam) {
-        return anchorParam._get();
-      }
-    }
-  };
-
-  /**
-   * Resolves the hash argument against the chain's current hash and commits
-   * it to every anchor route in the chain.
-   */
-  const resolveHash = (
-    routes: RouteData[],
-    hash: Hash,
-    lane: Lane
-  ): string | undefined => {
-    const resolvedHash =
-      typeof hash == 'function' ? hash(currentHash(routes)) : hash;
-
-    for (let i = 0; i < routes.length; i++) {
-      routes[i]._anchor?._set(resolvedHash, enqueue, lane);
-    }
-
-    return resolvedHash;
-  };
-
-  /**
-   * Queues a one-shot node into the lane, one level above the path's controls,
-   * so it runs after their commits: verifies the navigation wasn't superseded,
-   * skips when the URL wouldn't change, otherwise writes history and commits
-   * the navigation state.
-   */
-  const queueHistorySync = (
-    lane: Lane,
-    routes: RouteData[],
-    index: number,
-    href: string,
-    replace: boolean | undefined,
-    isNewPage: boolean,
-    enableScrollToTop: boolean | undefined,
-    enableScrollRestoration: boolean | undefined,
-    hash: string | undefined
-  ) => {
-    addToQueue(lane, {
-      _level: maxParamControlLevel,
-      _commitSet() {
-        if (currentRouteIndex != index) {
-          // superseded by a newer navigation in the same flush
-          return;
-        }
-
-        if (hash) {
-          href += '#' + hash;
-        }
-
-        if (href == location.pathname + location.search + location.hash) {
-          return;
-        }
-
-        const state = history.state;
-
-        if (replace) {
-          history.replaceState(state, '', href);
-
-          enqueue(navigationStateRoot, { action: 'replace', delta: 0 }, lane);
-        } else {
-          if (
-            enableScrollRestoration == null
-              ? isNewPage
-              : enableScrollRestoration
-          ) {
-            history.replaceState(
-              {
-                ...state,
-                scroll: [window.scrollX, window.scrollY],
-              } satisfies HistoryState,
-              ''
-            );
-          }
-
-          history.pushState(
-            {
-              ...state,
-              idx: ++currentHistoryIndex,
-            } satisfies HistoryState,
-            '',
-            href
-          );
-
-          enqueue(navigationStateRoot, { action: 'push', delta: 1 }, lane);
-        }
-
-        if (hash) {
-          const anchorParam = routes[routes.length - 1]._anchor;
-
-          if (anchorParam) {
-            anchorParam._scrollTo(hash);
-          }
-        } else if (enableScrollToTop == null ? isNewPage : enableScrollToTop) {
-          window.scroll(0, 0);
-        }
-      },
-    } as unknown as ControlInternals);
-  };
-
-  const navigate = (
-    index: number,
-    routes: RouteData[],
-    setComponents: () => void,
-    event: ReactMouseEvent<HTMLAnchorElement, any> | null,
-    params: RouterParamUpdates[] | undefined,
-    replace: boolean | undefined,
-    ignoreBlock: boolean | undefined,
-    enableScrollToTop: boolean | undefined,
-    enableScrollRestoration: boolean | undefined,
-    onClick:
-      | ((event: ReactMouseEvent<HTMLAnchorElement, any>) => void)
-      | undefined,
-    hash?: Hash
-  ) => {
-    if (event) {
-      if (onClick) {
-        onClick(event);
-      }
-
-      const { target } = event.currentTarget;
-
-      if (
-        (target && target != '_self') ||
-        event.button ||
-        event.metaKey ||
-        event.altKey ||
-        event.ctrlKey ||
-        event.shiftKey ||
-        event.defaultPrevented
-      ) {
-        return;
-      }
-
-      event.preventDefault();
-    }
-
-    const fn = () => {
-      const isNewPage = currentRouteIndex != index;
-
-      const lane = getCurrentLane() || getLane(scheduleMicrotask);
-
-      const href = handleHref(routes, params, 0, true, undefined, lane);
-
-      // navigate clears the hash unless one was passed
-      const resolvedHash = resolveHash(routes, hash, lane);
-
-      handleMatching(routes, setComponents, lane);
-
-      currentRouteIndex = index;
-
-      queueHistorySync(
-        lane,
-        routes,
-        index,
-        href,
-        replace,
-        isNewPage,
-        enableScrollToTop,
-        enableScrollRestoration,
-        resolvedHash
-      );
-
-      scheduleFlush(lane, scheduleMicrotask);
-    };
-
-    if (isRouterAvailable || ignoreBlock) {
-      fn();
-    } else {
-      allowNavigate = fn;
-
-      enqueue(isLeaveControl, true);
-    }
-  };
-
-  const findCurrentRouteArr: Array<(path: string, search: string) => boolean> =
-    [];
 
   const isLeaveControl = makePrimitiveInternals(false);
 
@@ -1201,7 +804,11 @@ const createRouter = <Paths extends AnyPaths>(
 
   const routes: Route<any, any, any> = {} as any;
 
-  let { pathname, search } = location;
+  const { search } = location;
+
+  const searchParams = parseSearch(search);
+
+  let { pathname } = location;
 
   let delta = 0;
 
@@ -1219,11 +826,7 @@ const createRouter = <Paths extends AnyPaths>(
 
   let allowNavigate: () => void = noop;
 
-  let maxParamsPerRoute = 0;
-
-  let currentRouteIndex = -1;
-
-  popStateListener = (e) => {
+  const popStateListener = (e: PopStateEvent) => {
     const state = e.state as HistoryState | null;
 
     const nextHistoryIndex = state && state.idx;
@@ -1295,15 +898,10 @@ const createRouter = <Paths extends AnyPaths>(
 
         currentHistoryIndex = nextHistoryIndex;
       } else {
-        // foreign history entry (third-party pushState) — stamp it so
-        // subsequent pops have a usable index; direction is unknowable,
-        // assume forward
-        currentHistoryIndex++;
-
         history.replaceState(
           {
             ...(state as HistoryState),
-            idx: currentHistoryIndex,
+            idx: ++currentHistoryIndex,
           } satisfies HistoryState,
           ''
         );
@@ -1313,39 +911,20 @@ const createRouter = <Paths extends AnyPaths>(
 
       isRouterBlockPopupAllowed = true;
 
-      enqueue(navigationStateRoot, { action: 'pop', delta });
+      navigationStateRoot._enqueueSet({ action: 'pop', delta }, historyLane);
 
-      const { pathname, search } = location;
-
-      for (
-        var i = 0;
-        i < findCurrentRouteArr.length &&
-        findCurrentRouteArr[i](pathname, search);
-        i++
-      ) {}
-
-      currentRouteIndex = i;
+      runHistoryMatching(location.pathname, parseSearch(location.search));
     }
   };
 
-  handleRoutes(
-    routes,
-    navigations,
-    paths,
-    findCurrentRouteArr,
-    routesQueue,
-    EMPTY_ARR,
-    '',
-    0,
-    false
-  );
+  handleRoutes(routes, navigations, paths, EMPTY_ARR, '', 0, false);
 
-  maxParamControlLevel++;
+  updateFinalizer._level = ++maxParamControlLevel;
 
   if (pathname.length > 1 && pathname.at(-1) == '/') {
     pathname = pathname.slice(0, -1);
 
-    history.replaceState(state, '', pathname + search);
+    history.replaceState(state, '', pathname + search + location.hash);
   }
 
   if (!state || state.idx == null) {
@@ -1359,16 +938,13 @@ const createRouter = <Paths extends AnyPaths>(
     currentHistoryIndex = state.idx;
   }
 
-  for (
-    var routeIndex = 0;
-    routeIndex < findCurrentRouteArr.length &&
-    findCurrentRouteArr[routeIndex](pathname, search);
-    routeIndex++
-  ) {}
-
-  currentRouteIndex = routeIndex;
+  runHistoryMatching(pathname, searchParams);
 
   window.addEventListener('popstate', popStateListener);
+
+  if (process.env.NODE_ENV !== 'production') {
+    devPopStateListener = popStateListener;
+  }
 
   return {
     routes: routes as any,

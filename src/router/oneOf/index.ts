@@ -21,37 +21,30 @@ const oneOf = ((param: Record<string, OneOfOptions<string[], true>>) =>
 
     const isCorrectVariant = set.has.bind(set);
 
-    parsers.set(
-      name,
+    parsers[name] =
       optional && defaultValue
         ? (target, key, value) => {
             target[key] = value || defaultValue;
-
-            return !value && !!defaultValue;
           }
-        : simpleParse
-    );
+        : simpleParse;
 
-    stringifies.set(
-      name,
-      optional
-        ? (value, key) => {
-            value ||= defaultValue;
+    stringifies[name] = optional
+      ? (value, key) => {
+          value ||= defaultValue;
 
-            if (value === undefined || isCorrectVariant(value)) {
-              return value;
-            }
-
-            throw new Error(`${key} has incorrect "${value}" variant`);
+          if (value === undefined || isCorrectVariant(value)) {
+            return value;
           }
-        : (value, key) => {
-            if (isCorrectVariant(nonUndefinedIdentity(value, key))) {
-              return value;
-            }
 
-            throw new Error(`${key} has incorrect "${value}" variant`);
+          throw new Error(`${key} has incorrect "${value}" variant`);
+        }
+      : (value, key) => {
+          if (isCorrectVariant(nonUndefinedIdentity(value, key))) {
+            return value;
           }
-    );
+
+          throw new Error(`${key} has incorrect "${value}" variant`);
+        };
 
     path.push(name);
 

@@ -1,4 +1,4 @@
-import type { AsyncControl, Control } from '#types';
+import type { AsyncControl } from '#types';
 import handlePath from '#router/internal/handlePath';
 import type {
   CreatePath,
@@ -6,82 +6,28 @@ import type {
   PathParam,
   QueryParam,
   RouteData,
-  RouterContext,
 } from '#router/internal/types';
-import createDerivedControl from '#core/createDerivedControl';
+import createAsyncDerivedControl from '#core/createAsyncDerivedControl';
 import type { PrimitiveControlInternals } from '#internal/types';
-import { EMPTY_OBJECT } from '#router/internal/constants';
+import addToQueue from '#internal/addToQueue';
+import { getCurrentLane } from '#internal/flushQueue';
+import { updateFinalizer } from '#router/internal/state';
 
 const makeControl = (
-  routerContext: RouterContext,
   isMatchedRoot: PrimitiveControlInternals,
-  source: Control,
-  routeData: RouteData
+  source: AsyncControl,
+  routeData: RouteData,
+  strings: Record<string, string | undefined>
 ) =>
-  createDerivedControl(source, (value) => {
+  createAsyncDerivedControl(source, (value) => {
     if (isMatchedRoot._value) {
       const params = {};
 
-      let replaced = false;
+      routeData._extractPathParams(params, strings, value);
 
-      if (
-        routeData._extractPathParams(
-          params,
-          EMPTY_OBJECT,
-          routerContext._path,
-          value
-        )
-      ) {
-        replaced = true;
-      }
+      routeData._extractQueryParams(params, strings, value);
 
-      if (
-        routeData._extractQueryParams(
-          params,
-          EMPTY_OBJECT,
-          routerContext._query,
-          value
-        )
-      ) {
-        replaced = true;
-      }
-
-      if (replaced) {
-        const routes = routerContext._routesQueue[routerContext._currentIndex];
-
-        let path = '';
-
-        let search = '';
-
-        routeData._currentSearch = routeData._handleSearch(
-          params,
-          EMPTY_OBJECT
-        );
-
-        routeData._currentPath = routeData._handlePath(params, EMPTY_OBJECT);
-
-        for (let i = 0; i < routes.length; i++) {
-          const route = routes[i];
-
-          const currentSearch = route._currentSearch;
-
-          path += route._currentPath;
-
-          if (currentSearch) {
-            if (search) {
-              search += '&' + currentSearch;
-            } else {
-              search = '?' + currentSearch;
-            }
-          }
-        }
-
-        history.replaceState(
-          history.state,
-          '',
-          (path || '/') + search + location.hash
-        );
-      }
+      addToQueue(getCurrentLane()!, updateFinalizer);
 
       return params;
     }

@@ -4,8 +4,7 @@ import type {
   PrimitiveControlInternals,
 } from '#internal/types';
 import type { SyncExternalStorage } from '#types';
-import { getCurrentLane, getLane, scheduleFlush } from '#internal/flushQueue';
-import scheduleMicrotask from '#internal/scheduleMicrotask';
+import { getSchedulerLane, scheduleFlush } from '#internal/flushQueue';
 import { INTERNALS, RELOAD } from '#internal/constants';
 
 const initControl = <I extends PrimitiveControlInternals>(
@@ -31,7 +30,7 @@ const initControl = <I extends PrimitiveControlInternals>(
           const self = ref.deref();
 
           if (self) {
-            const lane = getCurrentLane() || getLane(scheduleMicrotask);
+            const lane = getSchedulerLane();
 
             if (isSync || value !== undefined) {
               if (isSync && value === undefined && defaultValue !== undefined) {
@@ -47,7 +46,7 @@ const initControl = <I extends PrimitiveControlInternals>(
               ]._enqueueSet(RELOAD, lane);
             }
 
-            scheduleFlush(lane, scheduleMicrotask);
+            scheduleFlush(lane);
           } else {
             unobserve();
           }

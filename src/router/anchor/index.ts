@@ -1,9 +1,13 @@
-import type { PrimitiveControlInternals } from '#internal/types';
+import type { Lane, PrimitiveControlInternals } from '#internal/types';
 import type { ControlScope, ReadonlyControl } from '#types';
 import makePrimitiveInternals from '#internal/makePrimitiveInternals';
 import createControl from '#core/createControl';
 import setValue from '#core/setValue';
-import { INTERNALS } from '#internal/constants';
+import scheduleMicrotask from '#internal/scheduleMicrotask';
+import { INTERNALS, PASSIVE } from '#internal/constants';
+import { EMPTY_OBJECT } from '#router/internal/constants';
+import enqueue from '#internal/enqueue';
+import removeFromArray from '#internal/removeFromArray';
 
 declare const ANCHOR_IDS: unique symbol;
 
@@ -14,25 +18,16 @@ export type AnchorScrollOptions = ScrollIntoViewOptions & {
   leftOffset?: number;
 };
 
-type Options =
-  | AnchorScrollOptions
-  | ((offsetEl: HTMLElement | null) => AnchorScrollOptions);
+type GetOptions = (offsetEl: HTMLElement | null) => AnchorScrollOptions;
 
-type Enqueue = (
-  internals: Pick<PrimitiveControlInternals, '_enqueueSet'>,
-  value: any,
-  lane?: any
-) => void;
-
-type Entry = { _el: HTMLElement | null; _getOptions: Options | undefined };
+type Entry = {
+  _id: string;
+  _el: HTMLElement;
+};
 
 type Handle = {
   id: string;
   ref(el: HTMLElement | null): void;
-  /** @internal anchor this handle's element is currently bound to */
-  _boundTo?: AnchorParam;
-  /** @internal latest resolver, applied to the live entry */
-  _getOptions?: Options;
 };
 
 // cross-cutting singletons (not per-route state)
@@ -42,35 +37,58 @@ let offsetEl: HTMLElement | null = null;
 
 let isProgrammaticScroll = false;
 
-let programmaticScrollTimer: ReturnType<typeof setTimeout> | undefined;
+const stopScrollSuppression = () => {
+  isProgrammaticScroll = false;
+
+  window.removeEventListener('scrollend', stopScrollSuppression);
+};
 
 const handles = new Map<string, Handle>();
 
-const resolveOptions = (getOptions: Options | undefined) =>
-  typeof getOptions == 'function' ? getOptions(offsetEl) : getOptions;
+const SPY_EVENTS = ['scroll', 'resize', 'orientationchange'] as const;
 
-const doScroll = (el: HTMLElement, getOptions: Options | undefined) => {
-  const options = resolveOptions(getOptions);
+const returnDefaultOptions = () => EMPTY_OBJECT as AnchorScrollOptions;
 
-  isProgrammaticScroll = true;
+const IS_SCROLLEND_AVAILABLE =
+  typeof window != 'undefined' && 'onscrollend' in window;
 
-  clearTimeout(programmaticScrollTimer);
+const doScroll = (el: HTMLElement, getOptions: GetOptions) => {
+  const options = getOptions(offsetEl);
 
-  // spy stays suppressed until the scroll settles, with a timeout fallback
-  programmaticScrollTimer = setTimeout(() => {
-    isProgrammaticScroll = false;
-  }, 1000);
+  // the spy is suppressed until `scrollend` reports the scroll settled;
+  // without the event it just keeps reporting the position — not a big deal
 
-  if (options && (options.topOffset != null || options.leftOffset != null)) {
+  if (IS_SCROLLEND_AVAILABLE) {
+    isProgrammaticScroll = true;
+
+    window.addEventListener('scrollend', stopScrollSuppression, PASSIVE);
+  }
+
+  const x = window.scrollX;
+
+  const y = window.scrollY;
+
+  if (options.topOffset != null || options.leftOffset != null) {
     const rect = el.getBoundingClientRect();
 
     window.scrollTo({
-      top: rect.top + window.scrollY - (options.topOffset || 0),
-      left: rect.left + window.scrollX - (options.leftOffset || 0),
+      top: rect.top + y - (options.topOffset || 0),
+      left: rect.left + x - (options.leftOffset || 0),
       behavior: options.behavior,
     });
   } else {
-    el.scrollIntoView(options || undefined);
+    // an empty dictionary has the same defaults as a bare call
+    el.scrollIntoView(options);
+  }
+
+  // an instant scroll that didn't move fires no events at all — release now
+  // (a plain no-op when nothing was suppressed)
+  if (
+    window.scrollX == x &&
+    window.scrollY == y &&
+    options.behavior != 'smooth'
+  ) {
+    stopScrollSuppression();
   }
 };
 
@@ -82,29 +100,21 @@ export type AnchorParam<Ids extends string = string> = {
   /** @internal hash control internals */
   _hash: PrimitiveControlInternals;
   /** @internal public hash control */
-  _hashControl: ReadonlyControl<string | undefined>;
+  _hashControl: ReadonlyControl<string>;
   /** @internal reactive set of mounted anchor ids */
   _registered: ControlScope<Record<string, true | undefined>>;
-  /** @internal mounted elements by id */
-  _entries: Map<string, Entry>;
+  /** @internal the anchor's scroll-options resolver */
+  _getOptions: GetOptions;
+  /** @internal mounted elements — unordered, the spy works on positions */
+  _entries: Entry[];
   /** @internal pending scroll target awaiting its element */
   _pending?: string;
   /** @internal active scroll-spy teardown */
-  _stopSpy?: () => void;
-  /** @internal commits the resolved hash to the control */
-  _set(hash: string | undefined, enqueue: Enqueue, lane?: any): void;
-  /** @internal current committed hash */
-  _get(): string | undefined;
-  /** @internal commits the URL hash on match (direct on initial match) and scrolls */
-  _commit(
-    urlHash: string | undefined,
-    enqueue: Enqueue,
-    isInitial: boolean
-  ): void;
+  _stopSpy: (() => void) | void;
   /** @internal becomes the active anchor; starts the spy when tracking */
-  _activate(enqueue: Enqueue): void;
+  _activate(): void;
   /** @internal clears the hash, stops the spy, releases active */
-  _clear(enqueue: Enqueue, lane?: any): void;
+  _clear(lane: Lane): void;
   /** @internal scrolls to the id, or defers until its element mounts */
   _scrollTo(id: string): void;
   [ANCHOR_IDS]: Ids;
@@ -122,218 +132,221 @@ export type AnchorParam<Ids extends string = string> = {
  * lets a navigation header show only mounted sections and highlight the
  * active one.
  *
+ * {@link getOptions} sets the anchor's scroll options — an object, or a
+ * resolver receiving the offset element (see `registerAnchorOffset`) called
+ * at scroll time.
+ *
  * @example
  * ```ts
- * createPath('search', query({ q: true }), anchor<'filters' | 'results'>(true))
+ * createPath(
+ *   'search',
+ *   query({ q: true }),
+ *   anchor<'filters' | 'results'>(true, (header) => ({
+ *     topOffset: header ? header.offsetHeight : 0,
+ *   }))
+ * )
  * ```
  */
+function anchorActivate(this: AnchorParam) {
+  activeAnchor = this;
+
+  if (this._trackScroll && !this._stopSpy) {
+    const { _hash, _entries, _getOptions } = this;
+
+    let rafId: number | undefined;
+
+    const compute = () => {
+      rafId = undefined;
+
+      if (isProgrammaticScroll) {
+        return;
+      }
+
+      const line = _getOptions(offsetEl).topOffset || 0;
+
+      let nextId: string | undefined;
+
+      let bestTop = -Infinity;
+
+      let maxTop = -Infinity;
+
+      let lowestId: string | undefined;
+
+      for (let i = 0; i < _entries.length; i++) {
+        const entry = _entries[i];
+
+        const top = entry._el.getBoundingClientRect().top - line;
+
+        if (top > maxTop) {
+          maxTop = top;
+
+          lowestId = entry._id;
+        }
+
+        // the element closest above the line (top <= 0)
+        if (top <= 1 && top > bestTop) {
+          bestTop = top;
+
+          nextId = entry._id;
+        }
+      }
+
+      // scrolled to the bottom — activate the lowest section
+      if (
+        window.innerHeight + window.scrollY >=
+        document.documentElement.scrollHeight - 1
+      ) {
+        nextId = lowestId;
+      }
+
+      const next = nextId || '';
+
+      // compare against the control itself — it may have been set externally
+      // (navigation, updateParams) since the last spy pass
+      if (next !== _hash._value) {
+        enqueue(_hash, next);
+      }
+    };
+
+    const onScroll = () => {
+      rafId ??= requestAnimationFrame(compute);
+    };
+
+    for (let i = 0; i < SPY_EVENTS.length; i++) {
+      window.addEventListener(SPY_EVENTS[i], onScroll, PASSIVE);
+    }
+
+    this._stopSpy = () => {
+      // an unknown handle is a spec-level no-op
+      cancelAnimationFrame(rafId!);
+
+      for (let i = 0; i < SPY_EVENTS.length; i++) {
+        window.removeEventListener(SPY_EVENTS[i], onScroll);
+      }
+    };
+  }
+}
+
+function anchorClear(this: AnchorParam, lane: Lane) {
+  this._hash._enqueueSet('', lane);
+
+  this._stopSpy &&= this._stopSpy();
+
+  if (activeAnchor == this) {
+    activeAnchor = undefined;
+  }
+}
+
+function anchorScrollTo(this: AnchorParam, id: string) {
+  const entries = this._entries;
+
+  for (let i = 0; i < entries.length; i++) {
+    if (entries[i]._id == id) {
+      this._pending = undefined;
+
+      doScroll(entries[i]._el, this._getOptions);
+
+      return;
+    }
+  }
+
+  this._pending = id;
+}
+
 const anchor = <Ids extends string = string>(
-  trackScroll?: boolean
+  trackScroll?: boolean,
+  getOptions?: AnchorScrollOptions | GetOptions
 ): AnchorParam<Ids> => {
-  const hash = makePrimitiveInternals(undefined);
+  const hash = makePrimitiveInternals('');
 
-  const entries = new Map<string, Entry>();
+  if (typeof getOptions == 'object') {
+    const options = getOptions;
 
-  const self = {
+    getOptions = () => options;
+  }
+
+  return {
     _anchor: true,
     _trackScroll: trackScroll || false,
     _hash: hash,
-    _hashControl: { [INTERNALS]: hash } as ReadonlyControl<string | undefined>,
+    _hashControl: { [INTERNALS]: hash } as ReadonlyControl<string>,
     _registered: createControl<Record<string, true | undefined>>({}),
-    _entries: entries,
-    _set(value, enqueue, lane) {
-      enqueue(hash, value, lane);
-    },
-    _get: () => hash._value,
-    _commit(urlHash, enqueue, isInitial) {
-      if (isInitial) {
-        // runs before any listener can exist — write directly
-        hash._value = urlHash;
-      } else {
-        enqueue(hash, urlHash);
-      }
-
-      if (urlHash !== undefined) {
-        self._scrollTo(urlHash);
-      }
-    },
-    _activate(enqueue) {
-      activeAnchor = self;
-
-      if (self._trackScroll && !self._stopSpy) {
-        let rafId: number | undefined;
-
-        let activeId: string | undefined;
-
-        const compute = () => {
-          rafId = undefined;
-
-          if (isProgrammaticScroll) {
-            return;
-          }
-
-          let nextId: string | undefined;
-
-          let bestTop = -Infinity;
-
-          let lastId: string | undefined;
-
-          entries.forEach((entry, id) => {
-            const el = entry._el;
-
-            if (el) {
-              lastId = id;
-
-              const options = resolveOptions(entry._getOptions);
-
-              const line = (options && options.topOffset) || 0;
-
-              const top = el.getBoundingClientRect().top - line;
-
-              // last element whose line has been crossed (top <= 0)
-              if (top <= 1 && top > bestTop) {
-                bestTop = top;
-
-                nextId = id;
-              }
-            }
-          });
-
-          // scrolled to the bottom — activate the last section
-          if (
-            window.innerHeight + window.scrollY >=
-            document.documentElement.scrollHeight - 1
-          ) {
-            nextId = lastId;
-          }
-
-          if (nextId != activeId) {
-            activeId = nextId;
-
-            enqueue(hash, nextId);
-          }
-        };
-
-        const onScroll = () => {
-          if (rafId == null) {
-            rafId = requestAnimationFrame(compute);
-          }
-        };
-
-        window.addEventListener('scroll', onScroll, { passive: true });
-
-        window.addEventListener('resize', onScroll, { passive: true });
-
-        self._stopSpy = () => {
-          if (rafId != null) {
-            cancelAnimationFrame(rafId);
-          }
-
-          window.removeEventListener('scroll', onScroll);
-
-          window.removeEventListener('resize', onScroll);
-        };
-      }
-    },
-    _clear(enqueue, lane) {
-      enqueue(hash, undefined, lane);
-
-      if (self._stopSpy) {
-        self._stopSpy();
-
-        self._stopSpy = undefined;
-      }
-
-      if (activeAnchor == self) {
-        activeAnchor = undefined;
-      }
-    },
-    _scrollTo(id) {
-      const entry = entries.get(id);
-
-      if (entry && entry._el) {
-        self._pending = undefined;
-
-        doScroll(entry._el, entry._getOptions);
-      } else {
-        self._pending = id;
-      }
-    },
-  } as AnchorParam<Ids>;
-
-  return self;
+    _getOptions: (getOptions as GetOptions) || returnDefaultOptions,
+    _entries: [],
+    _pending: undefined,
+    _stopSpy: undefined,
+    _activate: anchorActivate,
+    _clear: anchorClear,
+    _scrollTo: anchorScrollTo,
+    // the ANCHOR_IDS brand is phantom
+  } as Partial<AnchorParam<Ids>> as AnchorParam<Ids>;
 };
 
 /**
  * Registers an element as the scroll target for the given anchor {@link id} —
- * spread the result onto the element. The optional {@link getOptions} either
- * is the scroll options or a resolver receiving the registered offset element
- * (see {@link registerAnchorOffset}), called at scroll time. Targets the
- * currently matched anchor route.
+ * spread the result onto the element. Targets the currently matched anchor
+ * route; scroll options come from the route's `anchor()` declaration.
  *
  * Returns a cached handle per id, safe to call during render.
  *
  * @example
  * ```tsx
- * <section {...registerAnchor('filters', (header) => ({ topOffset: header?.offsetHeight }))} />
+ * <section {...registerAnchor('filters')} />
  * ```
  */
-export const registerAnchor = (id: string, getOptions?: Options) => {
+export const registerAnchor = (id: string) => {
   let handle = handles.get(id);
 
-  if (handle) {
-    handle._getOptions = getOptions;
+  if (!handle) {
+    /** anchor this handle's element is currently bound to */
+    let boundTo: AnchorParam | undefined;
 
-    const boundTo = handle._boundTo;
+    /** the handle's entry in the bound anchor's `_entries` */
+    let entry: Entry | undefined;
 
-    if (boundTo) {
-      const entry = boundTo._entries.get(id);
-
-      if (entry) {
-        entry._getOptions = getOptions;
-      }
-    }
-  } else {
     handles.set(
       id,
       (handle = {
         id,
-        _getOptions: getOptions,
         ref(el) {
           if (el) {
             const anchorParam = activeAnchor;
 
             if (anchorParam) {
-              handle!._boundTo = anchorParam;
+              boundTo = anchorParam;
 
-              anchorParam._entries.set(id, {
-                _el: el,
-                _getOptions: handle!._getOptions,
-              });
+              if (entry) {
+                entry._el = el;
+              } else {
+                anchorParam._entries.push((entry = { _id: id, _el: el }));
+              }
 
               setValue(anchorParam._registered[id], true);
 
               if (anchorParam._pending == id) {
-                anchorParam._scrollTo(id);
+                // wait out the current commit — the offset element's ref
+                // (e.g. a sticky header) may attach after this one, and the
+                // deferred scroll must measure it
+                scheduleMicrotask(() => {
+                  if (anchorParam._pending == id) {
+                    anchorParam._scrollTo(id);
+                  }
+                });
               }
             }
-          } else {
-            const boundTo = handle!._boundTo;
+          } else if (boundTo) {
+            removeFromArray(boundTo._entries, entry!);
 
-            if (boundTo) {
-              boundTo._entries.delete(id);
+            setValue(boundTo._registered[id], undefined);
 
-              setValue(boundTo._registered[id], undefined);
-
-              handle!._boundTo = undefined;
-            }
+            boundTo = entry = undefined;
           }
         },
       })
     );
   }
 
-  return { id: handle.id, ref: handle.ref };
+  return handle;
 };
 
 /**

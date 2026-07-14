@@ -26,18 +26,13 @@ const array = ((param: Record<string, ArrayOptions<any> | false>) =>
 
     const stringify = options && options.stringify;
 
-    parsers.set(name, (target, key, value) => {
+    parsers[name] = (target, key, value) => {
       target[key] = parse(parseArray(value!));
+    };
 
-      return false;
-    });
-
-    stringifies.set(
-      name,
-      stringify
-        ? (value, name) => stringifyArray(stringify(value), name)
-        : stringifyArray
-    );
+    stringifies[name] = stringify
+      ? (value, name) => stringifyArray(stringify(value), name)
+      : stringifyArray;
 
     path.push(name);
 

@@ -1,72 +1,47 @@
-import { useLayoutEffect, useReducer, type MouseEvent } from 'react';
+import type { MouseEvent } from 'react';
 
-import type { RouteData } from '#router/internal/types';
+import type { Hash } from '#router/internal/types';
 import type { NavigationTarget } from '#router/types';
-import type {
-  AsyncControlInternals,
-  ControlInternals,
-  ErrorControlInternals,
-  PrimitiveControlInternals,
-} from '#internal/types';
-import { INTERNALS } from '#internal/constants';
 import {
   ROUTE_METHODS,
   ROUTE_PARAMS,
   ROUTE_HASH,
 } from '#router/internal/constants';
-import forceRerenderReducer from '#internal/forceRerenderReducer';
+import navigateRoute from '#router/internal/navigateRoute';
+import useForceRerender from '#internal/useForceRerender';
+import useNoopLayoutEffect from '#internal/useNoopLayoutEffect';
+import useInternalsValue from '#internal/useInternalsValue';
 
-const useInternalsSubscription = (
-  forceRerender: () => void,
-  internals: ControlInternals | PrimitiveControlInternals | undefined,
-  errorInternals?: ErrorControlInternals<any>
-) => {
-  useLayoutEffect(() => {
-    if (internals) {
-      internals._attach(internals, forceRerender, false);
-
-      if (errorInternals) {
-        errorInternals._attach(errorInternals, forceRerender, false);
-      }
-
-      return () => {
-        internals._detach(internals, forceRerender, false);
-
-        if (errorInternals) {
-          errorInternals._detach(errorInternals, forceRerender, false);
-        }
-      };
-    }
-  }, [internals]);
+export type LinkOptions = {
+  /** The navigation target. */
+  to: NavigationTarget<true>;
+  /** Runs before the navigation on every click. */
+  onClick?(e: MouseEvent<HTMLAnchorElement, any>): void;
+  /**
+   * Computes `isMatched`, subscribing to changes: `true` — whether the
+   * target route is matched; `'exact'` — whether it's matched with exactly
+   * the params and anchor this link navigates to.
+   */
+  trackMatch?: boolean | 'exact';
+  ignoreBlock?: boolean;
+  scrollToTop?: boolean;
+  scrollRestoration?: boolean;
 };
 
-function useParams(this: () => void, route: RouteData) {
-  const root = route._params!;
-
-  let errorInternals: ErrorControlInternals<any> | undefined;
-
-  if ('_errorControl' in root) {
-    errorInternals = (root as AsyncControlInternals)._errorControl[INTERNALS];
-
-    if (errorInternals._value !== undefined) {
-      throw errorInternals._value;
-    }
-  }
-
-  useInternalsSubscription(this, root, errorInternals);
-}
-
-function useNoop(this: () => void) {
-  useInternalsSubscription(this, undefined);
-}
-
-export type Link = {
+export type LinkHandle = {
   /** The current href of the target route. */
   href: string;
   /** Click handler performing the navigation (respects modifier keys, `target`, `event.preventDefault()`). */
   onClick(e: MouseEvent<HTMLAnchorElement, any>): void;
-  /** Whether the target route is currently matched. */
+  /**
+   * Whether the target route is currently matched (exactly, with
+   * `trackMatch: 'exact'`); always `false` when `trackMatch` isn't set.
+   */
   isMatched: boolean;
+};
+
+const throwNotMatched = () => {
+  throw new Error('route not mounted');
 };
 
 /**
@@ -75,46 +50,184 @@ export type Link = {
  *
  * @example
  * ```tsx
- * const { href, onClick, isMatched } = useLink(navigationRoot.home());
+ * const { href, onClick, isMatched } = useLink({ to: navigationRoot.home() });
  *
  * return <a href={href} onClick={onClick} className={isMatched ? 'active' : ''} />;
  * ```
  */
-const useLink = (
-  to: NavigationTarget<true>,
-  ignoreBlock?: boolean,
-  scrollToTop?: boolean,
-  scrollRestoration?: boolean,
-  onClick?: (e: MouseEvent<HTMLAnchorElement, any>) => void
-): Link => {
-  const forceRerender = useReducer(forceRerenderReducer, 0)[1];
+const useLink = ({
+  to,
+  trackMatch,
+  ignoreBlock,
+  scrollToTop,
+  scrollRestoration,
+  onClick,
+}: LinkOptions): LinkHandle => {
+  const forceRerender = useForceRerender();
 
   const methods = to[ROUTE_METHODS];
 
-  const params = to[ROUTE_PARAMS];
+  const updatedParams = to[ROUTE_PARAMS];
 
-  const isMatchedInternals = methods._isMatched;
+  const routes = methods._routes();
 
-  useInternalsSubscription(forceRerender, isMatchedInternals);
+  const routesCount = routes.length;
+
+  const updatedParamsCount = updatedParams ? updatedParams.length : 0;
+
+  const lastRoute = routes[routesCount - 1];
+
+  const anchorParam = lastRoute._anchor;
+
+  const exact = trackMatch === 'exact';
+
+  const isMatched =
+    !!trackMatch && useInternalsValue(lastRoute._isMatched, forceRerender);
+
+  let exactMatch = exact && isMatched;
+
+  let path = '';
+
+  let search = '';
+
+  let anchorValue = '';
+
+  let updatedIndex = 0;
+
+  let hash: Hash | undefined;
+
+  for (
+    let i = 0, updatedParam = updatedParams && updatedParams[0];
+    i < routesCount;
+    i++
+  ) {
+    const route = routes[i];
+
+    let pathChunk: string;
+
+    let searchChunk: string;
+
+    if (updatedIndex < updatedParamsCount && updatedParam!._route == route) {
+      const { _params } = updatedParam!;
+
+      const params =
+        typeof _params == 'function'
+          ? _params(useInternalsValue(route._params!, forceRerender))
+          : (exact
+              ? useInternalsValue(route._params!, forceRerender)
+              : useNoopLayoutEffect(),
+            _params);
+
+      pathChunk = route._handlePath(params, true, true);
+
+      searchChunk = route._handleSearch(params, true, true);
+
+      if (
+        exactMatch &&
+        (pathChunk != route._currentPath || searchChunk != route._currentSearch)
+      ) {
+        exactMatch = false;
+      }
+
+      updatedParam = updatedParams![++updatedIndex];
+    } else {
+      const paramsRoot = route._params;
+
+      if (paramsRoot) {
+        if (!route._isMatched._value) {
+          throwNotMatched();
+        }
+
+        useInternalsValue(paramsRoot, forceRerender);
+      } else {
+        useNoopLayoutEffect();
+      }
+
+      pathChunk = route._currentPath;
+
+      searchChunk = route._currentSearch;
+    }
+
+    if (pathChunk) {
+      path += pathChunk;
+    }
+
+    if (searchChunk) {
+      if (search) {
+        search += '&' + searchChunk;
+      } else {
+        search = '?' + searchChunk;
+      }
+    }
+  }
+
+  if (updatedIndex != updatedParamsCount) {
+    throwNotMatched();
+  }
+
+  for (let maxControls = methods._maxSlots() - routesCount; maxControls--; ) {
+    useNoopLayoutEffect();
+  }
+
+  if (anchorParam) {
+    hash = to[ROUTE_HASH];
+
+    if (hash === undefined) {
+      anchorValue = useInternalsValue(anchorParam._hash, forceRerender);
+    } else if (exact) {
+      const prev = useInternalsValue(anchorParam._hash, forceRerender);
+
+      const next = typeof hash == 'function' ? hash(prev) : hash;
+
+      if (exactMatch && prev !== next) {
+        exactMatch = false;
+      }
+
+      anchorValue = next;
+    } else {
+      anchorValue =
+        typeof hash == 'function'
+          ? hash(useInternalsValue(anchorParam._hash, forceRerender))
+          : (useNoopLayoutEffect(), hash);
+    }
+  } else {
+    useNoopLayoutEffect();
+  }
 
   return {
-    href: methods._useHref(
-      params,
-      useParams.bind(forceRerender),
-      useNoop.bind(forceRerender)
-    ),
-    onClick: (e) =>
-      methods._navigate(
-        e,
-        params,
+    href: (path || '/') + search + (anchorValue && '#' + anchorValue),
+    onClick(event) {
+      if (onClick) {
+        onClick(event);
+      }
+
+      const { target } = event.currentTarget;
+
+      if (
+        (target && target != '_self') ||
+        event.button ||
+        event.metaKey ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.defaultPrevented
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+
+      navigateRoute(
+        methods,
+        updatedParams,
         false,
         ignoreBlock,
         scrollToTop,
         scrollRestoration,
-        onClick,
-        to[ROUTE_HASH]
-      ),
-    isMatched: isMatchedInternals._value as boolean,
+        hash
+      );
+    },
+    isMatched: exact ? exactMatch : isMatched,
   };
 };
 

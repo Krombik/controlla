@@ -6,6 +6,7 @@ import type {
   Notifier,
 } from '#internal/types';
 import type { Scheduler } from '#types';
+import scheduleMicrotask from '#internal/scheduleMicrotask';
 
 let currentLane: Lane | null = null;
 
@@ -111,7 +112,9 @@ const flushQueue = (
   }
 };
 
-export const scheduleFlush = (lane: Lane, scheduler: Scheduler) => {
+export const scheduleFlush = (lane: Lane) => {
+  const scheduler = lane._scheduler;
+
   if (lane._canScheduleFlush) {
     lane._canScheduleFlush = false;
 
@@ -146,48 +149,49 @@ export const scheduleFlush = (lane: Lane, scheduler: Scheduler) => {
     });
   }
 
-  if ('_debounce' in scheduler) {
+  if ('_debounce' in scheduler && lane !== currentLane) {
     scheduler._debounce!();
   }
 };
 
 export const getCurrentLane = () => currentLane;
 
+export const getSchedulerLane = (scheduler?: Scheduler) =>
+  ((!scheduler || scheduler._sync) && currentLane) ||
+  getLane(scheduler || scheduleMicrotask);
+
 export const getLane = (scheduler: Scheduler) => {
-  const lane = flushLanes.get(scheduler);
+  let lane = flushLanes.get(scheduler);
 
-  if (lane) {
-    return lane;
-  }
-
-  const newLane: Lane = {
-    _beforeFlushHooks: [],
-    _canScheduleFlush: true,
-    _patchByControl: new Map(),
-    _pendingControlLevels: [],
-    _minPendingLevel: Infinity,
-    _maxPendingLevel: 0,
-    _routerNavigation: undefined,
-    _routerParamUpdates: [],
-    _routerReplace: true,
-  };
-
-  flushLanes.set(scheduler, newLane);
-
-  return newLane;
+  return (
+    lane ||
+      flushLanes.set(
+        scheduler,
+        (lane = {
+          _scheduler: scheduler,
+          _beforeFlushHooks: [],
+          _canScheduleFlush: true,
+          _patchByControl: new Map(),
+          _pendingControlLevels: [],
+          _minPendingLevel: Infinity,
+          _maxPendingLevel: 0,
+        })
+      ),
+    lane
+  );
 };
 
 export const addListener = <T extends Function>(
   internals: Listeners<T>,
   listener: T
 ) => {
-  if (internals._listeners != iteratedListeners) {
+  const listeners = internals._listeners;
+
+  if (listeners != iteratedListeners) {
     const indexMap = internals._indexMap;
 
     if (indexMap) {
       if (!indexMap.has(listener)) {
-        const listeners = internals._listeners;
-
         indexMap.set(listener, listeners.length);
 
         listeners.push(listener);
@@ -206,12 +210,12 @@ export const removeListener = <T extends Function>(
   internals: Listeners<T>,
   listener: T
 ) => {
-  if (internals._listeners != iteratedListeners) {
+  const listeners = internals._listeners;
+
+  if (listeners != iteratedListeners) {
     const indexMap = internals._indexMap!;
 
     if (indexMap.has(listener)) {
-      const listeners = internals._listeners;
-
       const last = listeners.pop()!;
 
       if (last != listener) {

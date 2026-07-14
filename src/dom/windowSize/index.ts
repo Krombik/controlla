@@ -1,5 +1,6 @@
 import createControl from '#core/createControl';
 import setValue from '#core/setValue';
+import { PASSIVE } from '#internal/constants';
 import type { ControlScope, ReadonlyControlScope } from '#types';
 
 type Size = { width: number; height: number };
@@ -18,11 +19,9 @@ if (typeof window !== 'undefined') {
     setValue($windowSize, getSize(), requestAnimationFrame);
   };
 
-  const options: AddEventListenerOptions = { passive: true };
+  window.addEventListener('resize', listener, PASSIVE);
 
-  window.addEventListener('resize', listener, options);
-
-  window.addEventListener('orientationchange', listener, options);
+  window.addEventListener('orientationchange', listener, PASSIVE);
 }
 
 /**

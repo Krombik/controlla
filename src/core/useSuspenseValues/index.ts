@@ -1,17 +1,17 @@
-import { useContext, useLayoutEffect, useReducer } from 'react';
+import { useContext, useLayoutEffect } from 'react';
 import type {
   Falsy,
   ExtractValues,
   ExtractErrors,
   AsyncControlInternals,
 } from '#internal/types';
-import noop from 'lodash.noop';
 import ErrorBoundaryContext from '#internal/ErrorBoundaryContext';
 import suspendOnControl from '#internal/suspendOnControl';
 import SuspenseContext from '#internal/SuspenseContext';
 import { INTERNALS } from '#internal/constants';
 import type { ReadonlyAsyncControl } from '#types';
-import forceRerenderReducer from '#internal/forceRerenderReducer';
+import useForceRerender from '#internal/useForceRerender';
+import useNoopLayoutEffect from '#internal/useNoopLayoutEffect';
 
 /**
  * Returns the values of multiple async {@link controls}, suspending until all
@@ -58,7 +58,7 @@ const useSuspenseValues = <
 
   const suspenseCtx = useContext(SuspenseContext);
 
-  const forceRerender = useReducer(forceRerenderReducer, 0)[1];
+  const forceRerender = useForceRerender();
 
   for (let i = 0; i < l; i++) {
     const control = controls[i];
@@ -103,7 +103,7 @@ const useSuspenseValues = <
           errors![i] = err;
         }
       } else {
-        useLayoutEffect(noop, [0]);
+        useNoopLayoutEffect();
 
         const unloadedControls: AsyncControlInternals[] = [root];
 
@@ -124,7 +124,7 @@ const useSuspenseValues = <
             }
           }
 
-          useLayoutEffect(noop, [0]);
+          useNoopLayoutEffect();
         }
 
         throw new Promise<void>((res) => {
@@ -150,7 +150,7 @@ const useSuspenseValues = <
         });
       }
     } else {
-      useLayoutEffect(noop, [0]);
+      useNoopLayoutEffect();
     }
   }
 

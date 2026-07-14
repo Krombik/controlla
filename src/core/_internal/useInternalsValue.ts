@@ -1,8 +1,11 @@
 import { useLayoutEffect } from 'react';
-import type { ControlInternalsChild } from '#internal/types';
+import type {
+  ControlInternalsChild,
+  PrimitiveControlInternals,
+} from '#internal/types';
 
 const useInternalsValue = (
-  internals: ControlInternalsChild,
+  internals: ControlInternalsChild | PrimitiveControlInternals,
   forceRerender: () => void
 ) => {
   const value = internals._get();
