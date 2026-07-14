@@ -1,16 +1,16 @@
 import type {
   Hash,
-  RouterUpdateEntry,
+  RouterWrite,
   RouteMethods,
-  RouterParamUpdates,
+  TargetParams,
 } from '#router/internal/types';
 import { getSchedulerLane, scheduleFlush } from '#internal/flushQueue';
 import queueRouterPatch from '#router/internal/queueRouterPatch';
-import { clearUpdateLanes, paramsHandler } from '#router/internal/state';
+import { clearWrites, paramsHandler } from '#router/internal/state';
 
 const navigateRoute = (
   methods: RouteMethods,
-  params: RouterParamUpdates[] | undefined,
+  params: TargetParams[] | undefined,
   hash: Hash | undefined,
   replace: boolean,
   ignoreBlock: boolean | undefined,
@@ -23,7 +23,7 @@ const navigateRoute = (
 
   const updatesCount = params ? params.length : 0;
 
-  const updates: RouterUpdateEntry[] = [];
+  const updates: RouterWrite[] = [];
 
   const toAnchor = hash !== undefined;
 
@@ -72,7 +72,7 @@ const navigateRoute = (
 
   const lane = getSchedulerLane();
 
-  clearUpdateLanes();
+  clearWrites();
 
   paramsHandler._hasNavigation = true;
 
@@ -82,12 +82,12 @@ const navigateRoute = (
       _isNewPage: false,
       _isHistoryEvent: false,
       _ignoreBlock: ignoreBlock,
-      _enableScrollToTop: enableScrollToTop,
-      _enableScrollRestoration: enableScrollRestoration,
+      _scrollToTop: enableScrollToTop,
+      _scrollRestoration: enableScrollRestoration,
     },
-    _paramUpdates: updates,
+    _updates: updates,
     _replace: replace,
-    _toAnchor: toAnchor,
+    _hashChanged: toAnchor,
   });
 
   scheduleFlush(lane);

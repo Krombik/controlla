@@ -26,9 +26,9 @@ const makeControl = (
 
       routeData._initial = false;
 
-      routeData._extractPathParams(params, strings, value, initial);
+      routeData._parsePath(params, strings, value, initial);
 
-      routeData._extractQueryParams(params, strings, value, initial);
+      routeData._parseQuery(params, strings, value, initial);
 
       getRouterPatch(getCurrentLane()!);
 

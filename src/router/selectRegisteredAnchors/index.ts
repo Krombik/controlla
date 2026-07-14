@@ -1,4 +1,4 @@
-import type { RouteIsPage } from '#router/internal/types';
+import type { PageRoute } from '#router/internal/types';
 import type { ReadonlyControlScope } from '#types';
 
 /**
@@ -13,7 +13,7 @@ import type { ReadonlyControlScope } from '#types';
  * ```
  */
 const selectRegisteredAnchors = <Ids extends string>(
-  route: RouteIsPage<true>
+  route: PageRoute<true>
 ): ReadonlyControlScope<Record<Ids, true | undefined>> => {
   const anchorParam = route._anchor;
 

@@ -41,7 +41,7 @@ export type Route<
     : Paths & 1 extends 0
       ? boolean
       : false,
-> = RouteIsPage<IsPage> &
+> = PageRoute<IsPage> &
   RouteParams<Params, Async> &
   ([Paths] extends [never]
     ? {}
@@ -97,7 +97,7 @@ export type Router<Paths extends AnyPaths> = {
 
 declare const IS_PAGE_MARKER: unique symbol;
 
-export type RouteIsPage<IsPage extends boolean> = {
+export type PageRoute<IsPage extends boolean> = {
   [IS_PAGE_MARKER]: IsPage;
   /** @internal */
   _register(setComponents: () => void): void;
@@ -147,7 +147,7 @@ export type Navigation<
       : {}
     : {
         (
-          params: ProcessParams<
+          params: ValueOrUpdater<
             Partial<
               Pick<
                 Params,
@@ -161,7 +161,7 @@ export type Navigation<
         ): Children & NavigationTarget<true>;
       });
 
-export type Hash = ProcessParams<string>;
+export type Hash = ValueOrUpdater<string>;
 
 export type NavigationState = {
   readonly action: 'none' | 'push' | 'replace' | 'pop';
@@ -173,23 +173,23 @@ export type RouteData = {
   readonly _params: ControlInternals | DerivedControlInternals | null;
   readonly _isMatched: PrimitiveControlInternals;
   readonly _anchor: AnchorParam | undefined;
-  _handlePath<T extends boolean>(
+  _buildPath<T extends boolean>(
     params: Record<string, any>,
     typed: boolean,
     peek: T
   ): T extends true ? string : void;
-  _handleSearch<T extends boolean>(
+  _buildSearch<T extends boolean>(
     params: Record<string, any>,
     typed: boolean,
     peek: T
   ): T extends true ? string : void;
-  _extractPathParams(
+  _parsePath(
     target: Record<string, any>,
     stringifiedParams: Record<string, string | undefined>,
     source: any,
     initial: boolean
   ): void;
-  _extractQueryParams(
+  _parseQuery(
     target: Record<string, any>,
     stringifiedParams: Record<string, string | undefined>,
     source: any,
@@ -202,13 +202,13 @@ export type RouteData = {
 };
 
 /** @internal a navigation target's param entry */
-export type RouterParamUpdates = {
+export type TargetParams = {
+  readonly _params: ValueOrUpdater<Record<string, any>>;
   readonly _route: RouteData;
-  readonly _params: ProcessParams<Record<string, any>>;
 };
 
 /** @internal accumulated router write (`setValue`/`replaceValue` on a params control) */
-export type RouterUpdateEntry = {
+export type RouterWrite = {
   /** the written control's root */
   readonly _root: RouterControlRoot;
   /** the value as resolved at call time */
@@ -230,8 +230,8 @@ export type RouterNavigation = {
    * allowed re-dispatch passes the still-enabled blocker
    */
   _ignoreBlock: boolean | undefined;
-  readonly _enableScrollToTop: boolean | undefined;
-  readonly _enableScrollRestoration: boolean | undefined;
+  readonly _scrollToTop: boolean | undefined;
+  readonly _scrollRestoration: boolean | undefined;
 };
 
 /**
@@ -241,23 +241,23 @@ export type RouterNavigation = {
  * the finalizer once committed
  */
 export type RouterPatch = {
-  /** navigation payload — wins over accumulated `_paramUpdates` */
+  /** navigation payload — wins over accumulated `_updates` */
   _navigation: RouterNavigation | undefined;
   /** accumulated `setValue`/`replaceValue` entries */
-  readonly _paramUpdates: RouterUpdateEntry[];
+  readonly _updates: RouterWrite[];
   /** history replace — only if every update in the flush asked for it (navigate overwrites) */
   _replace: boolean;
   /**
    * a hash write happened — the finalizer takes the URL hash from the anchor
    * control and scrolls to it when it's non-empty
    */
-  _toAnchor: boolean;
+  _hashChanged: boolean;
 };
 
 /** @internal the params handler node carrying the router's cross-lane state */
-export type RouterPendingItem = PendingItem & {
+export type RouterHandler = PendingItem & {
   /** lanes holding accumulated `setValue`/`replaceValue` patches */
-  readonly _updateLanes: Lane[];
+  readonly _lanes: Lane[];
   /** a navigation is queued and not yet committed — updates are ignored */
   _hasNavigation: boolean;
 };
@@ -288,7 +288,7 @@ export type RouteMethods = {
   _setComponents(): void;
 };
 
-export type ProcessParams<O, P = never> = O | ((prev: O | P) => O);
+export type ValueOrUpdater<O, P = never> = O | ((prev: O | P) => O);
 
 declare const ROUTE_MARKER: unique symbol;
 
@@ -299,14 +299,14 @@ declare const QUERY_PARAM_MARKER: unique symbol;
 declare const SOURCE: unique symbol;
 
 /** @internal */
-export type HandleParse = (
+export type ParamParser = (
   value: string | undefined,
   source: any,
   initial: boolean
 ) => any;
 
 /** @internal */
-export type HandleStringify = (value: any, key: string) => string;
+export type ParamStringifier = (value: any, key: string) => string;
 
 type ParamData<V, O extends boolean> = [V, O];
 
@@ -316,8 +316,8 @@ export type QueryParam<
 > = {
   /** @internal */
   (
-    parsers: Record<string, HandleParse>,
-    stringifies: Record<string, HandleStringify>,
+    parsers: Record<string, ParamParser>,
+    stringifies: Record<string, ParamStringifier>,
     queryParams: string[]
   ): void;
   [QUERY_PARAM_MARKER]: P;
@@ -330,8 +330,8 @@ export type PathParam<
 > = {
   /** @internal */
   (
-    parsers: Record<string, HandleParse>,
-    stringifies: Record<string, HandleStringify>,
+    parsers: Record<string, ParamParser>,
+    stringifies: Record<string, ParamStringifier>,
     pathParams: string[],
     path: string[]
   ): string;
@@ -500,9 +500,9 @@ export interface Path<
     strings: Record<string, string | undefined>
   ): ControlScope | AsyncControlScope;
   /** @internal */
-  readonly _parsers: Record<string, HandleParse>;
+  readonly _parsers: Record<string, ParamParser>;
   /** @internal */
-  readonly _stringifies: Record<string, HandleStringify>;
+  readonly _stringifies: Record<string, ParamStringifier>;
 }
 
 export type AnyPaths = Record<string, Path<any, {}, any, boolean>>;

@@ -1,12 +1,12 @@
 import noop from 'lodash.noop';
 
 import type { Lane, Mutable, PendingItem } from '#internal/types';
-import type { RouterPatch, RouterPendingItem } from '#router/internal/types';
+import type { RouterPatch, RouterHandler } from '#router/internal/types';
 import queueRouterPatch from '#router/internal/queueRouterPatch';
 
-export const paramsHandler: RouterPendingItem = {
+export const paramsHandler: RouterHandler = {
   _level: 0,
-  _updateLanes: [],
+  _lanes: [],
   _hasNavigation: false,
   _commitSet: noop,
 };
@@ -21,20 +21,20 @@ export const getRouterPatch = (lane: Lane) => {
       lane,
       (patch = {
         _navigation: undefined,
-        _paramUpdates: [],
+        _updates: [],
         _replace: true,
-        _toAnchor: false,
+        _hashChanged: false,
       })
     );
 
-    paramsHandler._updateLanes.push(lane);
+    paramsHandler._lanes.push(lane);
   }
 
   return patch;
 };
 
-export const clearUpdateLanes = () => {
-  const lanes = paramsHandler._updateLanes;
+export const clearWrites = () => {
+  const lanes = paramsHandler._lanes;
 
   for (let i = 0; i < lanes.length; i++) {
     lanes[i]._patchByControl.delete(paramsHandler);
@@ -43,7 +43,7 @@ export const clearUpdateLanes = () => {
   lanes.length = 0;
 };
 
-export const updateFinalizer: Mutable<PendingItem> = {
+export const urlFinalizer: Mutable<PendingItem> = {
   _level: 0,
   _commitSet: noop,
 };
