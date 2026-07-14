@@ -1,23 +1,16 @@
 import identity from 'lodash.identity';
 import createPath from '#router/createPath';
-import type {
-  AnyPaths,
-  Path,
-  PathParam,
-  UnionToIntersection,
-} from '#router/internal/types';
+import type { AnyPaths, Path, PathParam } from '#router/internal/types';
 import NOT_FOUND from '#router/NOT_FOUND';
 
 const NAME = 'notFoundPath';
 
 const notFoundPath = createPath(((parsers, stringifies, pathParams, path) => {
-  parsers.set(NAME, (target, key, value) => {
+  parsers[NAME] = (target, key, value) => {
     target[key] = value || '';
+  };
 
-    return false;
-  });
-
-  stringifies.set(NAME, identity);
+  stringifies[NAME] = identity;
 
   path.push(NAME);
 
@@ -28,7 +21,7 @@ const notFoundPath = createPath(((parsers, stringifies, pathParams, path) => {
 
 const withNotFound = <Paths extends AnyPaths>(
   paths: Paths
-): UnionToIntersection<Paths> & {
+): Paths & {
   [NOT_FOUND]: Path<never, { [NAME]: string }>;
 } =>
   ({

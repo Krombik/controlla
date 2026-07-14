@@ -5,33 +5,13 @@ import type {
   Listeners,
 } from '#internal/types';
 import scheduleMicrotask from '#internal/scheduleMicrotask';
-import {
-  addListener,
-  getCurrentLane,
-  getLane,
-  notify,
-  removeListener,
-  scheduleFlush,
-} from '#internal/flushQueue';
+import { addListener, notify, removeListener } from '#internal/flushQueue';
 import { EMPTY_ARR, SILENT_RELOAD, INTERNALS } from '#internal/constants';
+import enqueue from '#internal/enqueue';
 
 const visibilityChangeQueue: AsyncControlInternals[] = [];
 
 const visibilityChangeIndexMap = new Map<AsyncControlInternals, number>();
-
-const triggerSilentReload = (internals: AsyncControlInternals) => {
-  const currLine = getCurrentLane();
-
-  if (currLine) {
-    internals._enqueueSet(SILENT_RELOAD, currLine, undefined);
-  } else {
-    const lane = getLane(scheduleMicrotask);
-
-    internals._enqueueSet(SILENT_RELOAD, lane, undefined);
-
-    scheduleFlush(lane, scheduleMicrotask);
-  }
-};
 
 const visibilityChangeListener = () => {
   if (!document.hidden) {
@@ -44,7 +24,7 @@ const visibilityChangeListener = () => {
         source._loadedAt &&
         source._source.reloadOnFocus! + source._loadedAt < Date.now()
       ) {
-        triggerSilentReload(internals);
+        enqueue(internals, SILENT_RELOAD);
       }
     }
   }
@@ -81,17 +61,14 @@ export const triggerLoad = (internals: AsyncControlInternals) => {
           endLoad(internals);
         }
 
-        internals._enqueueSet(value, getLane(scheduler || scheduleMicrotask));
+        enqueue(internals, value, scheduler);
 
         return !isLoaded;
       },
       setError(value, scheduler) {
         endLoad(internals);
 
-        internals._errorControl[INTERNALS]._enqueueSet(
-          value,
-          getLane(scheduler || scheduleMicrotask)
-        );
+        enqueue(internals._errorControl[INTERNALS], value, scheduler);
       },
       stillLoading: () => !data._loadedAt,
       getValue: () => internals._get(),
@@ -182,7 +159,7 @@ const attachLoad = (control: AsyncControlInternals) => {
       data._source.reloadIfStale &&
       data._loadedAt + data._source.reloadIfStale < Date.now()
     ) {
-      triggerSilentReload(control);
+      enqueue(control, SILENT_RELOAD);
     }
 
     if (data._source.reloadOnFocus) {

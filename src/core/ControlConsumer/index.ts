@@ -1,9 +1,9 @@
-import { type ReactNode, useReducer } from 'react';
+import type { ReactNode } from 'react';
 import type { ReadonlyAsyncControl, ReadonlyControl } from '#types';
 import type useValue from '#core/useValue';
 import { INTERNALS } from '#internal/constants';
 import type { RenderablePrimitives } from '#internal/types';
-import forceRerenderReducer from '#internal/forceRerenderReducer';
+import useForceRerender from '#internal/useForceRerender';
 import useInternalsValue from '#internal/useInternalsValue';
 
 type RenderProps<S extends ReadonlyControl> = {
@@ -20,7 +20,7 @@ type RenderProps<S extends ReadonlyControl> = {
 };
 
 type TruthyGateProps = {
-  control: ReadonlyControl<boolean | RenderablePrimitives>;
+  control: ReadonlyControl<RenderablePrimitives>;
   children: ReactNode;
   render?: never;
 };
@@ -37,10 +37,7 @@ const ControlConsumer = ((
     | TruthyGateProps
     | PrimitiveDisplayProps
 ) => {
-  const value = useInternalsValue(
-    props.control[INTERNALS],
-    useReducer(forceRerenderReducer, 0)[1]
-  );
+  const value = useInternalsValue(props.control[INTERNALS], useForceRerender());
 
   return 'render' in props
     ? props.render!(value)

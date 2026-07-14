@@ -1,9 +1,9 @@
-import forceRerenderReducer from '#internal/forceRerenderReducer';
+import useForceRerender from '#internal/useForceRerender';
 import type { ControlInternalsChild } from '#internal/types';
 import { INTERNALS } from '#internal/constants';
 import type { ReadonlyAsyncControl, ReadonlyControl } from '#types';
 import noop from 'lodash.noop';
-import { useLayoutEffect, useReducer, useRef } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 
 /**
  * Returns the current values of a dynamic list of same-typed
@@ -36,7 +36,7 @@ const useInfiniteValues = <C extends ReadonlyControl>(
 
   const internals = Array<ControlInternalsChild>(controlsCount);
 
-  const forceRerender = useReducer(forceRerenderReducer, 0)[1];
+  const forceRerender = useForceRerender();
 
   const handleSubscriptionsRef =
     useRef<(internals: ControlInternalsChild[]) => void>(noop);

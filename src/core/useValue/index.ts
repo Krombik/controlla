@@ -1,23 +1,22 @@
-import { useLayoutEffect, useReducer } from 'react';
 import type { Falsy } from '#internal/types';
-import noop from 'lodash.noop';
 import { INTERNALS } from '#internal/constants';
 import type {
   AsyncControl,
   ReadonlyAsyncControl,
   ReadonlyControl,
 } from '#types';
-import forceRerenderReducer from '#internal/forceRerenderReducer';
+import useForceRerender from '#internal/useForceRerender';
+import useNoopLayoutEffect from '#internal/useNoopLayoutEffect';
 import useInternalsValue from '#internal/useInternalsValue';
 
 const useValue = ((control: AsyncControl | Falsy) => {
-  const forceRerender = useReducer(forceRerenderReducer, 0)[1];
+  const forceRerender = useForceRerender();
 
   if (control) {
     return useInternalsValue(control[INTERNALS], forceRerender);
   }
 
-  useLayoutEffect(noop, [0]);
+  useNoopLayoutEffect();
 }) as {
   /**
    * Returns the current value of the given {@link control}, rerendering the
@@ -34,7 +33,7 @@ const useValue = ((control: AsyncControl | Falsy) => {
     control: S
   ): S extends ReadonlyControl<infer K>
     ? K | (S extends ReadonlyAsyncControl ? undefined : never)
-    : never;
+    : undefined;
 };
 
 export default useValue;

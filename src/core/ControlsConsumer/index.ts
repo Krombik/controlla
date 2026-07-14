@@ -1,9 +1,9 @@
-import { type ReactNode, useLayoutEffect, useReducer } from 'react';
+import type { ReactNode } from 'react';
 import type { ReadonlyAsyncControl, ReadonlyControl } from '#types';
 import { INTERNALS } from '#internal/constants';
 import type { Falsy } from '#internal/types';
-import noop from 'lodash.noop';
-import forceRerenderReducer from '#internal/forceRerenderReducer';
+import useForceRerender from '#internal/useForceRerender';
+import useNoopLayoutEffect from '#internal/useNoopLayoutEffect';
 import useInternalsValue from '#internal/useInternalsValue';
 
 type Props<C extends Array<ReadonlyControl | Falsy>> = {
@@ -48,7 +48,7 @@ const ControlsConsumer: {
    */
   <C extends Array<ReadonlyControl | Falsy>>(props: Props<C>): ReactNode;
 } = (props: Props<Array<ReadonlyControl | Falsy>>) => {
-  const forceRerender = useReducer(forceRerenderReducer, 0)[1];
+  const forceRerender = useForceRerender();
 
   const controls = props.controls;
 
@@ -61,7 +61,7 @@ const ControlsConsumer: {
 
     values[i] = control
       ? useInternalsValue(control[INTERNALS], forceRerender)
-      : useLayoutEffect(noop, [0]);
+      : useNoopLayoutEffect();
   }
 
   return props.render(...values);

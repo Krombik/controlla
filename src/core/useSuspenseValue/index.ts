@@ -1,12 +1,12 @@
-import { useContext, useLayoutEffect, useReducer } from 'react';
+import { useContext, useLayoutEffect } from 'react';
 import type { Falsy } from '#internal/types';
 import ErrorBoundaryContext from '#internal/ErrorBoundaryContext';
 import SuspenseContext from '#internal/SuspenseContext';
 import suspendOnControl from '#internal/suspendOnControl';
-import noop from 'lodash.noop';
 import { INTERNALS } from '#internal/constants';
 import type { ReadonlyAsyncControl } from '#types';
-import forceRerenderReducer from '#internal/forceRerenderReducer';
+import useForceRerender from '#internal/useForceRerender';
+import useNoopLayoutEffect from '#internal/useNoopLayoutEffect';
 
 const useSuspenseValue: {
   /**
@@ -32,13 +32,15 @@ const useSuspenseValue: {
     ? SafeReturn extends false
       ? T
       : Readonly<[value: T, error: undefined] | [value: undefined, error: E]>
-    : undefined;
+    : SafeReturn extends false
+      ? undefined
+      : Readonly<[value: undefined, error: undefined]>;
 } = (control, safeReturn) => {
   const errorBoundaryCtx = useContext(ErrorBoundaryContext);
 
   const suspenseCtx = useContext(SuspenseContext);
 
-  const forceRerender = useReducer(forceRerenderReducer, 0)[1];
+  const forceRerender = useForceRerender();
 
   if (control) {
     const internals = control[INTERNALS];
@@ -80,7 +82,11 @@ const useSuspenseValue: {
     throw suspendOnControl(root, errorBoundaryCtx, suspenseCtx);
   }
 
-  useLayoutEffect(noop, [0]);
+  useNoopLayoutEffect();
+
+  if (safeReturn) {
+    return [undefined, undefined];
+  }
 };
 
 export default useSuspenseValue;

@@ -38,12 +38,16 @@ const query = ((
         optional = options;
       }
 
-      parsers.set(
+      parsers[name] = handleParse(
         name,
-        handleParse(name, optional, parse, isValid, defaultValue, fallbackValue)
+        optional,
+        parse,
+        isValid,
+        defaultValue,
+        fallbackValue
       );
 
-      stringifies.set(name, handleStringify(stringify, optional, defaultValue));
+      stringifies[name] = handleStringify(stringify, optional, defaultValue);
 
       queryParams.push(name);
     }

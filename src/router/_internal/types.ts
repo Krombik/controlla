@@ -1,28 +1,21 @@
-import type { MouseEvent as ReactMouseEvent } from 'react';
 import type { ROUTE_HASH, ROUTE_PARAMS } from '#router/internal/constants';
 import type {
   AsyncControlScope,
   Control,
   ControlScope,
-  ReadonlyAsyncControlScope,
   ReadonlyControl,
   ReadonlyControlScope,
-  Scheduler,
 } from '#types';
 import type {
   ControlInternals,
   AsyncControlInternals,
+  Lane,
+  PendingItem,
   PrimitiveControlInternals,
-  ChildControlNode,
 } from '#internal/types';
 import type { NavigationTarget } from '#router/types';
 import type { AnchorParam } from '#router/anchor';
-
-export type UnionToIntersection<U> = (
-  U extends any ? (x: U) => void : never
-) extends (x: infer R) => void
-  ? Required<R>
-  : never;
+import type { DerivedControlInternals } from '#internal/derivedControlUtils';
 
 export type IsUnion<T, U = T> = T extends any
   ? // isUnion check
@@ -66,7 +59,7 @@ export type Route<
       }) &
   ([Anchor] extends [never]
     ? {}
-    : { [ROUTE_HASH]: ReadonlyControl<Anchor | undefined> }) &
+    : { [ROUTE_HASH]: ReadonlyControl<Anchor | ''> }) &
   ReadonlyControl<boolean>;
 
 export type Router<Paths extends AnyPaths> = {
@@ -169,7 +162,7 @@ export type Navigation<
         ): Children & NavigationTarget<true>;
       });
 
-export type Hash = ProcessParams<string | undefined>;
+export type Hash = ProcessParams<string>;
 
 export type NavigationState = {
   readonly action: 'none' | 'push' | 'replace' | 'pop';
@@ -177,26 +170,10 @@ export type NavigationState = {
 };
 
 /** @internal */
-export type ParamsUpdatedData = {
-  readonly _route: RouteData;
-  readonly _params: ProcessParams<Record<string, any>>;
-};
-
-type RouterParamsRoot = (ControlInternals | AsyncControlInternals) & {
-  readonly _route: RouteData;
-};
-
-/** @internal */
 export type RouteData = {
-  readonly _selfIndex: number;
-  readonly _params: ControlInternals | AsyncControlInternals | null;
-  readonly _source:
-    | ChildControlNode<ControlInternals>
-    | PrimitiveControlInternals
-    | undefined;
+  readonly _params: ControlInternals | DerivedControlInternals | null;
   readonly _isMatched: PrimitiveControlInternals;
   readonly _anchor: AnchorParam | undefined;
-  readonly _pathParamsCount: number;
   _handlePath<T extends boolean>(
     params: Record<string, any>,
     typed: boolean,
@@ -209,16 +186,16 @@ export type RouteData = {
   ): T extends true ? string : void;
   _extractPathParams(
     target: Record<string, any>,
-    stringifiedParams: Record<string, string>,
+    stringifiedParams: Record<string, string | undefined>,
     source: any
-  ): boolean;
+  ): void;
   _extractQueryParams(
     target: Record<string, any>,
-    stringifiedParams: Record<string, string>,
+    stringifiedParams: Record<string, string | undefined>,
     source: any
-  ): boolean;
-  readonly _currentPath: string;
-  readonly _currentSearch: string;
+  ): void;
+  _currentPath: string;
+  _currentSearch: string;
 };
 
 /** @internal */
@@ -227,24 +204,83 @@ export type RouterParamUpdates = {
   readonly _params: ProcessParams<Record<string, any>>;
 };
 
+/** @internal `updateParams` entry resolved to a concrete params object */
+export type ResolvedParamUpdate = {
+  readonly _route: RouteData;
+  readonly _params: Record<string, any>;
+};
+
+/** @internal `navigate` payload stored in the lane — wins over accumulated `updateParams` */
+export type RouterNavigation = {
+  /** updates resolved at call time — applied even if a route unmatched since */
+  readonly _updates: ResolvedParamUpdate[];
+  /** the navigation target — its chain, queue index and page setter */
+  readonly _methods: RouteMethods;
+  /** stamped by the params handler when the chain changes */
+  _isNewPage: boolean;
+  /** popstate/init matching — skips the `navigationState` write */
+  readonly _isHistoryEvent: boolean;
+  /**
+   * skips the navigation blocker; stamped when the payload is parked so the
+   * allowed re-dispatch passes the still-enabled blocker
+   */
+  _ignoreBlock: boolean | undefined;
+  readonly _enableScrollToTop: boolean | undefined;
+  readonly _enableScrollRestoration: boolean | undefined;
+};
+
+/** @internal anchor update stored in the patch; `undefined` = keep current, no scroll */
+export type RouterHash = string | ((prev: string) => string) | undefined;
+
+/**
+ * @internal the params handler's pending patch in a lane's `_patchByControl`
+ * — `updateParams` accumulates one per lane (each scheduler commits its own
+ * batch), a navigation patch always lives in the microtask lane; handed to
+ * the finalizer once committed
+ */
+export type RouterPatch = {
+  /** navigation payload — wins over accumulated `_paramUpdates` */
+  _navigation: RouterNavigation | undefined;
+  /** accumulated `updateParams` entries */
+  readonly _paramUpdates: RouterParamUpdates[];
+  /** history replace — only if every update in the flush asked for it (navigate overwrites) */
+  _replace: boolean;
+  /** anchor to commit on finalize; `undefined` = keep current, no scroll */
+  _hash: RouterHash;
+};
+
+/** @internal the params handler node carrying the router's cross-lane state */
+export type RouterPendingItem = PendingItem & {
+  /** lanes holding accumulated `updateParams` patches */
+  _updateLanes: Lane[];
+  /** a navigation is queued and not yet committed — updates are ignored */
+  _hasNavigation: boolean;
+  /** the lane holding the pending navigation patch */
+  _navLane: Lane | undefined;
+};
+
+/** @internal a control root wired to the router via `_route` */
+export type RouterControlRoot = (
+  | ControlInternals
+  | AsyncControlInternals
+  | PrimitiveControlInternals
+) & {
+  _route?: RouteData;
+};
+
 /** @internal */
 export type RouteMethods = {
-  _useHref(
-    params: RouterParamUpdates[] | undefined,
-    useParams: (route: RouteData) => void,
-    useNoop: () => void
-  ): string;
-  _navigate(
-    event: ReactMouseEvent<HTMLAnchorElement, any> | null,
-    params?: RouterParamUpdates[],
-    replace?: boolean,
-    ignoreBlock?: boolean,
-    enableScrollToTop?: boolean,
-    enableScrollRestoration?: boolean,
-    onClick?: (event: ReactMouseEvent<HTMLAnchorElement, any>) => void,
-    hash?: Hash
-  ): void;
-  readonly _isMatched: PrimitiveControlInternals;
+  /** the target's current route chain */
+  _routes(): RouteData[];
+  /** `useLink`'s hook-slot budget — the length of the longest route chain */
+  _maxSlots(): number;
+  /**
+   * the chain's index in the router's queue; `-1` for current-chain targets
+   * (never read — their chain diff is empty)
+   */
+  _index: number;
+  /** the leaf page's component setter (`noop` until the page registers) */
+  _setComponents(): void;
 };
 
 export type ProcessParams<O, P = never> = O | ((prev: O | P) => O);
@@ -263,7 +299,7 @@ export type HandleParse = (
   key: string,
   value: string | undefined,
   source: any
-) => boolean;
+) => void;
 
 /** @internal */
 export type HandleStringify = (value: any, key: string) => string;
@@ -276,8 +312,8 @@ export type QueryParam<
 > = {
   /** @internal */
   (
-    parsers: Map<string, HandleParse>,
-    stringifies: Map<string, HandleStringify>,
+    parsers: Record<string, HandleParse>,
+    stringifies: Record<string, HandleStringify>,
     queryParams: string[]
   ): void;
   [QUERY_PARAM_MARKER]: P;
@@ -290,8 +326,8 @@ export type PathParam<
 > = {
   /** @internal */
   (
-    parsers: Map<string, HandleParse>,
-    stringifies: Map<string, HandleStringify>,
+    parsers: Record<string, HandleParse>,
+    stringifies: Record<string, HandleStringify>,
     pathParams: string[],
     path: string[]
   ): string;
@@ -321,15 +357,13 @@ export type CreatePath<Source = never> = {
       [key in keyof P]: ValidatePath<P[key]>;
     }
   ): HandlePath<
-    UnionToIntersection<
-      {
-        [key in keyof P]: P[key] extends PathParam<infer K, Source>
+    {
+      [key in keyof P]: P[key] extends PathParam<infer K, Source>
+        ? K
+        : P[key] extends QueryParam<infer K, Source>
           ? K
-          : P[key] extends QueryParam<infer K, Source>
-            ? K
-            : never;
-      }[number]
-    >,
+          : never;
+    }[number],
     Source
   >;
 
@@ -338,11 +372,9 @@ export type CreatePath<Source = never> = {
       [key in keyof P]: ValidatePath<P[key]>;
     }
   ): HandlePath<
-    UnionToIntersection<
-      {
-        [key in keyof P]: P[key] extends PathParam<infer K, Source> ? K : never;
-      }[number]
-    >,
+    {
+      [key in keyof P]: P[key] extends PathParam<infer K, Source> ? K : never;
+    }[number],
     Source
   >;
 
@@ -356,15 +388,13 @@ export type CreatePath<Source = never> = {
       [key in keyof P]: ValidatePath<P[key]>;
     }
   ): HandlePath<
-    UnionToIntersection<
-      {
-        [key in keyof P]: P[key] extends PathParam<infer K, Source>
+    {
+      [key in keyof P]: P[key] extends PathParam<infer K, Source>
+        ? K
+        : P[key] extends QueryParam<infer K, Source>
           ? K
-          : P[key] extends QueryParam<infer K, Source>
-            ? K
-            : never;
-      }[number]
-    >,
+          : never;
+    }[number],
     Source
   >;
 
@@ -379,15 +409,13 @@ export type CreatePath<Source = never> = {
       [key in keyof P]: ValidatePath<P[key]>;
     }
   ): HandlePath<
-    UnionToIntersection<
-      {
-        [key in keyof P]: P[key] extends PathParam<infer K, Source>
+    {
+      [key in keyof P]: P[key] extends PathParam<infer K, Source>
+        ? K
+        : P[key] extends QueryParam<infer K, Source>
           ? K
-          : P[key] extends QueryParam<infer K, Source>
-            ? K
-            : never;
-      }[number]
-    >,
+          : never;
+    }[number],
     Source,
     FindChildren<P>
   >;
@@ -397,11 +425,9 @@ export type CreatePath<Source = never> = {
       [key in keyof P]: ValidatePath<P[key]>;
     }
   ): HandlePath<
-    UnionToIntersection<
-      {
-        [key in keyof P]: P[key] extends PathParam<infer K, Source> ? K : never;
-      }[number]
-    >,
+    {
+      [key in keyof P]: P[key] extends PathParam<infer K, Source> ? K : never;
+    }[number],
     Source
   >;
 
@@ -415,11 +441,9 @@ export type CreatePath<Source = never> = {
       [key in keyof P]: ValidatePath<P[key]>;
     }
   ): HandlePath<
-    UnionToIntersection<
-      {
-        [key in keyof P]: P[key] extends PathParam<infer K, Source> ? K : never;
-      }[number]
-    >,
+    {
+      [key in keyof P]: P[key] extends PathParam<infer K, Source> ? K : never;
+    }[number],
     Source,
     FindChildren<P>
   >;
@@ -449,13 +473,7 @@ export interface Path<
   Async extends boolean = false,
   Anchor extends string = never,
 > {
-  [ROUTE_MARKER]: [
-    UnionToIntersection<Children>,
-    Params,
-    OptionalParams,
-    Async,
-    Anchor,
-  ];
+  [ROUTE_MARKER]: [Children, Params, OptionalParams, Async, Anchor];
   /** @internal */
   readonly _pathParams: string[];
   /** @internal */
@@ -472,15 +490,15 @@ export interface Path<
   readonly _source: Control | undefined;
   /** @internal */
   _createControlScope(
-    routerContext: RouterContext,
     isMatchedRoot: PrimitiveControlInternals,
     source: Control,
-    routeData: RouteData
+    routeData: RouteData,
+    strings: Record<string, string | undefined>
   ): ControlScope | AsyncControlScope;
   /** @internal */
-  _getParse(key: string): HandleParse;
+  readonly _parsers: Record<string, HandleParse>;
   /** @internal */
-  _getStringify(key: string): (value: any, key: string) => string | undefined;
+  readonly _stringifies: Record<string, HandleStringify>;
 }
 
 export type AnyPaths = Record<string, Path<any, {}, any, boolean>>;
@@ -520,11 +538,3 @@ export type ValidateParams<P> = keyof P extends {
 }[keyof P]
   ? unknown
   : never;
-
-export type RouterContext = {
-  _path: Record<string, string>;
-  _query: Record<string, string>;
-  _hash: string | undefined;
-  readonly _routesQueue: RouteData[][];
-  _currentIndex: number;
-};

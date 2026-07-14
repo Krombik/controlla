@@ -4,6 +4,7 @@ import {
   ROUTE_PARAMS,
   ROUTE_HASH,
 } from '#router/internal/constants';
+import navigateRoute from '#router/internal/navigateRoute';
 
 /**
  * Navigates to the given {@link to target} (pushes a history entry; pass
@@ -17,14 +18,13 @@ const navigate = (
   scrollToTop?: boolean,
   scrollRestoration?: boolean
 ) => {
-  to[ROUTE_METHODS]._navigate(
-    null,
+  navigateRoute(
+    to[ROUTE_METHODS],
     to[ROUTE_PARAMS],
     replace,
     ignoreBlock,
     scrollToTop,
     scrollRestoration,
-    undefined,
     to[ROUTE_HASH]
   );
 };

@@ -24,6 +24,9 @@ const createManualScheduler = (): ManualScheduler => {
     pending = cb;
   }) as ManualScheduler;
 
+  // updates made during a flush join it instead of waiting for `flush`
+  scheduler._sync = true;
+
   scheduler.flush = () => {
     if (pending) {
       pending = pending();

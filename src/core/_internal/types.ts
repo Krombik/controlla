@@ -1,17 +1,11 @@
 import type { PrimitiveOrNested } from 'keyweaver';
 import type { INTERNALS } from '#internal/constants';
-import type {
-  ComponentType,
-  ContextType,
-  JSX,
-  PropsWithChildren,
-  useEffect as _useEffect,
-  useSyncExternalStore as _useSyncExternalStore,
-} from 'react';
+import type { ComponentType, ContextType, JSX, PropsWithChildren } from 'react';
 import type {
   AsyncControlOptions,
   Control,
   ReadonlyAsyncControl,
+  Scheduler,
   SyncExternalStorage,
 } from '#types';
 import type SuspenseContext from '#internal/SuspenseContext';
@@ -20,26 +14,14 @@ import type { PatchType } from '#internal/constants';
 export type PendingItem = Pick<ControlInternals, '_commitSet' | '_level'>;
 
 export type Lane = {
+  /** the scheduler this lane belongs to — the one that flushes it */
+  readonly _scheduler: Scheduler;
   _canScheduleFlush: boolean;
   _minPendingLevel: number;
   _maxPendingLevel: number;
   readonly _patchByControl: Map<PendingItem, any>;
   readonly _beforeFlushHooks: Array<() => void>;
-  readonly _pendingControlLevels: Array<PendingItem>[];
-  //#region router-relative
-  readonly _routerParamUpdates: {
-    readonly _root: PrimitiveControlInternals;
-    readonly _path: string[] | undefined;
-    readonly _value: any;
-  }[];
-  _routerReplace: boolean;
-  _routerNavigation:
-    | {
-        _enableScrollToTop: boolean;
-        _enableScrollRestoration: boolean | undefined;
-      }
-    | undefined;
-  //#endregion
+  readonly _pendingControlLevels: PendingItem[][];
 };
 
 /** @internal */
@@ -261,4 +243,4 @@ export type PendingControl = {
   ): Promise<any>;
 } & AsyncControlInternals;
 
-export type RenderablePrimitives = string | number | null | undefined;
+export type RenderablePrimitives = string | number | null | undefined | boolean;

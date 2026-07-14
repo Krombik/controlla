@@ -2,6 +2,8 @@ export const INTERNALS = Symbol();
 
 export const EMPTY_ARR = [];
 
+export const PASSIVE: AddEventListenerOptions = { passive: true };
+
 export const RELOAD = Symbol();
 
 export const SILENT_RELOAD = Symbol();

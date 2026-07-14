@@ -291,6 +291,11 @@ export type Scheduler = {
   (cb: () => void): any;
   /** @internal */
   _debounce?(): void;
+  /**
+   * @internal a sync scheduler — updates made during a flush join the
+   * flushing lane instead of scheduling their own
+   */
+  _sync?: boolean;
 };
 
 export type RegistryOptions<T = any, Keys extends any[] = any[]> = {

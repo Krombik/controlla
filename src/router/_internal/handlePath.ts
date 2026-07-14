@@ -1,5 +1,3 @@
-import noop from 'lodash.noop';
-import { INTERNALS } from '#internal/constants';
 import type {
   HandleParse,
   HandleStringify,
@@ -7,7 +5,6 @@ import type {
   PathParam,
   QueryParam,
   RouteData,
-  RouterContext,
 } from '#router/internal/types';
 import type { AnchorParam } from '#router/anchor';
 import type { AsyncControl, Control } from '#types';
@@ -36,16 +33,16 @@ const handlePath = (
     | AnchorParam
   >,
   createControlScope: (
-    routerContext: RouterContext,
     isMatchedRoot: PrimitiveControlInternals,
-    source: Control,
-    routeData: RouteData
+    source: AsyncControl,
+    routeData: RouteData,
+    strings: Record<string, string | undefined>
   ) => AsyncControl | Control,
   source?: AsyncControl
 ): Path => {
-  const parsers = new Map<string, HandleParse>();
+  const parsers: Record<string, HandleParse> = {};
 
-  const stringifies = new Map<string, HandleStringify>();
+  const stringifies: Record<string, HandleStringify> = {};
 
   const _path: string[] = [];
 
@@ -61,18 +58,15 @@ const handlePath = (
 
   let regexStr = '';
 
-  // trailing slots, scanned from the end: [...segments, query?, anchor?, children?]
   if (end) {
     let last = path[end - 1];
 
-    if (typeof last == 'object' && !('_anchor' in last)) {
-      children = last as Record<string, Path>;
-
-      last = path[--end - 1];
-    }
-
-    if (end && typeof last == 'object' && '_anchor' in last) {
-      anchorParam = last as AnchorParam;
+    if (typeof last == 'object') {
+      if ((last as AnchorParam)._anchor !== true) {
+        children = last as Record<string, Path>;
+      } else {
+        anchorParam = last as AnchorParam;
+      }
 
       last = path[--end - 1];
     }
@@ -96,13 +90,13 @@ const handlePath = (
   return {
     _regexStr: regexStr,
     _children: children,
-    _getParse: parsers.size ? parsers.get.bind(parsers) : noop,
-    _getStringify: stringifies.size ? stringifies.get.bind(stringifies) : noop,
+    _parsers: parsers,
+    _stringifies: stringifies,
     _pathParams: pathParams,
     _queryParams: queryParams,
     _path,
     _anchor: anchorParam,
-    _source: source && source[INTERNALS],
+    _source: source,
     _createControlScope: createControlScope,
   } as Path;
 };

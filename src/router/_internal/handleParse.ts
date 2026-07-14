@@ -49,7 +49,7 @@ const handleParse = (
       if (isValid(parsed, source)) {
         target[key] = parsed;
 
-        return false;
+        return;
       }
     } catch (error) {
       err = error;
@@ -59,21 +59,15 @@ const handleParse = (
 
     target[key] =
       fallbackValue !== undefined ? fallbackValue : getDefaultValue(source);
-
-    return true;
   };
 
   return optional
     ? (target, key, value, source) => {
         if (value) {
-          return safeParse(target, key, value, source);
+          safeParse(target, key, value, source);
+        } else {
+          target[key] = getDefaultValue(source);
         }
-
-        const defaultValue = getDefaultValue(source);
-
-        target[key] = defaultValue;
-
-        return defaultValue !== undefined;
       }
     : safeParse;
 };

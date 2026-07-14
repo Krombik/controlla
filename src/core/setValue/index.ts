@@ -1,7 +1,6 @@
 import type { AsyncControl, Control, Scheduler } from '#types';
 import { INTERNALS } from '#internal/constants';
-import scheduleMicrotask from '#internal/scheduleMicrotask';
-import { getLane, scheduleFlush } from '#internal/flushQueue';
+import { getSchedulerLane, scheduleFlush } from '#internal/flushQueue';
 
 /**
  * Sets the {@link value} of the given {@link control} — directly or via an
@@ -17,16 +16,16 @@ import { getLane, scheduleFlush } from '#internal/flushQueue';
  * setValue($user.profile.name, 'Jane');   // nested controls are settable too
  * ```
  */
-const setValue = <S extends Control>(
-  control: S,
-  value: S extends Control<infer K>
-    ? K | ((prevValue: K | (S extends AsyncControl ? undefined : never)) => K)
+const setValue = <C extends Control>(
+  control: C,
+  value: C extends Control<infer K>
+    ? K | ((prevValue: K | (C extends AsyncControl ? undefined : never)) => K)
     : never,
-  scheduler: Scheduler = scheduleMicrotask
+  scheduler?: Scheduler
 ) => {
   const internals = control[INTERNALS];
 
-  const lane = getLane(scheduler);
+  const lane = getSchedulerLane(scheduler);
 
   internals._root._enqueueSet(
     typeof value != 'function' ? value : value(internals._get()),
@@ -34,7 +33,7 @@ const setValue = <S extends Control>(
     internals._path
   );
 
-  scheduleFlush(lane, scheduler);
+  scheduleFlush(lane);
 };
 
 export default setValue;
