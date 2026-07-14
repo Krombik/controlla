@@ -67,13 +67,13 @@ const useLink = ({
 
   const methods = to[ROUTE_METHODS];
 
-  const updatedParams = to[ROUTE_PARAMS];
+  const targetParams = to[ROUTE_PARAMS];
 
   const routes = methods._routes();
 
   const routesCount = routes.length;
 
-  const updatedParamsCount = updatedParams ? updatedParams.length : 0;
+  const targetParamsCount = targetParams ? targetParams.length : 0;
 
   const lastRoute = routes[routesCount - 1];
 
@@ -92,12 +92,12 @@ const useLink = ({
 
   let anchorValue = '';
 
-  let updatedIndex = 0;
+  let targetIndex = 0;
 
   let hash: Hash | undefined;
 
   for (
-    let i = 0, updatedParam = updatedParams && updatedParams[0];
+    let i = 0, targetParam = targetParams && targetParams[0];
     i < routesCount;
     i++
   ) {
@@ -107,8 +107,8 @@ const useLink = ({
 
     let searchChunk: string;
 
-    if (updatedIndex < updatedParamsCount && updatedParam!._route == route) {
-      const { _params } = updatedParam!;
+    if (targetIndex < targetParamsCount && targetParam!._route == route) {
+      const { _params } = targetParam!;
 
       const params =
         typeof _params == 'function'
@@ -118,9 +118,9 @@ const useLink = ({
               : useNoopLayoutEffect(),
             _params);
 
-      pathChunk = route._handlePath(params, true, true);
+      pathChunk = route._buildPath(params, true, true);
 
-      searchChunk = route._handleSearch(params, true, true);
+      searchChunk = route._buildSearch(params, true, true);
 
       if (
         exactMatch &&
@@ -129,7 +129,7 @@ const useLink = ({
         exactMatch = false;
       }
 
-      updatedParam = updatedParams![++updatedIndex];
+      targetParam = targetParams![++targetIndex];
     } else {
       const paramsRoot = route._params;
 
@@ -161,11 +161,11 @@ const useLink = ({
     }
   }
 
-  if (updatedIndex != updatedParamsCount) {
+  if (targetIndex != targetParamsCount) {
     throwNotMatched();
   }
 
-  for (let maxControls = methods._maxSlots() - routesCount; maxControls--; ) {
+  for (let fillerCount = methods._maxSlots() - routesCount; fillerCount--; ) {
     useNoopLayoutEffect();
   }
 
@@ -219,7 +219,7 @@ const useLink = ({
 
       navigateRoute(
         methods,
-        updatedParams,
+        targetParams,
         hash,
         false,
         ignoreBlock,

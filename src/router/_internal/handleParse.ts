@@ -1,7 +1,7 @@
 import identity from 'lodash.identity';
 import nonUndefinedIdentity from '#router/internal/nonUndefinedIdentity';
 import alwaysTrue from '#internal/alwaysTrue';
-import type { HandleParse } from '#router/internal/types';
+import type { ParamParser } from '#router/internal/types';
 
 const handleParse = (
   name: string,
@@ -11,7 +11,7 @@ const handleParse = (
   defaultValue: undefined | unknown | ((source: any) => unknown),
   fallbackValue: undefined | unknown | ((source: any) => unknown),
   initialValue: undefined | unknown | ((source: any) => unknown)
-): HandleParse => {
+): ParamParser => {
   if (
     optional &&
     !parse &&
@@ -47,7 +47,7 @@ const handleParse = (
     typeof defaultValue != 'function' ? () => defaultValue : defaultValue
   ) as (source: any) => unknown;
 
-  const safeParse: HandleParse = (value, source) => {
+  const safeParse: ParamParser = (value, source) => {
     let err;
 
     try {

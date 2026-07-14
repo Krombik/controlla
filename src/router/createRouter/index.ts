@@ -1,7 +1,7 @@
 import type {
-  ProcessParams,
+  ValueOrUpdater,
   Hash,
-  HandleParse,
+  ParamParser,
   Navigation,
   RouteData,
   RouteMethods,
@@ -11,7 +11,7 @@ import type {
   NavigationState,
   Route,
   AnyPaths,
-  RouterUpdateEntry,
+  RouterWrite,
 } from '#router/internal/types';
 
 import noop from 'lodash.noop';
@@ -40,10 +40,10 @@ import createManualScheduler from '#scheduler/createManualScheduler';
 import parseSearch from '#router/internal/parseSearch';
 import addToLevel from '#internal/addToLevel';
 import {
-  clearUpdateLanes,
+  clearWrites,
   getRouterPatch,
   paramsHandler,
-  updateFinalizer,
+  urlFinalizer,
 } from '#router/internal/state';
 import replacing from '#internal/replacing';
 import queueRouterPatch from '#router/internal/queueRouterPatch';
@@ -84,16 +84,16 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
       window.removeEventListener('pagehide', devPageHideListener!);
     }
 
-    clearUpdateLanes();
+    clearWrites();
   }
 
   if ('scrollRestoration' in history) {
     history.scrollRestoration = 'manual';
   }
 
-  const routesQueue: RouteData[][] = [];
+  const chains: RouteData[][] = [];
 
-  const findCurrentRouteArr: Array<
+  const matchers: Array<
     (
       path: string,
       searchParams: Record<string, string>,
@@ -101,20 +101,20 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
     ) => boolean
   > = [];
 
-  let currentRouteIndex = -1;
+  let currentChainIndex = -1;
 
   let maxLinkSlots = 0;
 
   const asyncStrings: Record<string, string | undefined> = {};
 
-  const storeAsyncString = (key: string, value: string | undefined) => {
+  const storeAsyncParam = (key: string, value: string | undefined) => {
     asyncStrings[key] = value;
   };
 
   const getMaxLinkSlots = () => maxLinkSlots;
 
   const currentChainMethods: RouteMethods = {
-    _routes: () => routesQueue[currentRouteIndex],
+    _routes: () => chains[currentChainIndex],
     _maxSlots: getMaxLinkSlots,
     _index: -1,
     _setComponents: noop,
@@ -124,15 +124,14 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
   const historyLane = getLane(historyEventScheduler);
 
-  const runHistoryMatching = (
+  const matchLocation = (
     pathname: string,
     searchParams: Record<string, string>,
     initial: boolean
   ) => {
     for (
       let i = 0;
-      i < findCurrentRouteArr.length &&
-      findCurrentRouteArr[i](pathname, searchParams, initial);
+      i < matchers.length && matchers[i](pathname, searchParams, initial);
       i++
     ) {}
 
@@ -141,8 +140,8 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
     historyEventScheduler.flush();
   };
 
-  const makeExtract =
-    (keys: string[], parsers: Record<string, HandleParse>) =>
+  const makeParse =
+    (keys: string[], parsers: Record<string, ParamParser>) =>
     (
       target: Record<string, any>,
       stringifiedParams: Record<string, string | undefined>,
@@ -160,7 +159,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
       }
     };
 
-  const wrapRouterRoot = (
+  const wrapRoot = (
     root: RouterControlRoot,
     route: RouteData,
     isHash: boolean
@@ -175,13 +174,13 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
       if (!paramsHandler._hasNavigation) {
         const patch = getRouterPatch(lane);
 
-        patch._paramUpdates.push({
+        patch._updates.push({
           _root: root,
           _params: value,
           _path: path,
         });
 
-        patch._toAnchor ||= isHash;
+        patch._hashChanged ||= isHash;
 
         patch._replace &&= replacing._value;
       }
@@ -195,20 +194,20 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
     const nav = patch._navigation;
 
-    const updates = patch._paramUpdates;
+    const updates = patch._updates;
 
     const updatesCount = updates.length;
 
     if (nav) {
       paramsHandler._hasNavigation = false;
 
-      if (!isRouterAvailable && !nav._ignoreBlock && !nav._isHistoryEvent) {
+      if (!canNavigate && !nav._ignoreBlock && !nav._isHistoryEvent) {
         nav._ignoreBlock = true;
 
-        allowNavigate = () => {
+        resumeNavigation = () => {
           const nextLane = getSchedulerLane();
 
-          clearUpdateLanes();
+          clearWrites();
 
           paramsHandler._hasNavigation = true;
 
@@ -217,7 +216,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
           scheduleFlush(nextLane);
         };
 
-        isLeaveControl._enqueueSet(true, lane);
+        pendingNavigationRoot._enqueueSet(true, lane);
 
         return;
       }
@@ -231,23 +230,23 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
       const nextAnchor = nextRoutes[nextRoutesCount - 1]._anchor;
 
       const currentRoutes =
-        currentRouteIndex < 0
+        currentChainIndex < 0
           ? (EMPTY_ARR as RouteData[])
-          : routesQueue[currentRouteIndex];
+          : chains[currentChainIndex];
 
       const isNewPage = currentRoutes != nextRoutes;
 
       let u = 0;
 
-      let l = nextRoutesCount;
+      let count = nextRoutesCount;
 
       if (isNewPage) {
         nav._isNewPage = true;
 
         const prevRoutesCount = currentRoutes.length;
 
-        if (prevRoutesCount > l) {
-          l = prevRoutesCount;
+        if (prevRoutesCount > count) {
+          count = prevRoutesCount;
         }
 
         const prevAnchor =
@@ -262,7 +261,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
         }
       }
 
-      for (let i = 0; i < l; i++) {
+      for (let i = 0; i < count; i++) {
         const nextRoute = nextRoutes[i];
 
         if (isNewPage) {
@@ -297,7 +296,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
       }
 
       if (isNewPage) {
-        currentRouteIndex = methods._index;
+        currentChainIndex = methods._index;
       }
 
       if (u < updatesCount) {
@@ -308,7 +307,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
       methods._setComponents();
     } else {
-      removeFromArray(paramsHandler._updateLanes, lane);
+      removeFromArray(paramsHandler._lanes, lane);
 
       for (let i = 0; i < updatesCount; i++) {
         const item = updates[i];
@@ -317,17 +316,17 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
       }
     }
 
-    if (!lane._patchByControl.has(updateFinalizer)) {
-      addToLevel(lane, updateFinalizer);
+    if (!lane._patchByControl.has(urlFinalizer)) {
+      addToLevel(lane, urlFinalizer);
     }
 
-    lane._patchByControl.set(updateFinalizer, patch);
+    lane._patchByControl.set(urlFinalizer, patch);
   };
 
-  updateFinalizer._commitSet = (patch: RouterPatch, lane) => {
+  urlFinalizer._commitSet = (patch: RouterPatch, lane) => {
     const nav = patch._navigation;
 
-    const routes = routesQueue[currentRouteIndex];
+    const routes = chains[currentChainIndex];
 
     let scrollToAnchor = false;
 
@@ -359,10 +358,10 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
     const anchorParam = route!._anchor;
 
-    if (patch._toAnchor || (nav && nav._isNewPage)) {
+    if (patch._hashChanged || (nav && nav._isNewPage)) {
       anchorValue = anchorParam ? anchorParam._hash._value : '';
 
-      scrollToAnchor = patch._toAnchor && !!anchorValue;
+      scrollToAnchor = patch._hashChanged && !!anchorValue;
 
       path += anchorValue && '#' + anchorValue;
     } else {
@@ -384,9 +383,9 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
       } else {
         if (
           nav &&
-          (nav._enableScrollRestoration == null
+          (nav._scrollRestoration == null
             ? nav._isNewPage
-            : nav._enableScrollRestoration)
+            : nav._scrollRestoration)
         ) {
           saveScroll(state);
         }
@@ -408,7 +407,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
       anchorParam!._scrollTo(anchorValue);
     } else if (
       nav &&
-      (nav._enableScrollToTop == null ? nav._isNewPage : nav._enableScrollToTop)
+      (nav._scrollToTop == null ? nav._isNewPage : nav._scrollToTop)
     ) {
       window.scroll(0, 0);
     }
@@ -416,7 +415,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
   let maxParamControlLevel = 0;
 
-  const handleRoutes = (
+  const buildRoutes = (
     routes: Route<any, any, any>,
     navigations: Record<string, Navigation<AnyPaths, any>>,
     paths: AnyPaths,
@@ -451,27 +450,27 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
       const queryParamsCount = _queryParams.length;
 
-      const l = _path.length;
+      const segmentsCount = _path.length;
 
       const isMatchedRoot = makePrimitiveInternals(false);
 
       const regexStr =
         parentRegexStr + (pathParamsCount ? `(${_regexStr})` : _regexStr);
 
-      const storeString: typeof storeAsyncString = _source
-        ? storeAsyncString
+      const storeString: typeof storeAsyncParam = _source
+        ? storeAsyncParam
         : noop;
 
       const routeData: RouteData = {
-        _currentPath: pathParamsCount || !l ? '' : _path[0],
+        _currentPath: pathParamsCount || !segmentsCount ? '' : _path[0],
         _currentSearch: '',
-        _handlePath: pathParamsCount
+        _buildPath: pathParamsCount
           ? (params, typed, peek) => {
-              const store: typeof storeAsyncString = peek ? noop : storeString;
+              const store: typeof storeAsyncParam = peek ? noop : storeString;
 
               let str = '';
 
-              for (let i = 0; i < l; i++) {
+              for (let i = 0; i < segmentsCount; i++) {
                 const item = _path[i];
 
                 if (item[0] == '/') {
@@ -498,9 +497,9 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
               (routeData as Mutable<RouteData>)._currentPath = str;
             }
           : (noop as any),
-        _handleSearch: queryParamsCount
+        _buildSearch: queryParamsCount
           ? (params, typed, peek) => {
-              const store: typeof storeAsyncString = peek ? noop : storeString;
+              const store: typeof storeAsyncParam = peek ? noop : storeString;
 
               let search = '';
 
@@ -531,11 +530,9 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
               (routeData as Mutable<RouteData>)._currentSearch = search;
             }
           : (noop as any),
-        _extractPathParams: pathParamsCount
-          ? makeExtract(_pathParams, _parsers)
-          : noop,
-        _extractQueryParams: queryParamsCount
-          ? makeExtract(_queryParams, _parsers)
+        _parsePath: pathParamsCount ? makeParse(_pathParams, _parsers) : noop,
+        _parseQuery: queryParamsCount
+          ? makeParse(_queryParams, _parsers)
           : noop,
         _isMatched: isMatchedRoot,
         _anchor: _anchor,
@@ -564,13 +561,13 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
         (paramsRoot as RouterControlRoot)._route = routeData;
 
-        wrapRouterRoot(paramsRoot, routeData, false);
+        wrapRoot(paramsRoot, routeData, false);
 
         paramsRoot._setExternal = (value) => {
           if (value !== undefined) {
-            routeData._handlePath(value, true, false);
+            routeData._buildPath(value, true, false);
 
-            routeData._handleSearch(value, true, false);
+            routeData._buildSearch(value, true, false);
           }
         };
 
@@ -582,14 +579,14 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
       if (_anchor) {
         (_anchor._hash as RouterControlRoot)._route = routeData;
 
-        wrapRouterRoot(_anchor._hash as RouterControlRoot, routeData, true);
+        wrapRoot(_anchor._hash as RouterControlRoot, routeData, true);
       }
 
       let _paramsCount = paramsCount;
 
       let navigation: (
         this: NavigationTarget<boolean>,
-        params?: ProcessParams<Record<string, any>> | Hash,
+        params?: ValueOrUpdater<Record<string, any>> | Hash,
         hash?: Hash
       ) => NavigationTarget<boolean>;
 
@@ -605,7 +602,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
       if (_children) {
         const childrenNavigation = {};
 
-        handleRoutes(
+        buildRoutes(
           route,
           childrenNavigation,
           _children,
@@ -617,39 +614,44 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
         if (paramsControl) {
           navigation = function (params) {
+            const parentParams = this[ROUTE_PARAMS];
+
             return (
               params !== undefined
                 ? {
                     ...childrenNavigation,
                     [ROUTE_METHODS]: currentChainMethods,
-                    [ROUTE_PARAMS]:
-                      ROUTE_PARAMS in this
-                        ? append(this[ROUTE_PARAMS]!, {
+                    [ROUTE_PARAMS]: parentParams
+                      ? append(parentParams, {
+                          _params: params,
+                          _route: routeData,
+                        })
+                      : [
+                          {
                             _params: params,
                             _route: routeData,
-                          })
-                        : [
-                            {
-                              _params: params,
-                              _route: routeData,
-                            },
-                          ],
+                          },
+                        ],
                   }
-                : ROUTE_PARAMS in this
+                : parentParams
                   ? {
                       ...childrenNavigation,
-                      [ROUTE_PARAMS]: this[ROUTE_PARAMS],
+                      [ROUTE_METHODS]: currentChainMethods,
+                      [ROUTE_PARAMS]: parentParams,
                     }
                   : childrenNavigation
             ) as NavigationTarget<boolean>;
           };
         } else {
           navigation = function () {
+            const parentParams = this[ROUTE_PARAMS];
+
             return (
-              ROUTE_PARAMS in this
+              parentParams
                 ? {
                     ...childrenNavigation,
-                    [ROUTE_PARAMS]: this[ROUTE_PARAMS]!,
+                    [ROUTE_METHODS]: currentChainMethods,
+                    [ROUTE_PARAMS]: parentParams,
                   }
                 : childrenNavigation
             ) as NavigationTarget<boolean>;
@@ -660,7 +662,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
         const testRegex = regex[withPathParams ? 'exec' : 'test'].bind(regex);
 
-        const routeIndex = routesQueue.length;
+        const routeIndex = chains.length;
 
         const methods: RouteMethods = {
           _routes: () => routesData,
@@ -669,12 +671,14 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
           _setComponents: noop,
         };
 
-        const res = {
+        const emptyTarget = {
           [ROUTE_METHODS]: methods,
+          [ROUTE_HASH]: undefined,
+          [ROUTE_PARAMS]: undefined,
         } as NavigationTarget<boolean>;
 
         route._register = (setComponents) => {
-          if (currentRouteIndex == routeIndex) {
+          if (currentChainIndex == routeIndex) {
             setComponents();
           }
 
@@ -685,46 +689,45 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
         navigation = paramsControl
           ? function (params, hash) {
+              const parentParams = this[ROUTE_PARAMS];
+
               return (
                 params !== undefined
                   ? {
                       [ROUTE_METHODS]: methods,
                       [ROUTE_HASH]: hash,
-                      [ROUTE_PARAMS]:
-                        ROUTE_PARAMS in this
-                          ? append(this[ROUTE_PARAMS]!, {
+                      [ROUTE_PARAMS]: parentParams
+                        ? append(parentParams, {
+                            _params: params,
+                            _route: routeData,
+                          })
+                        : [
+                            {
                               _params: params,
                               _route: routeData,
-                            })
-                          : [
-                              {
-                                _params: params,
-                                _route: routeData,
-                              },
-                            ],
+                            },
+                          ],
                     }
-                  : ROUTE_PARAMS in this
+                  : parentParams
                     ? {
                         [ROUTE_METHODS]: methods,
-                        [ROUTE_PARAMS]: this[ROUTE_PARAMS],
+                        [ROUTE_HASH]: undefined,
+                        [ROUTE_PARAMS]: parentParams,
                       }
-                    : res
+                    : emptyTarget
               ) as NavigationTarget<boolean>;
             }
           : function (hash) {
+              const parentParams = this[ROUTE_PARAMS];
+
               return (
-                ROUTE_PARAMS in this
+                parentParams || hash !== undefined
                   ? {
                       [ROUTE_METHODS]: methods,
                       [ROUTE_HASH]: hash as Hash,
-                      [ROUTE_PARAMS]: this[ROUTE_PARAMS]!,
+                      [ROUTE_PARAMS]: parentParams,
                     }
-                  : hash !== undefined
-                    ? ({
-                        [ROUTE_METHODS]: methods,
-                        [ROUTE_HASH]: hash as Hash,
-                      } as NavigationTarget<boolean>)
-                    : res
+                  : emptyTarget
               ) as NavigationTarget<boolean>;
             };
 
@@ -732,10 +735,10 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
           maxLinkSlots = routesData.length;
         }
 
-        routesQueue.push(routesData);
+        chains.push(routesData);
 
-        const queueMatch = (updates: RouterUpdateEntry[], initial: boolean) => {
-          clearUpdateLanes();
+        const queueMatch = (updates: RouterWrite[], initial: boolean) => {
+          clearWrites();
 
           if (_anchor) {
             updates.push({
@@ -751,16 +754,16 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
               _isNewPage: false,
               _isHistoryEvent: true,
               _ignoreBlock: false,
-              _enableScrollToTop: false,
-              _enableScrollRestoration: false,
+              _scrollToTop: false,
+              _scrollRestoration: false,
             },
-            _paramUpdates: updates,
+            _updates: updates,
             _replace: true,
-            _toAnchor: initial,
+            _hashChanged: initial,
           });
         };
 
-        findCurrentRouteArr.push(
+        matchers.push(
           _paramsCount
             ? (path, searchParams, initial) => {
                 const isMatched = testRegex(path);
@@ -770,7 +773,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
                     ? (isMatched as RegExpExecArray).groups!
                     : EMPTY_OBJECT;
 
-                  const updates: RouterUpdateEntry[] = [];
+                  const updates: RouterWrite[] = [];
 
                   for (let i = 0; i < routesData.length; i++) {
                     const route = routesData[i];
@@ -778,9 +781,9 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
                     const paramsControl = route._params;
 
                     if (paramsControl) {
-                      route._handlePath(pathParams, false, false);
+                      route._buildPath(pathParams, false, false);
 
-                      route._handleSearch(searchParams, false, false);
+                      route._buildSearch(searchParams, false, false);
 
                       if ('_equable' in paramsControl) {
                         paramsControl._equable = false;
@@ -792,14 +795,14 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
                         const params = {};
 
                         try {
-                          route._extractPathParams(
+                          route._parsePath(
                             params,
                             pathParams,
                             undefined,
                             initial
                           );
 
-                          route._extractQueryParams(
+                          route._parseQuery(
                             params,
                             searchParams,
                             undefined,
@@ -834,14 +837,14 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
     }
   };
 
-  const isLeaveControl = makePrimitiveInternals(false);
+  const pendingNavigationRoot = makePrimitiveInternals(false);
 
   const navigationStateRoot = makePrimitiveInternals({
     action: 'none',
     delta: 0,
   } satisfies NavigationState);
 
-  const navigationControlState = {
+  const $navigationState = {
     [INTERNALS]: navigationStateRoot,
   } as unknown as Router<any>['navigationState'];
 
@@ -861,33 +864,33 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
   let delta = 0;
 
-  let isPopTriggeredByBlocking = false;
+  let isBlockedPop = false;
 
-  let isRouterBlockPopupAllowed = true;
+  let canBlockPop = true;
 
-  let isPopTriggeredForScrollSave = false;
+  let isScrollSavePop = false;
 
-  let isPopTriggeredByScrollSaving = false;
+  let isScrollRestorePop = false;
 
   let currentHistoryIndex = 0;
 
-  let isRouterAvailable = true;
+  let canNavigate = true;
 
-  let allowNavigate: () => void = noop;
+  let resumeNavigation: () => void = noop;
 
   const popStateListener = (e: PopStateEvent) => {
     const state = e.state as HistoryState | null;
 
     const nextHistoryIndex = state && state.idx;
 
-    if (isPopTriggeredByBlocking) {
-      isPopTriggeredByBlocking = false;
+    if (isBlockedPop) {
+      isBlockedPop = false;
 
-      enqueue(isLeaveControl, true);
-    } else if (isPopTriggeredForScrollSave) {
-      isPopTriggeredForScrollSave = false;
+      enqueue(pendingNavigationRoot, true);
+    } else if (isScrollSavePop) {
+      isScrollSavePop = false;
 
-      isPopTriggeredByScrollSaving = true;
+      isScrollRestorePop = true;
 
       saveScroll(state);
 
@@ -896,14 +899,13 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
       if (nextHistoryIndex != null) {
         const scroll = state && state.scroll;
 
-        isPopTriggeredByBlocking =
-          isRouterBlockPopupAllowed && !isRouterAvailable;
+        isBlockedPop = canBlockPop && !canNavigate;
 
         delta = nextHistoryIndex - currentHistoryIndex;
 
-        if (isPopTriggeredByBlocking) {
-          allowNavigate = () => {
-            isRouterBlockPopupAllowed = false;
+        if (isBlockedPop) {
+          resumeNavigation = () => {
+            canBlockPop = false;
 
             if (scroll) {
               saveScroll(state);
@@ -917,16 +919,16 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
           return;
         }
 
-        isPopTriggeredForScrollSave = !!scroll && !isPopTriggeredByScrollSaving;
+        isScrollSavePop = !!scroll && !isScrollRestorePop;
 
-        if (isPopTriggeredForScrollSave) {
+        if (isScrollSavePop) {
           history.go(-delta);
 
           return;
         }
 
-        if (scroll && isPopTriggeredByScrollSaving) {
-          isPopTriggeredByScrollSaving = false;
+        if (scroll && isScrollRestorePop) {
+          isScrollRestorePop = false;
 
           window.scroll(scroll[0], scroll[1]);
 
@@ -947,21 +949,17 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
         delta = 0;
       }
 
-      isRouterBlockPopupAllowed = true;
+      canBlockPop = true;
 
       navigationStateRoot._enqueueSet({ action: 'pop', delta }, historyLane);
 
-      runHistoryMatching(
-        location.pathname,
-        parseSearch(location.search),
-        false
-      );
+      matchLocation(location.pathname, parseSearch(location.search), false);
     }
   };
 
-  handleRoutes(routes, navigations, paths, EMPTY_ARR, '', 0, false);
+  buildRoutes(routes, navigations, paths, EMPTY_ARR, '', 0, false);
 
-  updateFinalizer._level = ++maxParamControlLevel;
+  urlFinalizer._level = ++maxParamControlLevel;
 
   if (pathname.length > 1 && pathname.at(-1) == '/') {
     pathname = pathname.slice(0, -1);
@@ -986,7 +984,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
     );
   }
 
-  runHistoryMatching(pathname, searchParams, applyInitial);
+  matchLocation(pathname, searchParams, applyInitial);
 
   if (savedScroll) {
     const x = savedScroll[0];
@@ -1039,33 +1037,33 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
   return {
     routes: routes as any,
     navigation: navigations as any,
-    navigationState: navigationControlState,
+    navigationState: $navigationState,
     navigationBlocker: {
       enable() {
-        isRouterAvailable = false;
+        canNavigate = false;
 
         window.addEventListener('beforeunload', beforeUnloadListener);
 
         return this.disable;
       },
       disable() {
-        isRouterAvailable = true;
+        canNavigate = true;
 
         window.removeEventListener('beforeunload', beforeUnloadListener);
       },
       isPendingNavigation: {
-        [INTERNALS]: isLeaveControl,
+        [INTERNALS]: pendingNavigationRoot,
         allow() {
-          enqueue(isLeaveControl, false);
+          enqueue(pendingNavigationRoot, false);
 
-          allowNavigate();
+          resumeNavigation();
 
-          allowNavigate = noop;
+          resumeNavigation = noop;
         },
         deny() {
-          enqueue(isLeaveControl, false);
+          enqueue(pendingNavigationRoot, false);
 
-          allowNavigate = noop;
+          resumeNavigation = noop;
         },
       } as Router<any>['navigationBlocker']['isPendingNavigation'],
     },

@@ -1,6 +1,6 @@
 import type {
-  HandleParse,
-  HandleStringify,
+  ParamParser,
+  ParamStringifier,
   Path,
   PathParam,
   QueryParam,
@@ -40,9 +40,9 @@ const handlePath = (
   ) => AsyncControl | Control,
   source?: AsyncControl
 ): Path => {
-  const parsers: Record<string, HandleParse> = {};
+  const parsers: Record<string, ParamParser> = {};
 
-  const stringifies: Record<string, HandleStringify> = {};
+  const stringifies: Record<string, ParamStringifier> = {};
 
   const _path: string[] = [];
 

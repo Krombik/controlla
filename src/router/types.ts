@@ -3,7 +3,7 @@ import type {
   Hash,
   RouteMethods,
   RouteParams,
-  RouterParamUpdates,
+  TargetParams,
 } from '#router/internal/types';
 import type {
   ROUTE_METHODS,
@@ -17,7 +17,7 @@ export type NavigationTarget<Navigable extends boolean = true> = {
   /** @internal */
   readonly [ROUTE_METHODS]: RouteMethods;
   /** @internal */
-  readonly [ROUTE_PARAMS]?: RouterParamUpdates[];
+  readonly [ROUTE_PARAMS]?: TargetParams[];
   /** @internal */
   readonly [ROUTE_HASH]?: Hash;
   [NAVIGATION_MARKER]: Navigable;

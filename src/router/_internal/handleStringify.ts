@@ -1,12 +1,12 @@
 import identity from 'lodash.identity';
-import type { HandleStringify } from '#router/internal/types';
+import type { ParamStringifier } from '#router/internal/types';
 import nonUndefinedIdentity from '#router/internal/nonUndefinedIdentity';
 
 const handleStringify = (
   stringify: ((value: any) => string) | undefined,
   optional: boolean | undefined,
   defaultValue: undefined | unknown | (() => unknown)
-): HandleStringify => {
+): ParamStringifier => {
   if (optional) {
     const getDefaultValue =
       defaultValue !== undefined &&

@@ -15,7 +15,7 @@ const stringifyArray = (value: string[], key: string) => {
   return value.join('/');
 };
 
-const array = ((param: Record<string, ArrayOptions<any> | false>) =>
+const arrayParam = ((param: Record<string, ArrayOptions<any> | false>) =>
   (parsers, stringifies, pathParams, path) => {
     const name = Object.keys(param)[0];
 
@@ -60,4 +60,4 @@ const array = ((param: Record<string, ArrayOptions<any> | false>) =>
     >;
 };
 
-export default array;
+export default arrayParam;

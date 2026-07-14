@@ -5,7 +5,7 @@ import {
   useSyncExternalStore,
 } from 'react';
 
-import type { RouteIsPage } from '#router/internal/types';
+import type { PageRoute } from '#router/internal/types';
 import noop from 'lodash.noop';
 import { jsx } from 'react/jsx-runtime';
 import { EMPTY_OBJECT } from '#router/internal/constants';
@@ -13,11 +13,11 @@ import { EMPTY_ARR } from '#internal/constants';
 import batch from '#core/batch';
 import append from '#internal/append';
 
-export type Page = [route: RouteIsPage<true>, Component: ComponentType];
+export type RouterPage = [route: PageRoute<true>, Component: ComponentType];
 
-export type Container = [
+export type RouterContainer = [
   Container: ComponentType<PropsWithChildren>,
-  children: Array<Page | Container>,
+  children: Array<RouterPage | RouterContainer>,
 ];
 
 type Slot = {
@@ -68,7 +68,7 @@ const setSlot = (slot: Slot, Component: ComponentType) => {
 
 const handleRouter = (
   level: number,
-  routes: Array<Page | Container>,
+  routes: Array<RouterPage | RouterContainer>,
   components: ComponentType[]
 ) => {
   const Router = getRouter(level);
@@ -87,7 +87,7 @@ const handleRouter = (
     } else {
       const count = components.length;
 
-      (arg1 as RouteIsPage<true>)._register(() => {
+      (arg1 as PageRoute<true>)._register(() => {
         for (let i = 0; i < count; i++) {
           setSlot(slots[i], components[i]);
         }
@@ -100,7 +100,7 @@ const handleRouter = (
   return Router;
 };
 
-const createRouterView = (routes: Array<Page | Container>) =>
+const createRouterView = (routes: Array<RouterPage | RouterContainer>) =>
   handleRouter(0, routes, EMPTY_ARR);
 
 export default createRouterView;
