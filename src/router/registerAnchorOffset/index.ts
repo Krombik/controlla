@@ -1,1 +1,1 @@
-export { registerAnchorOffset as default } from '#router/anchor';
+export { registerAnchorOffset as default } from '#router/internal/anchor';

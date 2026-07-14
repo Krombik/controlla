@@ -9,9 +9,8 @@ import type {
 } from '#router/internal/types';
 import createAsyncDerivedControl from '#core/createAsyncDerivedControl';
 import type { PrimitiveControlInternals } from '#internal/types';
-import addToQueue from '#internal/addToQueue';
 import { getCurrentLane } from '#internal/flushQueue';
-import { updateFinalizer } from '#router/internal/state';
+import { getRouterPatch } from '#router/internal/state';
 
 const makeControl = (
   isMatchedRoot: PrimitiveControlInternals,
@@ -23,11 +22,15 @@ const makeControl = (
     if (isMatchedRoot._value) {
       const params = {};
 
-      routeData._extractPathParams(params, strings, value);
+      const initial = routeData._initial === true;
 
-      routeData._extractQueryParams(params, strings, value);
+      routeData._initial = false;
 
-      addToQueue(getCurrentLane()!, updateFinalizer);
+      routeData._extractPathParams(params, strings, value, initial);
+
+      routeData._extractQueryParams(params, strings, value, initial);
+
+      getRouterPatch(getCurrentLane()!);
 
       return params;
     }

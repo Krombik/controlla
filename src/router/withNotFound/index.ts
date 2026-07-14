@@ -6,9 +6,7 @@ import NOT_FOUND from '#router/NOT_FOUND';
 const NAME = 'notFoundPath';
 
 const notFoundPath = createPath(((parsers, stringifies, pathParams, path) => {
-  parsers[NAME] = (target, key, value) => {
-    target[key] = value || '';
-  };
+  parsers[NAME] = (value) => value || '';
 
   stringifies[NAME] = identity;
 

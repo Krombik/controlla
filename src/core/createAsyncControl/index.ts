@@ -1,3 +1,4 @@
+import noop from 'lodash.noop';
 import type {
   AsyncControlScope,
   AsyncControlOptions,
@@ -166,9 +167,7 @@ function commitAsyncSet(
       prevValue
     );
 
-    if (internals._externalStorage) {
-      internals._externalStorage.set(nextValue);
-    }
+    internals._setExternal(nextValue);
 
     if (nextValue !== undefined) {
       nextLoadingValue = !internals._isLoaded(
@@ -301,7 +300,7 @@ const createAsyncControl: {
       _enqueueSet: asyncEnqueueSet,
       _attach: isLoadable ? attachAsync : attach,
       _detach: isLoadable ? detachAsync : detach,
-      _externalStorage: undefined,
+      _setExternal: noop,
       _errorControl: { [INTERNALS]: errorControl },
       _loadingControl: { [INTERNALS]: loadingInternals },
       _readyControl: { [INTERNALS]: readyInternals },

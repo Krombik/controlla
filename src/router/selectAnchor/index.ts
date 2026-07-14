@@ -1,13 +1,13 @@
 import type { RouteIsPage } from '#router/internal/types';
-import type { ReadonlyControl } from '#types';
+import type { Control } from '#types';
 
 /**
  * Returns the anchor control of the given {@link route} — its value is the
  * current anchor while the route is matched (set via navigation,
- * `updateParams` or scroll spy), an empty string when there is none.
+ * `setValue`/`replaceValue` or scroll spy), an empty string when there is none.
  * Throws if the route's path was created without `anchor()`.
  */
-const selectAnchor = (route: RouteIsPage<true>): ReadonlyControl<string> => {
+const selectAnchor = (route: RouteIsPage<true>): Control<string> => {
   const anchorParam = route._anchor;
 
   if (!anchorParam) {

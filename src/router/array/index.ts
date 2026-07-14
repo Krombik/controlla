@@ -1,4 +1,3 @@
-import identity from 'lodash.identity';
 import type {
   ArrayOptions,
   HandleUnknown,
@@ -22,13 +21,13 @@ const array = ((param: Record<string, ArrayOptions<any> | false>) =>
 
     const options = param[name];
 
-    const parse = (options && options.parse) || identity;
+    const parse = options && options.parse;
 
     const stringify = options && options.stringify;
 
-    parsers[name] = (target, key, value) => {
-      target[key] = parse(parseArray(value!));
-    };
+    parsers[name] = parse
+      ? (value) => parse(parseArray(value!))
+      : (parseArray as never);
 
     stringifies[name] = stringify
       ? (value, name) => stringifyArray(stringify(value), name)

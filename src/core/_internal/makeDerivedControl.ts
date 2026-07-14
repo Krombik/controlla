@@ -1,4 +1,5 @@
 import identity from 'lodash.identity';
+import noop from 'lodash.noop';
 import { INTERNALS, EMPTY_ARR } from '#internal/constants';
 import createScope from '#internal/createScope';
 import readRootValue from '#internal/readRootValue';
@@ -77,6 +78,7 @@ const makeDerivedControl = (params: any[]) => {
     _path: undefined,
     _children: undefined,
     _storage: undefined,
+    _setExternal: noop,
     _commitSet: commitSet,
     _enqueueSet: enqueueSet,
     _level: 0,

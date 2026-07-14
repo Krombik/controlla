@@ -22,6 +22,7 @@ const query = ((
 
       let defaultValue: Options['defaultValue'],
         fallbackValue: Options['fallbackValue'],
+        initialValue: Options['initialValue'],
         isValid: Options['isValid'],
         optional: Options['optional'],
         parse: Options['parse'],
@@ -30,6 +31,7 @@ const query = ((
       if (typeof options == 'object') {
         defaultValue = options.defaultValue;
         fallbackValue = options.fallbackValue;
+        initialValue = options.initialValue;
         isValid = options.isValid;
         optional = options.optional;
         parse = options.parse;
@@ -44,7 +46,8 @@ const query = ((
         parse,
         isValid,
         defaultValue,
-        fallbackValue
+        fallbackValue,
+        initialValue
       );
 
       stringifies[name] = handleStringify(stringify, optional, defaultValue);

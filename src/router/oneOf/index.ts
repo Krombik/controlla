@@ -1,5 +1,5 @@
+import identity from 'lodash.identity';
 import nonUndefinedIdentity from '#router/internal/nonUndefinedIdentity';
-import simpleParse from '#router/internal/simpleParse';
 import type {
   HandleUnknown,
   IsUnion,
@@ -22,11 +22,7 @@ const oneOf = ((param: Record<string, OneOfOptions<string[], true>>) =>
     const isCorrectVariant = set.has.bind(set);
 
     parsers[name] =
-      optional && defaultValue
-        ? (target, key, value) => {
-            target[key] = value || defaultValue;
-          }
-        : simpleParse;
+      optional && defaultValue ? (value) => value || defaultValue : identity;
 
     stringifies[name] = optional
       ? (value, key) => {
