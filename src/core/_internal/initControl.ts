@@ -66,7 +66,9 @@ const initControl = <I extends PrimitiveControlInternals>(
       }
     }
 
-    (internals as Mutable<I>)._externalStorage = externalStorage;
+    // keep the storage as the receiver — `set` may be a method
+    (internals as Mutable<I>)._setExternal = (value) =>
+      externalStorage.set(value);
   } else {
     internals._value = defaultValue;
   }

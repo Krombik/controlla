@@ -1,3 +1,4 @@
+import noop from 'lodash.noop';
 import type {
   ControlInternals,
   Lane,
@@ -29,9 +30,7 @@ function commitSet(this: ControlInternals, nextValue: any, lane: Lane) {
 
     notify(root._listeners, root._dependents, lane, nextValue, prevValue);
 
-    if (root._externalStorage) {
-      root._externalStorage.set(nextValue);
-    }
+    root._setExternal(nextValue);
   }
 }
 
@@ -51,7 +50,7 @@ const makePrimitiveInternals = (value: any): PrimitiveControlInternals => {
     _load: false,
     _commitSet: commitSet,
     _enqueueSet: enqueueSet,
-    _externalStorage: undefined,
+    _setExternal: noop,
   };
 
   (internals as { _root: PrimitiveControlInternals })._root = internals;

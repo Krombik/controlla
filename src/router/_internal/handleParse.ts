@@ -1,6 +1,5 @@
 import identity from 'lodash.identity';
 import nonUndefinedIdentity from '#router/internal/nonUndefinedIdentity';
-import simpleParse from '#router/internal/simpleParse';
 import alwaysTrue from '#internal/alwaysTrue';
 import type { HandleParse } from '#router/internal/types';
 
@@ -10,21 +9,29 @@ const handleParse = (
   parse: ((value: string, source: any) => any) | undefined,
   isValid: ((value: any, source: any) => boolean) | undefined,
   defaultValue: undefined | unknown | ((source: any) => unknown),
-  fallbackValue: undefined | unknown | ((source: any) => unknown)
+  fallbackValue: undefined | unknown | ((source: any) => unknown),
+  initialValue: undefined | unknown | ((source: any) => unknown)
 ): HandleParse => {
   if (
     optional &&
     !parse &&
     !isValid &&
     defaultValue === undefined &&
-    fallbackValue === undefined
+    fallbackValue === undefined &&
+    initialValue === undefined
   ) {
-    return simpleParse;
+    return identity;
   }
 
   parse ||= identity;
 
   isValid ||= alwaysTrue;
+
+  const hasInitial = initialValue !== undefined;
+
+  const getInitialValue = (
+    typeof initialValue != 'function' ? () => initialValue : initialValue
+  ) as (source: any) => unknown;
 
   const getFallbackValue = (
     typeof fallbackValue != 'function'
@@ -40,16 +47,14 @@ const handleParse = (
     typeof defaultValue != 'function' ? () => defaultValue : defaultValue
   ) as (source: any) => unknown;
 
-  const safeParse: HandleParse = (target, key, value, source) => {
+  const safeParse: HandleParse = (value, source) => {
     let err;
 
     try {
-      const parsed = parse(nonUndefinedIdentity(value, key), source);
+      const parsed = parse(nonUndefinedIdentity(value, name), source);
 
       if (isValid(parsed, source)) {
-        target[key] = parsed;
-
-        return;
+        return parsed;
       }
     } catch (error) {
       err = error;
@@ -57,18 +62,18 @@ const handleParse = (
 
     const fallbackValue = getFallbackValue(value, source, err);
 
-    target[key] =
-      fallbackValue !== undefined ? fallbackValue : getDefaultValue(source);
+    return fallbackValue !== undefined
+      ? fallbackValue
+      : getDefaultValue(source);
   };
 
   return optional
-    ? (target, key, value, source) => {
-        if (value) {
-          safeParse(target, key, value, source);
-        } else {
-          target[key] = getDefaultValue(source);
-        }
-      }
+    ? (value, source, initial) =>
+        value
+          ? safeParse(value, source, initial)
+          : initial && hasInitial
+            ? getInitialValue(source)
+            : getDefaultValue(source)
     : safeParse;
 };
 

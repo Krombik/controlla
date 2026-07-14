@@ -21,11 +21,11 @@ const navigate = (
   navigateRoute(
     to[ROUTE_METHODS],
     to[ROUTE_PARAMS],
-    replace,
+    to[ROUTE_HASH],
+    replace || false,
     ignoreBlock,
     scrollToTop,
-    scrollRestoration,
-    to[ROUTE_HASH]
+    scrollRestoration
   );
 };
 

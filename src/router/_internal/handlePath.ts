@@ -6,7 +6,7 @@ import type {
   QueryParam,
   RouteData,
 } from '#router/internal/types';
-import type { AnchorParam } from '#router/anchor';
+import type { AnchorParam } from '#router/internal/anchor';
 import type { AsyncControl, Control } from '#types';
 import type { PrimitiveControlInternals } from '#internal/types';
 

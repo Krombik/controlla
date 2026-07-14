@@ -4,7 +4,6 @@ import type {
   Control,
   ControlScope,
   ReadonlyControl,
-  ReadonlyControlScope,
 } from '#types';
 import type {
   ControlInternals,
@@ -14,7 +13,7 @@ import type {
   PrimitiveControlInternals,
 } from '#internal/types';
 import type { NavigationTarget } from '#router/types';
-import type { AnchorParam } from '#router/anchor';
+import type { AnchorParam } from '#router/internal/anchor';
 import type { DerivedControlInternals } from '#internal/derivedControlUtils';
 
 export type IsUnion<T, U = T> = T extends any
@@ -110,7 +109,7 @@ declare const PARAMS_MARKER: unique symbol;
 
 export type RouteParams<Params, Async> = {
   /** @internal */
-  [ROUTE_PARAMS]: ReadonlyControlScope;
+  [ROUTE_PARAMS]: ControlScope;
   [PARAMS_MARKER]: [Params, Async];
 };
 
@@ -187,33 +186,39 @@ export type RouteData = {
   _extractPathParams(
     target: Record<string, any>,
     stringifiedParams: Record<string, string | undefined>,
-    source: any
+    source: any,
+    initial: boolean
   ): void;
   _extractQueryParams(
     target: Record<string, any>,
     stringifiedParams: Record<string, string | undefined>,
-    source: any
+    source: any,
+    initial: boolean
   ): void;
+  /** one-shot boot mark for async params — their first parse runs later */
+  _initial?: boolean;
   _currentPath: string;
   _currentSearch: string;
 };
 
-/** @internal */
+/** @internal a navigation target's param entry */
 export type RouterParamUpdates = {
   readonly _route: RouteData;
   readonly _params: ProcessParams<Record<string, any>>;
 };
 
-/** @internal `updateParams` entry resolved to a concrete params object */
-export type ResolvedParamUpdate = {
-  readonly _route: RouteData;
-  readonly _params: Record<string, any>;
+/** @internal accumulated router write (`setValue`/`replaceValue` on a params control) */
+export type RouterUpdateEntry = {
+  /** the written control's root */
+  readonly _root: RouterControlRoot;
+  /** the value as resolved at call time */
+  readonly _params: any;
+  /** the written control's path — scopes the patch to its slice */
+  readonly _path: readonly string[] | undefined;
 };
 
-/** @internal `navigate` payload stored in the lane — wins over accumulated `updateParams` */
+/** @internal `navigate` payload stored in the lane — wins over accumulated `setValue`/`replaceValue` */
 export type RouterNavigation = {
-  /** updates resolved at call time — applied even if a route unmatched since */
-  readonly _updates: ResolvedParamUpdate[];
   /** the navigation target — its chain, queue index and page setter */
   readonly _methods: RouteMethods;
   /** stamped by the params handler when the chain changes */
@@ -229,34 +234,32 @@ export type RouterNavigation = {
   readonly _enableScrollRestoration: boolean | undefined;
 };
 
-/** @internal anchor update stored in the patch; `undefined` = keep current, no scroll */
-export type RouterHash = string | ((prev: string) => string) | undefined;
-
 /**
  * @internal the params handler's pending patch in a lane's `_patchByControl`
- * — `updateParams` accumulates one per lane (each scheduler commits its own
+ * — `setValue`/`replaceValue` accumulates one per lane (each scheduler commits its own
  * batch), a navigation patch always lives in the microtask lane; handed to
  * the finalizer once committed
  */
 export type RouterPatch = {
   /** navigation payload — wins over accumulated `_paramUpdates` */
   _navigation: RouterNavigation | undefined;
-  /** accumulated `updateParams` entries */
-  readonly _paramUpdates: RouterParamUpdates[];
+  /** accumulated `setValue`/`replaceValue` entries */
+  readonly _paramUpdates: RouterUpdateEntry[];
   /** history replace — only if every update in the flush asked for it (navigate overwrites) */
   _replace: boolean;
-  /** anchor to commit on finalize; `undefined` = keep current, no scroll */
-  _hash: RouterHash;
+  /**
+   * a hash write happened — the finalizer takes the URL hash from the anchor
+   * control and scrolls to it when it's non-empty
+   */
+  _toAnchor: boolean;
 };
 
 /** @internal the params handler node carrying the router's cross-lane state */
 export type RouterPendingItem = PendingItem & {
-  /** lanes holding accumulated `updateParams` patches */
-  _updateLanes: Lane[];
+  /** lanes holding accumulated `setValue`/`replaceValue` patches */
+  readonly _updateLanes: Lane[];
   /** a navigation is queued and not yet committed — updates are ignored */
   _hasNavigation: boolean;
-  /** the lane holding the pending navigation patch */
-  _navLane: Lane | undefined;
 };
 
 /** @internal a control root wired to the router via `_route` */
@@ -266,6 +269,8 @@ export type RouterControlRoot = (
   | PrimitiveControlInternals
 ) & {
   _route?: RouteData;
+  /** the raw `_enqueueSet` — internal router writes bypass the patch */
+  _set?: PrimitiveControlInternals['_enqueueSet'];
 };
 
 /** @internal */
@@ -295,11 +300,10 @@ declare const SOURCE: unique symbol;
 
 /** @internal */
 export type HandleParse = (
-  target: Record<string, any>,
-  key: string,
   value: string | undefined,
-  source: any
-) => void;
+  source: any,
+  initial: boolean
+) => any;
 
 /** @internal */
 export type HandleStringify = (value: any, key: string) => string;
@@ -525,10 +529,16 @@ export type ParamOptions<Value, O = false, Source = never> = {
     | Value;
   isValid?(value: NoInfer<Value>, source: Source): boolean;
 } & (O extends true
-  ? {
-      defaultValue?: Value | ((source: Source) => Value);
-      // initialValue?: Value | ((source: Source) => Value);
-    }
+  ? // mutually exclusive: a default keeps the param out of the URL, an
+      // initial one is applied (and written to the URL) only on the boot parse
+      | {
+          defaultValue?: Value | ((source: Source) => Value);
+          initialValue?: never;
+        }
+      | {
+          initialValue?: Value | ((source: Source) => Value);
+          defaultValue?: never;
+        }
   : {});
 
 export type ValidateParams<P> = keyof P extends {

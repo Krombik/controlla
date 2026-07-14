@@ -1,7 +1,8 @@
 import noop from 'lodash.noop';
 
-import type { Mutable, PendingItem } from '#internal/types';
-import type { RouterPendingItem } from '#router/internal/types';
+import type { Lane, Mutable, PendingItem } from '#internal/types';
+import type { RouterPatch, RouterPendingItem } from '#router/internal/types';
+import queueRouterPatch from '#router/internal/queueRouterPatch';
 
 /**
  * The app has exactly one router, so its cross-module pieces live here as
@@ -10,7 +11,7 @@ import type { RouterPendingItem } from '#router/internal/types';
  */
 
 /**
- * Level-0 queue node applying a lane's pending router patch. `updateParams`
+ * Level-0 queue node applying a lane's pending router patch. `setValue`/`replaceValue`
  * accumulates a patch per lane, so every scheduler commits its own batch; a
  * navigation always lands in the microtask lane (the last call wins), drops
  * every accumulated update patch and gates new updates until it commits.
@@ -19,28 +20,34 @@ export const paramsHandler: RouterPendingItem = {
   _level: 0,
   _updateLanes: [],
   _hasNavigation: false,
-  _navLane: undefined,
   _commitSet: noop,
 };
 
-/**
- * Drops the pending navigation patch, wherever it was queued — a later
- * navigation or a history event supersedes it.
- */
-export const clearNavigation = () => {
-  const lane = paramsHandler._navLane;
+/** The lane's pending router patch — created, queued and tracked on first use. */
+export const getRouterPatch = (lane: Lane) => {
+  let patch = lane._patchByControl.get(paramsHandler) as
+    | RouterPatch
+    | undefined;
 
-  if (lane) {
-    lane._patchByControl.delete(paramsHandler);
+  if (!patch) {
+    queueRouterPatch(
+      lane,
+      (patch = {
+        _navigation: undefined,
+        _paramUpdates: [],
+        _replace: true,
+        _toAnchor: false,
+      })
+    );
 
-    paramsHandler._navLane = undefined;
-
-    paramsHandler._hasNavigation = false;
+    paramsHandler._updateLanes.push(lane);
   }
+
+  return patch;
 };
 
 /**
- * Drops every lane's accumulated `updateParams` patch — a navigation or a
+ * Drops every lane's accumulated `setValue`/`replaceValue` patch — a navigation or a
  * history event supersedes them; the lanes' stale queue entries commit as
  * patchless no-ops.
  */

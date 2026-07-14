@@ -1,4 +1,5 @@
 import type { PrimitiveOrNested } from 'keyweaver';
+import noop from 'lodash.noop';
 import type {
   Registry,
   AsyncControlOptions,
@@ -972,6 +973,7 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
         _path: undefined,
         _registry: self,
         _storage: undefined,
+        _setExternal: noop,
         _target: undefined,
         _root: undefined!,
         _attach: attach,

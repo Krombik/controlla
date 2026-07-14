@@ -1,4 +1,5 @@
 import identity from 'lodash.identity';
+import noop from 'lodash.noop';
 import { INTERNALS } from '#internal/constants';
 import { EMPTY_ARR, RELOAD, SILENT_RELOAD } from '#internal/constants';
 import createScope from '#internal/createScope';
@@ -110,6 +111,8 @@ function commitSet(
 
       notify(root._listeners, root._dependents, lane, nextValue, prevValue);
 
+      root._setExternal(nextValue);
+
       if (nextValue !== undefined) {
         settlePromise(root, true, nextValue);
       }
@@ -203,6 +206,8 @@ function commitSet(
 
     notify(root._listeners, root._dependents, lane, nextValue, prevValue);
 
+    root._setExternal(nextValue);
+
     if (nextValue !== undefined) {
       settlePromise(root, true, nextValue);
     }
@@ -260,6 +265,7 @@ const makeAsyncDerivedControl = (params: any[]) => {
     _path: undefined,
     _children: undefined,
     _storage: undefined,
+    _setExternal: noop,
     _commitSet: commitSet,
     _enqueueSet: enqueueSet,
     _level: 0,

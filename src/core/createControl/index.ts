@@ -1,4 +1,5 @@
 import type { ControlInternals, Lane, PatchTreeNode } from '#internal/types';
+import noop from 'lodash.noop';
 import createScope from '#internal/createScope';
 import type { ControlScope, SyncExternalStorage } from '#types';
 import { commitPatchNode, UNCHANGED } from '#internal/commitPatchNode';
@@ -34,9 +35,7 @@ function commitSet(
 
     notify(root._listeners, root._dependents, lane, nextValue, prevValue);
 
-    if (root._externalStorage) {
-      root._externalStorage.set(nextValue);
-    }
+    root._setExternal(nextValue);
   }
 }
 
@@ -96,7 +95,7 @@ const createControl: {
         _load: false,
         _commitSet: commitSet,
         _enqueueSet: enqueueSet,
-        _externalStorage: undefined,
+        _setExternal: noop,
       },
       value,
       syncExternalStorage,

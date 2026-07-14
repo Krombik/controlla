@@ -1,17 +1,12 @@
 import type {
   Hash,
-  ResolvedParamUpdate,
+  RouterUpdateEntry,
   RouteMethods,
   RouterParamUpdates,
 } from '#router/internal/types';
 import { getSchedulerLane, scheduleFlush } from '#internal/flushQueue';
-import { EMPTY_ARR } from '#internal/constants';
 import queueRouterPatch from '#router/internal/queueRouterPatch';
-import {
-  clearNavigation,
-  clearUpdateLanes,
-  paramsHandler,
-} from '#router/internal/state';
+import { clearUpdateLanes, paramsHandler } from '#router/internal/state';
 
 /**
  * Navigates to the target described by {@link methods} — resolves the param
@@ -22,11 +17,11 @@ import {
 const navigateRoute = (
   methods: RouteMethods,
   params: RouterParamUpdates[] | undefined,
-  replace: boolean | undefined,
+  hash: Hash | undefined,
+  replace: boolean,
   ignoreBlock: boolean | undefined,
   enableScrollToTop: boolean | undefined,
-  enableScrollRestoration: boolean | undefined,
-  hash?: Hash
+  enableScrollRestoration: boolean | undefined
 ) => {
   const routes = methods._routes();
 
@@ -34,16 +29,16 @@ const navigateRoute = (
 
   const updatesCount = params ? params.length : 0;
 
-  const updates: ResolvedParamUpdate[] = [];
+  const updates: RouterUpdateEntry[] = [];
+
+  const toAnchor = hash !== undefined;
 
   let u = 0;
 
-  // one pass, following the chain order: resolve the passed updates against
-  // the committed values and snapshot every other matched param route — the
-  // navigation applies as captured at call time, whatever happens to the
-  // controls before the commit
+  let route;
+
   for (let i = 0; i < routesCount; i++) {
-    const route = routes[i];
+    route = routes[i];
 
     const paramsRoot = route._params;
 
@@ -55,46 +50,40 @@ const navigateRoute = (
 
         const { _params } = item;
 
-        updates.push(
-          typeof _params == 'function'
-            ? { _route: route, _params: _params(paramsRoot._value) }
-            : item
-        );
-      } else if (route._isMatched._value) {
-        const value = paramsRoot._value;
-
-        // undefined = async params not parsed yet — nothing to capture
-        if (value !== undefined) {
-          updates.push({ _route: route, _params: value });
-        }
-      } else {
+        updates.push({
+          _root: paramsRoot,
+          _params:
+            typeof _params == 'function' ? _params(paramsRoot._value) : _params,
+          _path: undefined,
+        });
+      } else if (!route._isMatched._value) {
         throw new Error('navigate: params are required for an unmatched route');
       }
     }
   }
 
-  // an unconsumed entry targets a route outside the resolved chain
   if (u != updatesCount) {
     throw new Error('navigate: params were passed for an unmatched route');
   }
 
+  if (toAnchor) {
+    const root = route!._anchor!._hash;
+
+    updates.push({
+      _root: root,
+      _params: typeof hash == 'function' ? hash(root._value) : hash,
+      _path: undefined,
+    });
+  }
+
   const lane = getSchedulerLane();
 
-  // a navigation supersedes everything accumulated — drop every lane's
-  // updates and a navigation pending in another lane (the last call wins),
-  // and gate new updates until the commit; the blocker is checked at commit
-  // — the params handler parks the patch if needed
   clearUpdateLanes();
-
-  clearNavigation();
-
-  paramsHandler._navLane = lane;
 
   paramsHandler._hasNavigation = true;
 
-  queueRouterPatch(lane, paramsHandler, {
+  queueRouterPatch(lane, {
     _navigation: {
-      _updates: updates,
       _methods: methods,
       _isNewPage: false,
       _isHistoryEvent: false,
@@ -102,9 +91,9 @@ const navigateRoute = (
       _enableScrollToTop: enableScrollToTop,
       _enableScrollRestoration: enableScrollRestoration,
     },
-    _paramUpdates: EMPTY_ARR,
-    _replace: !!replace,
-    _hash: hash,
+    _paramUpdates: updates,
+    _replace: replace,
+    _toAnchor: toAnchor,
   });
 
   scheduleFlush(lane);

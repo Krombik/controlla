@@ -220,11 +220,11 @@ const useLink = ({
       navigateRoute(
         methods,
         updatedParams,
+        hash,
         false,
         ignoreBlock,
         scrollToTop,
-        scrollRestoration,
-        hash
+        scrollRestoration
       );
     },
     isMatched: exact ? exactMatch : isMatched,

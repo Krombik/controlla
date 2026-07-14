@@ -6,7 +6,6 @@ import type {
   Control,
   ReadonlyAsyncControl,
   Scheduler,
-  SyncExternalStorage,
 } from '#types';
 import type SuspenseContext from '#internal/SuspenseContext';
 import type { PatchType } from '#internal/constants';
@@ -93,7 +92,12 @@ interface Settable {
 }
 
 export type WithExternalStorage = {
-  _externalStorage?: ReturnType<SyncExternalStorage> | undefined;
+  /**
+   * syncs the committed value to its external representation (a storage, the
+   * router's URL caches) — `noop` when there is none, so commits skip the
+   * branch
+   */
+  _setExternal(value: any): void;
   /** Unsubscribes from external storage changes; consumed by `useControl` on unmount. */
   _unobserve?: (() => void) | undefined;
 };

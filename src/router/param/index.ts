@@ -22,6 +22,7 @@ const param = ((
 
     let defaultValue: Options['defaultValue'],
       fallbackValue: Options['fallbackValue'],
+      initialValue: Options['initialValue'],
       isValid: Options['isValid'],
       optional: boolean | undefined,
       parse: Options['parse'],
@@ -30,6 +31,7 @@ const param = ((
     if (typeof options == 'object') {
       defaultValue = options.defaultValue;
       fallbackValue = options.fallbackValue;
+      initialValue = options.initialValue;
       isValid = options.isValid;
       optional = options.optional;
       parse = options.parse;
@@ -44,7 +46,8 @@ const param = ((
       parse,
       isValid,
       defaultValue,
-      fallbackValue
+      fallbackValue,
+      initialValue
     );
 
     stringifies[name] = handleStringify(stringify, optional, defaultValue);
