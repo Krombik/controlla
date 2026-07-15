@@ -10,11 +10,15 @@ import noop from 'lodash.noop';
 import { jsx } from 'react/jsx-runtime';
 import { EMPTY_OBJECT } from '#router/internal/constants';
 import { EMPTY_ARR } from '#internal/constants';
-import batch from '#core/batch';
 import append from '#internal/append';
 
+/** A leaf of the view tree: the page route and the component it renders. */
 export type RouterPage = [route: PageRoute<true>, Component: ComponentType];
 
+/**
+ * A layout node of the view tree: the wrapper component (rendering
+ * `children`) and the pages or containers inside it.
+ */
 export type RouterContainer = [
   Container: ComponentType<PropsWithChildren>,
   children: Array<RouterPage | RouterContainer>,
@@ -37,9 +41,7 @@ const getRouter = (level: number) => {
   const slot: Slot = { _component: noop as any, _notify: noop };
 
   const subscribe = (onValueChange: () => void) => {
-    slot._notify = () => {
-      batch(onValueChange);
-    };
+    slot._notify = onValueChange;
 
     return () => {
       slot._notify = noop;
@@ -100,6 +102,25 @@ const handleRouter = (
   return Router;
 };
 
+/**
+ * Builds the component that renders the matched route's page inside its
+ * containers. On navigation only the slots whose component actually changed
+ * re-render: switching between pages under the same layout never re-renders
+ * the layout.
+ *
+ * @example
+ * ```tsx
+ * const RouterView = createRouterView([
+ *   [router.routes.home, HomePage],
+ *   [MainLayout, [
+ *     [router.routes.product, ProductPage],
+ *     [router.routes.catalog, CatalogPage],
+ *   ]],
+ * ]);
+ *
+ * createRoot(document.getElementById('root')!).render(<RouterView />);
+ * ```
+ */
 const createRouterView = (routes: Array<RouterPage | RouterContainer>) =>
   handleRouter(0, routes, EMPTY_ARR);
 

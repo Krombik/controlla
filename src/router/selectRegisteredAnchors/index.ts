@@ -1,29 +1,25 @@
-import type { PageRoute, RouteParams } from '#router/internal/types';
+import getAnchorParam from '#router/internal/getAnchorParam';
+import type { AnchorRoute } from '#router/internal/types';
 import type { ReadonlyControlScope } from '#types';
 
 /**
- * Returns the reactive set of mounted anchor ids for the given {@link route}
- * (`true` per registered id) — drive a navigation header that shows only the
- * sections currently on the page. Pair with `selectHash` for the active one.
- * Throws if the route's path was created without `anchor()`.
+ * Returns the reactive set of mounted anchor ids for the given {@link route}:
+ * `true` per mounted id, `undefined` when not mounted. Drive a navigation
+ * header that shows only the sections currently on the page. Throws if the
+ * route's path was created without `anchor()`.
+ *
+ * With a `trackScroll` anchor, the currently active id is `'active'`
+ * instead of `true`.
  *
  * @example
  * ```tsx
  * const registered = useValue(selectRegisteredAnchors(route).filters);
+ * // registered === 'active' | true | undefined
  * ```
  */
 const selectRegisteredAnchors = <A extends string>(
-  route: [A] extends [never]
-    ? never
-    : PageRoute<true> & RouteParams<any, any, A>
-): ReadonlyControlScope<Record<A, true | undefined>> => {
-  const anchorParam = route._anchor;
-
-  if (!anchorParam) {
-    throw new Error('the route has no anchor');
-  }
-
-  return anchorParam._registered as any;
-};
+  route: AnchorRoute<A>
+): ReadonlyControlScope<Record<A, 'active' | true | undefined>> =>
+  getAnchorParam(route)._registered as any;
 
 export default selectRegisteredAnchors;

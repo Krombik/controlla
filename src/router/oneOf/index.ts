@@ -7,6 +7,16 @@ import type {
   PathParam,
 } from '#router/internal/types';
 
+/**
+ * Declares a dynamic path segment restricted to the given string variants:
+ * the route matches only when the segment is one of them, and the param is
+ * typed as their union.
+ *
+ * @example
+ * ```ts
+ * createPath('orders', oneOf({ status: { variants: ['active', 'done'] } }));
+ * ```
+ */
 const oneOf = ((param: Record<string, OneOfOptions<string[], true>>) =>
   (parsers, stringifies, pathParams, path) => {
     const name = Object.keys(param)[0];

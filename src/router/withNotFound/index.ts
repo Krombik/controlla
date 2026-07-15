@@ -17,6 +17,20 @@ const notFoundPath = createPath(((parsers, stringifies, pathParams, path) => {
   return `(?:/(?<${NAME}>.*))?`;
 }) as PathParam<{ [NAME]: [string, false] }>);
 
+/**
+ * Adds a catch-all route to the path tree under the {@link NOT_FOUND} symbol:
+ * it matches any URL the other paths didn't, so the router always has a page.
+ *
+ * @example
+ * ```ts
+ * const router = createRouter(withNotFound({ home: createPath() }));
+ *
+ * const RouterView = createRouterView([
+ *   [router.routes.home, HomePage],
+ *   [router.routes[NOT_FOUND], NotFoundPage],
+ * ]);
+ * ```
+ */
 const withNotFound = <Paths extends AnyPaths>(
   paths: Paths
 ): Paths & {

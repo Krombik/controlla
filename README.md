@@ -1,6 +1,6 @@
 <h1 align="center">🎮 controlla</h1>
 
-<p align="center">Fine-grained reactive state for React — async, derived, persisted, and keyed, with surgical re-renders.</p>
+<p align="center">Fine-grained reactive state for React - async, derived, persisted, and keyed, with surgical re-renders.</p>
 
 <p align="center">
   <img alt="npm" src="https://img.shields.io/npm/v/controlla.svg" />
@@ -9,15 +9,16 @@
   <img alt="license" src="https://img.shields.io/npm/l/controlla.svg" />
 </p>
 
-A **control** is a reactive value you read, write, derive from, persist, and subscribe to. Writes notify only the paths that actually changed — no selectors, no context, no re-render storms.
+A **control** is a reactive value you read, write, derive from, persist, and subscribe to. Writes notify only the paths that actually changed - no selectors, no context, no re-render storms.
 
-- 🎯 **Fine-grained** — a write touches only the fields that changed; `$user.profile.name` is its own control.
-- ⚡ **Built-in async** — loading / ready / error states, Suspense, request & polling loaders.
-- 🔗 **Derived & combined** — controls that recompute only when their sources are ready.
-- 🗂️ **Keyed registries** — one control per key, created on demand.
-- 💾 **Persistence** — `localStorage` / `sessionStorage`, observable across tabs.
-- ⏱️ **Batching & scheduling** — microtask by default; throttle, debounce, manual.
-- 🌳 **Tree-shakeable & typed** — every export is its own import, no barrel.
+- 🗺️ **Typed router**: a typed path tree instead of URL strings, params/query/hash as controls, anchors with scroll restoration, and navigation blocking - all built in.
+- 🎯 **Fine-grained**: a write touches only the fields that changed - `$user.profile.name` is its own control.
+- ⚡ **Built-in async**: loading / ready / error states, Suspense, request & polling loaders.
+- 🔗 **Derived & combined**: controls that recompute only when their sources are ready.
+- 🗂️ **Keyed registries**: one control per key, created on demand.
+- 💾 **Persistence**: `localStorage` / `sessionStorage`, observable across tabs.
+- ⏱️ **Batching & scheduling**: microtask by default; throttle, debounce, manual.
+- 🌳 **Tree-shakeable & typed**: every export is its own import, no barrel.
 
 ```bash
 pnpm add controlla
@@ -35,7 +36,7 @@ npm install --save controlla
 
 ## Quick start
 
-A control lives **outside React** — no provider, no context. It's a tree of controls: every nested field (`$form.name`, `$form.address.city`) is a control of its own, and a component subscribes to exactly the one it reads. Write a field and **only the components reading that field re-render** — siblings don't:
+A control lives **outside React** (no provider, no context). It's a tree of controls - every nested field (`$form.name`, `$form.address.city`) is a control of its own, and a component subscribes to exactly the one it reads. Write a field and **only the components reading that field re-render**; siblings don't:
 
 ```tsx
 import createControl from 'controlla/core/createControl';
@@ -55,9 +56,9 @@ const Submit = () => {
 };
 ```
 
-No reducers, no selectors, no memoization — `setValue($form.name, …)` notifies `.name` (and `$form`), nothing else.
+No reducers, no selectors, no memoization - `setValue($form.name, …)` notifies `.name` (and `$form`), nothing else.
 
-Async data is **state too**, not fetch-glue in components. A `createRegistry` of async controls gives you one cached, self-fetching resource per key — fetched on first use, deduped, suspendable, refetchable:
+Async data is **state too**, not fetch-glue in components. A `createRegistry` of async controls gives you one cached, self-fetching resource per key - fetched on first use, deduped, suspendable, refetchable:
 
 ```tsx
 import createRegistry from 'controlla/core/createRegistry';
@@ -82,30 +83,57 @@ const UserCard = ({ id }: { id: number }) => (
 const refresh = (id: number) => invalidate(users.get(id));   // refetch one user
 ```
 
-> Every export is its own subpath import (`controlla/<domain>/<name>`) — no barrel, fully tree-shakeable. Controls are conventionally named with a leading `$`. The **router** module isn't documented here yet.
+controlla also ships a full **router**. Routes are a typed tree, not URL strings - every dynamic piece of the URL (path params, query, hash) is a control just like the ones above, so it reads and writes the same way while the address bar follows along on its own:
+
+```tsx
+import createRouter from 'controlla/router/createRouter';
+import createPath from 'controlla/router/createPath';
+import param from 'controlla/router/param';
+import navigate from 'controlla/router/navigate';
+import selectParams from 'controlla/router/selectParams';
+import useValue from 'controlla/core/useValue';
+
+const router = createRouter({
+  product: createPath('product', param({ id: { parse: Number, stringify: String } })),
+});
+
+navigate(router.navigation.product({ id: 42 }));   // → /product/42
+
+const $product = selectParams(router.routes.product);
+
+const ProductPage = () => {
+  const id = useValue($product.id);   // re-renders only when id changes
+  return <h1>Product #{id}</h1>;
+};
+```
+
+See the [Router](#router) section for paths, navigation, params, anchors and more.
+
+> Every export is its own subpath import (`controlla/<domain>/<name>`): no barrel, fully tree-shakeable. Controls are conventionally named with a leading `$`.
 
 ---
 
 ## Contents
 
-- **Controls** — [`createControl`](#createcontrol--usecontrol), [`createPrimitiveControl`](#createprimitivecontrol--useprimitivecontrol), [`createAsyncControl`](#createasynccontrol--useasynccontrol), [`createDerivedControl`](#createderivedcontrol--usederivedcontrol), [`createAsyncDerivedControl`](#createasyncderivedcontrol--useasyncderivedcontrol)
-- **Reading values** — [`getValue`](#getvaluecontrol), [`useValue`](#usevaluecontrol), [`toPromise`](#topromisecontrol), [`useSuspenseValue`](#usesuspensevaluecontrol-safe), [`useSuspenseValues`](#usesuspensevaluescontrols-safe), [`useInfiniteValues`](#useinfinitevaluescontrols)
-- **Writing values** — [`setValue`](#setvaluecontrol-value-scheduler), [`invalidate`](#invalidatecontrol-silentorscheduler)
-- **Subscribing** — [`watchValue`](#watchvaluecontrol-callback-immediate), [`watchValues`](#watchvaluescontrols-callback-immediate), [`load`](#loadcontrol), [`watchSlowLoading`](#watchslowloadingcontrol-callback)
-- **Async status** — [`selectLoading`](#selectloadingcontrol), [`selectReady`](#selectreadycontrol), [`selectError`](#selecterrorcontrol)
-- **Components** — [`ControlConsumer`](#controlconsumer), [`ControlsConsumer`](#controlsconsumer), [`InfiniteControlsConsumer`](#infinitecontrolsconsumer), [`Suspense`](#suspense), [`SuspenseControlConsumer`](#suspensecontrolconsumer), [`SuspenseControlsConsumer`](#suspensecontrolsconsumer), [`wrapErrorBoundary`](#wraperrorboundaryboundarycomponent)
-- **Utils** — [`$pending`](#pending), [`isAggregateControlError`](#isaggregatecontrolerrorerr)
-- **Registry** — [`createRegistry`](#createregistrycreate-initarg-options)
-- **Loaders** — [`requestLoader`](#requestloaderfetch-options-scheduler), [`pollLoader`](#pollloaderfetch-options-scheduler)
-- **Persistence** — [`getPersistStorage`](#getpersiststorageoptions), [`safeLocalStorage`](#safelocalstorage), [`safeSessionStorage`](#safesessionstorage)
-- **DOM** — [`mediaQuery`](#mediaqueryquery), [`$online`](#online), [`$pageVisible`](#pagevisible), [`$windowSize`](#windowsize)
-- **Schedulers** — [`batch`](#batchcallback-scheduler), [`createManualScheduler`](#createmanualscheduler), [`createThrottleScheduler`](#createthrottleschedulerms), [`createDebounceScheduler`](#createdebounceschedulerms)
+- **Controls**: [`createControl`](#createcontrol--usecontrol), [`createPrimitiveControl`](#createprimitivecontrol--useprimitivecontrol), [`createAsyncControl`](#createasynccontrol--useasynccontrol), [`createDerivedControl`](#createderivedcontrol--usederivedcontrol), [`createAsyncDerivedControl`](#createasyncderivedcontrol--useasyncderivedcontrol)
+- **Reading values**: [`getValue`](#getvaluecontrol), [`useValue`](#usevaluecontrol), [`toPromise`](#topromisecontrol), [`useSuspenseValue`](#usesuspensevaluecontrol-safe), [`useSuspenseValues`](#usesuspensevaluescontrols-safe), [`useInfiniteValues`](#useinfinitevaluescontrols)
+- **Writing values**: [`setValue`](#setvaluecontrol-value-scheduler), [`replaceValue`](#replacevaluecontrol-value-scheduler), [`invalidate`](#invalidatecontrol-silentorscheduler)
+- **Subscribing**: [`watchValue`](#watchvaluecontrol-callback-immediate), [`watchValues`](#watchvaluescontrols-callback-immediate), [`load`](#loadcontrol), [`watchSlowLoading`](#watchslowloadingcontrol-callback)
+- **Async status**: [`selectLoading`](#selectloadingcontrol), [`selectReady`](#selectreadycontrol), [`selectError`](#selecterrorcontrol)
+- **Components**: [`ControlConsumer`](#controlconsumer), [`ControlsConsumer`](#controlsconsumer), [`InfiniteControlsConsumer`](#infinitecontrolsconsumer), [`Suspense`](#suspense), [`SuspenseControlConsumer`](#suspensecontrolconsumer), [`SuspenseControlsConsumer`](#suspensecontrolsconsumer), [`wrapErrorBoundary`](#wraperrorboundaryboundarycomponent)
+- **Utils**: [`$pending`](#pending), [`isAggregateControlError`](#isaggregatecontrolerrorerr)
+- **Registry**: [`createRegistry`](#createregistrycreate-initarg-options)
+- **Loaders**: [`requestLoader`](#requestloaderfetch-options-scheduler), [`pollLoader`](#pollloaderfetch-options-scheduler)
+- **Persistence**: [`getPersistStorage`](#getpersiststorageoptions), [`safeLocalStorage`](#safelocalstorage), [`safeSessionStorage`](#safesessionstorage)
+- **DOM**: [`mediaQuery`](#mediaqueryquery), [`$online`](#online), [`$pageVisible`](#pagevisible), [`$windowSize`](#windowsize)
+- **Schedulers**: [`batch`](#batchcallback-scheduler), [`createManualScheduler`](#createmanualscheduler), [`createThrottleScheduler`](#createthrottleschedulerms), [`createDebounceScheduler`](#createdebounceschedulerms)
+- **Router**: [`createRouter`](#createrouterpaths), [`createPath`](#createpathpath), [`createAsyncPath`](#createasyncpathsource), [`param`](#paramoptions), [`query`](#queryoptions), [`oneOf`](#oneofoptions), [`arrayParam`](#arrayparamoptions), [`createRouterView`](#createrouterviewroutes), [`Link` / `useLink`](#link--uselink), [`navigate`](#navigateto-replace-ignoreblock-scrolltotop-scrollrestoration), [params as controls](#route-params-are-controls), [anchors](#anchors), [`registerAnchorOffset`](#registeranchoroffsetroute), [`selectRegisteredAnchors`](#selectregisteredanchorsroute), [`trackScroll`](#trackscrollanchor), [`navigationBlocker`](#blocking-navigation)
 
 ---
 
 ## Controls
 
-Each creator has a `use*` twin (`controlla/core/use*`) that does the same but binds the control to a React component — created on first render, the same instance afterwards. Pass a factory (`() => …`) to build it once when the argument is expensive.
+Each creator has a `use*` twin (`controlla/core/use*`) that does the same but binds the control to a React component - created on first render, the same instance afterwards. Pass a factory (`() => …`) to build it once when the argument is expensive.
 
 ### `createControl` / `useControl`
 
@@ -119,7 +147,7 @@ useControl(value?, externalStorage?)
 | Parameter | Type | Description |
 |---|---|---|
 | `value?` | `T` or `() => T` | Initial value, or a lazy initializer. |
-| `externalStorage?` | `SyncExternalStorage` | External storage backing the value: the control starts from the stored value, writes changes back and, if the storage is observable, picks up external changes. Any storage with sync reads works — e.g. one from [`getPersistStorage`](#getpersiststorageoptions). |
+| `externalStorage?` | `SyncExternalStorage` | External storage backing the value: the control starts from the stored value, writes changes back and, if the storage is observable, picks up external changes. Any storage with sync reads works: e.g. one from [`getPersistStorage`](#getpersiststorageoptions). |
 
 ```ts
 const $user = createControl({ profile: { name: 'John', age: 30 } });   // value
@@ -134,7 +162,7 @@ const $local = useControl(0);         // component-scoped (inside a component)
 
 ### `createPrimitiveControl` / `usePrimitiveControl`
 
-A lightweight control whose value is **opaque** — no nested-path access, changes detected by reference (`!==`). Cheaper than `createControl`; replace objects instead of mutating them.
+A lightweight control whose value is **opaque** - no nested-path access, changes detected by reference (`!==`). Cheaper than `createControl` - replace objects instead of mutating them.
 
 ```ts
 createPrimitiveControl(value?, externalStorage?)
@@ -188,16 +216,16 @@ useAsyncControl(options?, externalStorage?)   // options or () => options
 | `stillLoading()` | `boolean` | Whether still loading. |
 
 ```ts
-// loadable — fetches on first use
+// loadable: fetches on first use
 const $products = createAsyncControl(
   requestLoader(() => fetch('/api/products').then((r) => r.json()))
 );
 
-// manual — value pushed from outside
+// manual: value pushed from outside
 const $position = createAsyncControl<GeolocationPosition>();
 navigator.geolocation.watchPosition((pos) => setValue($position, pos));
 
-// component-scoped — factory builds the loader once
+// component-scoped: factory builds the loader once
 const $me = useAsyncControl(() =>
   requestLoader(() => fetch('/api/me').then((r) => r.json()))
 );
@@ -207,7 +235,7 @@ const $me = useAsyncControl(() =>
 
 A control computed from one or more source controls, recomputing on any source change. With no mapper it mirrors a single source.
 
-Settable via `setValue` as a local override — but a source recompute overrides it; if a source change and a `setValue` on the derived control land in the **same flush**, the source wins.
+Settable via `setValue` as a local override, but a source recompute overrides it; if a source change and a `setValue` on the derived control land in the **same flush**, the source wins.
 
 ```ts
 createDerivedControl(...controls, mapper?)
@@ -229,7 +257,7 @@ const $fullName = createDerivedControl($first, $last, (f, l) => `${f} ${l}`); //
 
 An async control computed from sources. The mapper runs only while **every** source is ready (has a value) and error-free; otherwise the control is loading, or holds an [`AggregateControlError`](#isaggregatecontrolerrorerr) with the source errors (last slot = the mapper's own throw). Using it loads loadable sources; `invalidate` reloads them.
 
-Settable via `setValue` as a local override — but a source recompute overrides it; if a source change and a `setValue` on the derived control land in the **same flush**, the source wins.
+Settable via `setValue` as a local override, but a source recompute overrides it; if a source change and a `setValue` on the derived control land in the **same flush**, the source wins.
 
 ```ts
 createAsyncDerivedControl(...controls, mapper?)
@@ -300,7 +328,7 @@ const [user, error] = useSuspenseValue($user, true);
 
 ### `useSuspenseValues(controls, safe?)`
 
-Like `useSuspenseValue` for an array — suspends until **all** are ready. Array length must stay constant across renders.
+Like `useSuspenseValue` for an array - suspends until **all** are ready. Array length must stay constant across renders.
 
 | Parameter | Type | Description |
 |---|---|---|
@@ -313,7 +341,7 @@ const [user, cart] = useSuspenseValues([$user, $cart]);
 
 ### `useInfiniteValues(controls)`
 
-Current values of a **dynamic-length** list of same-typed controls (the array may grow/shrink between renders) — for paginated/infinite data. Async controls provide `value` or `undefined` and start loading when consumed.
+Current values of a **dynamic-length** list of same-typed controls (the array may grow/shrink between renders): for paginated/infinite data. Async controls provide `value` or `undefined` and start loading when consumed.
 
 | Parameter | Type | Description |
 |---|---|---|
@@ -329,7 +357,7 @@ const pages = useInfiniteValues(pageNumbers.map((p) => productsRegistry.get(p)))
 
 ### `setValue(control, value, scheduler?)`
 
-Sets a control's value. Batched — committed on the next flush, notifying only changed paths.
+Sets a control's value. Batched - committed on the next flush, notifying only changed paths.
 
 | Parameter | Type | Description |
 |---|---|---|
@@ -344,9 +372,17 @@ setValue($user.profile.name, 'Jane');           // nested
 setValue($filter, value, requestAnimationFrame); // commit before next paint (any scheduler works)
 ```
 
+### `replaceValue(control, value, scheduler?)`
+
+Exactly `setValue`, but the write is marked as a *replacement* - for router controls it replaces the history entry instead of pushing one; for ordinary controls it's identical to `setValue`.
+
+```ts
+replaceValue(selectParams(router.routes.catalog), { sort: 'price' }); // no new history entry
+```
+
 ### `invalidate(control, silentOrScheduler?)`
 
-Resets an async control — clears value, error and ready status — and reloads if it's in use.
+Resets an async control (clears value, error and ready status) and reloads if it's in use.
 
 | Parameter | Type | Description |
 |---|---|---|
@@ -380,7 +416,7 @@ const unwatch = watchValue($theme, (theme, prevTheme) => {
 
 ### `watchValues(controls, callback, immediate?)`
 
-Like `watchValue` for multiple controls — one call per flush.
+Like `watchValue` for multiple controls - one call per flush.
 
 | Parameter | Type | Description |
 |---|---|---|
@@ -396,7 +432,7 @@ const unwatch = watchValues([$query, $page], ([query, page]) => {
 
 ### `load(control)`
 
-Marks the control **in use** → starts its loading (and that of its loadable sources) **without subscribing** — e.g. prefetching. Returns a release function; loading stops when no other usage remains. Safe to call more than once.
+Marks the control **in use** → starts its loading (and that of its loadable sources) **without subscribing**: e.g. prefetching. Returns a release function; loading stops when no other usage remains. Safe to call more than once.
 
 | Parameter | Type | Description |
 |---|---|---|
@@ -426,14 +462,14 @@ const unwatch = watchSlowLoading($products, () => console.warn('products are slo
 `selectLoading` / `selectReady` / `selectError` return sub-controls you can read like any control (`useValue`, `watchValue`, Consumers).
 
 ### `selectLoading(control)`
-Returns a `boolean` control — `true` while a load is in flight, `false` otherwise.
+Returns a `boolean` control - `true` while a load is in flight, `false` otherwise.
 
 | Parameter | Type | Description |
 |---|---|---|
 | `control` | `ReadonlyAsyncControl` | The async control. |
 
 ### `selectReady(control)`
-Returns a `true`/`undefined` control — `true` once the control has a value (ready), `undefined` before it ever resolves or while pending with no value (first load, after `invalidate`). Distinct from loading: it stays `true` through a background reload that keeps the value. Await/suspend on readiness without re-rendering on every value change.
+Returns a `true`/`undefined` control - `true` once the control has a value (ready), `undefined` before it ever resolves or while pending with no value (first load, after `invalidate`). Distinct from loading - it stays `true` through a background reload that keeps the value. Await/suspend on readiness without re-rendering on every value change.
 
 | Parameter | Type | Description |
 |---|---|---|
@@ -483,7 +519,7 @@ Multi-control `ControlConsumer`.
 ```jsx
 <ControlsConsumer
   controls={[$user, $cart]}
-  render={(user, cart) => <p>{user.name} — {cart.length} items</p>}
+  render={(user, cart) => <p>{user.name}: {cart.length} items</p>}
 />
 ```
 
@@ -498,7 +534,7 @@ Render-prop over a **dynamic-length** list of same-typed controls (component for
 
 ### `<Suspense>`
 
-Drop-in replacement for `React.Suspense`, **required** around components that use the suspense **hooks** ([`useSuspenseValue`](#usesuspensevaluecontrol-safe) / [`useSuspenseValues`](#usesuspensevaluescontrols-safe)) — it tracks the loadings suspended components start and releases them when they resolve or unmount. The `Suspense*Consumer` components include their own boundary, so they don't need it.
+Drop-in replacement for `React.Suspense`, **required** around components that use the suspense **hooks** ([`useSuspenseValue`](#usesuspensevaluecontrol-safe) / [`useSuspenseValues`](#usesuspensevaluescontrols-safe)): it tracks the loadings suspended components start and releases them when they resolve or unmount. The `Suspense*Consumer` components include their own boundary, so they don't need it.
 
 | Prop | Type | Description |
 |---|---|---|
@@ -549,7 +585,7 @@ Renders an async control with **its own** `Suspense` boundary (no outer one need
 
 ### `<SuspenseControlsConsumer>`
 
-Multi-control `SuspenseControlConsumer` — suspends until all are ready.
+Multi-control `SuspenseControlConsumer`: suspends until all are ready.
 
 | Prop | Type | Description |
 |---|---|---|
@@ -561,7 +597,7 @@ Multi-control `SuspenseControlConsumer` — suspends until all are ready.
 
 ### `wrapErrorBoundary(BoundaryComponent)`
 
-Wraps a class error boundary so that, when it catches an error, the loadings started by components suspended beneath it are **released** (otherwise they leak — a thrown component never commits, so React can't clean them up).
+Wraps a class error boundary so that, when it catches an error, the loadings started by components suspended beneath it are **released** (otherwise they leak - a thrown component never commits, so React can't clean them up).
 
 | Parameter | Type | Description |
 |---|---|---|
@@ -580,7 +616,7 @@ export default wrapErrorBoundary(ErrorBoundary);
 An async control stuck **loading forever** (value `undefined`, never settles, writes are no-ops). A placeholder where a control is expected but not yet available.
 
 ```jsx
-{/* $user may be undefined until selected — $pending keeps the fallback shown */}
+{/* $user may be undefined until selected: $pending keeps the fallback shown */}
 <SuspenseControlConsumer
   control={$user || $pending}
   fallback={<p>Loading…</p>}
@@ -590,7 +626,7 @@ An async control stuck **loading forever** (value `undefined`, never settles, wr
 
 ### `isAggregateControlError(err)`
 
-Type guard for `AggregateControlError` — the error of a derived/bound control. Its `.errors` is **positional**: one slot per source in order, the last slot the control's own (mapper) error; error-free slots are `undefined`.
+Type guard for `AggregateControlError` - the error of a derived/bound control. Its `.errors` is **positional** - one slot per source in order, the last slot the control's own (mapper) error; error-free slots are `undefined`.
 
 | Parameter | Type | Description |
 |---|---|---|
@@ -608,7 +644,7 @@ if (isAggregateControlError(err)) {
 
 ### `createRegistry(create, initArg?, options?)`
 
-A **keyed collection** of controls — one control per distinct key tuple, created and cached lazily on first access.
+A **keyed collection** of controls - one control per distinct key tuple, created and cached lazily on first access.
 
 | Parameter | Type | Description |
 |---|---|---|
@@ -620,9 +656,9 @@ A **keyed collection** of controls — one control per distinct key tuple, creat
 
 | Field | Type | Description |
 |---|---|---|
-| `externalStorage?` | `SyncExternalStorage` | External storage backing each item's value (receives the item's keys) — any storage with sync reads; persisting via [`getPersistStorage`](#getpersiststorageoptions) is one use of it. |
-| `keepPrev?` | `boolean` or `boolean[]` | For bound controls: keep showing the previous value while a re-targeted item loads, instead of blanking to `undefined`. An array decides per key — e.g. `[false, true]` keeps the value on the second key's changes but blanks on the first's; when several keys change at once, every changed key must allow keeping. The held value is replaced once the item produces one. |
-| `suppressError?` | `boolean` | For bound controls: swallow an error while there is a previous value to show — it surfaces only when there's nothing to hold. On re-targets it applies only where `keepPrev` holds. |
+| `externalStorage?` | `SyncExternalStorage` | External storage backing each item's value (receives the item's keys): any storage with sync reads; persisting via [`getPersistStorage`](#getpersiststorageoptions) is one use of it. |
+| `keepPrev?` | `boolean` or `boolean[]` | For bound controls: keep showing the previous value while a re-targeted item loads, instead of blanking to `undefined`. An array decides per key: e.g. `[false, true]` keeps the value on the second key's changes but blanks on the first's; when several keys change at once, every changed key must allow keeping. The held value is replaced once the item produces one. |
+| `suppressError?` | `boolean` | For bound controls: swallow an error while there is a previous value to show; it surfaces only when there's nothing to hold. On re-targets it applies only where `keepPrev` holds. |
 
 ```ts
 // async controls
@@ -729,7 +765,7 @@ Builds a `SyncExternalStorage` to pass as a control's second argument. Returns `
 | Option | Type | Description |
 |---|---|---|
 | `name` | `string` | Key the value is stored under (registry keys appended). |
-| `storage` | `PersistStorage` or `undefined` | The storage to read/write — [`safeLocalStorage`](#safelocalstorage), [`safeSessionStorage`](#safesessionstorage), or a custom `PersistStorage`. |
+| `storage` | `PersistStorage` or `undefined` | The storage to read/write: [`safeLocalStorage`](#safelocalstorage), [`safeSessionStorage`](#safesessionstorage), or a custom `PersistStorage`. |
 | `isValid?` | `(value) => boolean` | Validates a stored value on read; invalid → treated as absent. |
 | `converter?` | `{ parse, stringify }` | Serialize to/from string. Defaults to `JSON`. |
 | `observable?` | `boolean` | If `true` (and supported), pick up external changes (e.g. another tab). |
@@ -753,11 +789,11 @@ A `sessionStorage`-backed storage (observable within browsing contexts sharing t
 
 ## DOM
 
-Ready-made controls bound to browser state — import and read, no setup. Safe to import on the server (default values, no listeners attached).
+Ready-made controls bound to browser state - import and read, no setup. Safe to import on the server (default values, no listeners attached).
 
 ### `mediaQuery(query)`
 
-Returns a boolean control tracking whether the media `query` matches, kept in sync with [`matchMedia`](https://developer.mozilla.org/en-US/docs/Web/API/Window/matchMedia). Created once per query and reused after — safe to call inline.
+Returns a boolean control tracking whether the media `query` matches, kept in sync with [`matchMedia`](https://developer.mozilla.org/en-US/docs/Web/API/Window/matchMedia). Created once per query and reused after - safe to call inline.
 
 | Parameter | Type | Description |
 |---|---|---|
@@ -774,17 +810,17 @@ const Nav = () => {
 ```
 
 ### `$online`
-An **async control** of connectivity: `true` while online, `undefined` while offline. Since offline means "not ready", the async tooling just works — [`toPromise`](#topromisecontrol)`($online)` waits for reconnection, [`useSuspenseValue`](#usesuspensevaluecontrol-safe)`($online)` suspends a component while offline.
+An **async control** of connectivity - `true` while online, `undefined` while offline. Since offline means "not ready", the async tooling just works - [`toPromise`](#topromisecontrol)`($online)` waits for reconnection, [`useSuspenseValue`](#usesuspensevaluecontrol-safe)`($online)` suspends a component while offline.
 
 ```ts
 await toPromise($online);   // wait until back online, then retry
 ```
 
 ### `$pageVisible`
-A `boolean` control — `true` while the tab is visible, `false` while hidden.
+A `boolean` control - `true` while the tab is visible, `false` while hidden.
 
 ### `$windowSize`
-A `{ width, height }` control of the window's inner size, kept in sync with `resize` and `orientationchange` (committed once per animation frame). `width` and `height` are nested controls — subscribe to one without re-rendering on the other.
+A `{ width, height }` control of the window's inner size, kept in sync with `resize` and `orientationchange` (committed once per animation frame). `width` and `height` are nested controls - subscribe to one without re-rendering on the other.
 
 ```tsx
 import $online from 'controlla/dom/online';
@@ -804,7 +840,7 @@ const StatusBar = () => {
 
 Updates batch per scheduler (microtask by default). Pass one wherever a `scheduler` is accepted (`setValue`, `invalidate`, `batch`, loaders, …).
 
-A `Scheduler` is just `(cb: () => void) => any` — it receives a flush callback and decides when to run it. So **any** such function works, not only the factories below: pass `requestAnimationFrame`, `queueMicrotask`, `requestIdleCallback`, React's `startTransition`, or `(cb) => setTimeout(cb, ms)` directly. The factories add state (a `.flush()` handle, coalescing) on top.
+A `Scheduler` is just `(cb: () => void) => any` - it receives a flush callback and decides when to run it. So **any** such function works, not only the factories below - pass `requestAnimationFrame`, `queueMicrotask`, `requestIdleCallback`, React's `startTransition`, or `(cb) => setTimeout(cb, ms)` directly. The factories add state (a `.flush()` handle, coalescing) on top.
 
 ```ts
 import { startTransition } from 'react';
@@ -816,13 +852,13 @@ setValue($filter, value, (cb) => setTimeout(cb, 200));    // commit after 200ms
 
 ### `batch(callback, scheduler?)`
 
-Runs `callback` as part of the scheduler's flush. Anything inside it — control writes **and** external side-effects like React `setState` — lands in the same flush, so they coalesce into a **single re-render**. If already inside a flush, runs immediately and joins it.
+Runs `callback` as part of the scheduler's flush. Anything inside it (control writes **and** external side-effects like React `setState`) lands in the same flush, so they coalesce into a **single re-render**. If already inside a flush, runs immediately and joins it.
 
 Coalescing only happens between `batch` and writes on the **same scheduler** (same flush). They share a flush by default (both microtask); pass the same custom `scheduler` to both to coalesce on it.
 
 | Parameter | Type | Description |
 |---|---|---|
-| `callback` | `() => void` | Run within the flush — its control writes and any `setState` share that flush. |
+| `callback` | `() => void` | Run within the flush: its control writes and any `setState` share that flush. |
 | `scheduler?` | `Scheduler` | Schedules the flush (microtask by default). |
 
 ```tsx
@@ -839,7 +875,7 @@ const select = (id: number) => {
 
 A scheduler that commits **only** when `.flush()` is called.
 
-**Returns** — a `Scheduler` with `flush(): boolean` (runs the pending commit; `true` if there was one).
+**Returns**: a `Scheduler` with `flush(): boolean` (runs the pending commit; `true` if there was one).
 
 ```ts
 // stage several filter edits, apply them on "Search" as one update
@@ -860,7 +896,7 @@ Delays the flush by `ms`, batching all updates in the window into one commit.
 |---|---|---|
 | `ms` | `number` | Window in milliseconds. |
 
-**Returns** — a `Scheduler` with `flush(): boolean` (force the pending commit now).
+**Returns**: a `Scheduler` with `flush(): boolean` (force the pending commit now).
 
 ```ts
 const throttle = createThrottleScheduler(100);
@@ -872,15 +908,328 @@ window.addEventListener('pointermove', (e) => {
 
 ### `createDebounceScheduler(ms)`
 
-Delays the flush until `ms` of quiet — each update resets the timer, so it commits once updates stop.
+Delays the flush until `ms` of quiet - each update resets the timer, so it commits once updates stop.
 
 | Parameter | Type | Description |
 |---|---|---|
 | `ms` | `number` | Quiet period in milliseconds. |
 
-**Returns** — a `Scheduler` with `flush(): boolean`.
+**Returns**: a `Scheduler` with `flush(): boolean`.
 
 ```ts
 const debounce = createDebounceScheduler(300);
 setValue($search, value, debounce);   // commits 300ms after the last change
 ```
+
+---
+
+## Router
+
+Routes are a **typed tree**, not URL strings - every dynamic piece of the URL (path params, query, hash) lives in a regular control. Read it with [`useValue`](#usevaluecontrol), write it with [`setValue`](#setvaluecontrol-value-scheduler), and the address bar stays in sync on its own. Navigation targets are built by calling the tree (`navigation.product({ id: '42' })`), so a typo or a missing param is a compile error, not a 404.
+
+### `createRouter(paths)`
+
+Creates the app's router (there's exactly one). It matches the current URL immediately and from then on owns history, scroll restoration and anchor scrolling.
+
+```ts
+import createRouter from 'controlla/router/createRouter';
+
+const router = createRouter(paths);
+```
+
+- `router.routes` - the typed route tree, where every route is a readonly control of whether it's matched.
+- `router.navigation` - target builders, for [`navigate`](#navigateto-replace-ignoreblock-scrolltotop-scrollrestoration) and [`Link`](#link--uselink) below.
+- `router.navigationState` - a control reporting how the current entry was reached: `{ action: 'push' | 'replace' | 'pop', delta }`. Mostly for analytics - telling a real navigation apart from a back/forward one.
+- `router.navigationBlocker` - see [Blocking navigation](#blocking-navigation).
+
+### `createPath(...path)`
+
+Declares one path of the route tree. Arguments come in order - static string segments and param declarators (`param`, `query`, `oneOf`, `arrayParam`) building up the path, an optional `anchor(...)`, and an optional children record for nested paths.
+
+```ts
+import createPath from 'controlla/router/createPath';
+import param from 'controlla/router/param';
+import withNotFound from 'controlla/router/withNotFound';
+
+const paths = withNotFound({
+  home: createPath(),
+  product: createPath(
+    'product',
+    param({ id: { parse: Number, stringify: String } }),
+    { reviews: createPath('reviews') }              // /product/42/reviews
+  ),
+});
+```
+
+### `createAsyncPath(source)`
+
+Like `createPath`, but for a path whose params need data that isn't available synchronously - a lookup dictionary, a feature config, and so on. Pass the async `source` control first - every `parse`, `stringify`, `isValid` and default of the path's params then receives the source's current value as an extra argument.
+
+The route matches immediately, but its params control is **async** - `undefined` until `source` is ready, the parsed params once it resolves. If `source` changes later, the same URL strings are re-parsed against the new value, and when that yields different params, the URL is rewritten in place to match.
+
+A parse failure (a bad value with no `fallbackValue`) doesn't behave like `createPath`'s "route just doesn't match" - the route still matches, but the params control commits an error instead of a value, readable with `selectError`/`isAggregateControlError`.
+
+```ts
+import createAsyncPath from 'controlla/router/createAsyncPath';
+
+// /product/laptops - the slug is resolved through an async category dictionary
+const paths = {
+  product: createAsyncPath($categories)(
+    'product',
+    param({
+      category: {
+        parse: (slug, categories) => categories.bySlug[slug],
+        stringify: (category) => category.slug,
+      },
+    })
+  ),
+};
+```
+
+### `param(options)`
+
+Declares a dynamic path segment. Takes exactly one `{ name: options }` pair - the parsed value lands in the route's params control under that name.
+
+`options` is either a **boolean** or a **`ParamOptions` object**:
+
+| `options` | Meaning |
+|---|---|
+| `false` | A required plain string. |
+| `true` | An optional plain string - the URL may omit the segment. |
+| `ParamOptions` object | Typed parsing, validation and defaults, described below. |
+
+| `ParamOptions` field | Type | Description |
+|---|---|---|
+| `parse?` | `(raw) => T` | Converts the URL string to the typed value. |
+| `stringify?` | `(value) => string` | Converts the typed value back to a URL string. |
+| `isValid?` | `(raw) => boolean` | Rejects garbage input - without a `fallbackValue`, the route just doesn't match. |
+| `fallbackValue?` | `T` | Used in place of invalid raw input, instead of failing the match. |
+| `optional?` | `boolean` | Lets the URL omit the segment. |
+| `defaultValue?` | `T` | Stands in for a missing value - on parse, and when writing the URL too. The segment always shows this value until something else is explicitly set; there's no way to clear it back to "absent". |
+| `initialValue?` | `T` | Applied once, on the session's first load, then written into the URL like a real value from then on - unlike `defaultValue`, it can be cleared normally afterward. |
+
+```ts
+createPath('product', param({ id: false }));                               // required string
+createPath('product', param({ id: { parse: Number, stringify: String } })); // typed
+```
+
+`isValid`/`fallbackValue` only guard the URL → params direction. Building a target (`navigation.product({ id })`) skips them entirely - TypeScript's types are what keep the value you pass valid there, so `stringify` trusts it as-is.
+
+### `query(options)`
+
+Declares the path's query params - place it after the path segments. Takes a `{ name: options }` record - each value follows the same boolean-or-`ParamOptions` shape as [`param`](#paramoptions). Absent optional params are `undefined` in the params control, and `undefined` values are dropped from the URL.
+
+```ts
+import query from 'controlla/router/query';
+
+createPath('catalog', query({ sort: true, page: { parse: Number, optional: true } }));
+```
+
+### `oneOf(options)`
+
+Declares a dynamic path segment restricted to a fixed set of string variants - the route matches only when the segment is one of them, and the param is typed as their union.
+
+| Field | Type | Description |
+|---|---|---|
+| `variants` | `string[]` | The allowed values; the param's type is their union. |
+| `optional?` | `boolean` | Lets the URL omit the segment. |
+| `defaultValue?` | one of `variants` | Same as `param`'s `defaultValue` - stands in for a missing value, including in the URL. |
+
+```ts
+import oneOf from 'controlla/router/oneOf';
+
+createPath('orders', oneOf({ status: { variants: ['active', 'done'] } }));
+```
+
+### `arrayParam(options)`
+
+Declares a dynamic path segment whose value is a `/`-joined array of strings, e.g. `/tags/red/blue/green`. Unlike `param` and `query`, it's always required - there's no optional variant.
+
+`options` is either `false` (the raw `string[]`) or an object with `parse` / `stringify` for a typed array. Stringifying an empty array throws.
+
+```ts
+import arrayParam from 'controlla/router/arrayParam';
+
+createPath('search', arrayParam({ tags: false }));   // /search/red/blue/green
+```
+
+### `createRouterView(routes)`
+
+Builds the component that renders the matched page inside its layouts. On navigation **only the slots whose component changed re-render** - switching pages under a shared layout never re-renders the layout.
+
+```tsx
+import createRouterView from 'controlla/router/createRouterView';
+import NOT_FOUND from 'controlla/router/NOT_FOUND';
+
+const RouterView = createRouterView([
+  [router.routes.home, HomePage],
+  [MainLayout, [
+    [router.routes.product, ProductPage],
+    [router.routes.product.reviews, ReviewsPage],
+    [router.routes.catalog, CatalogPage],
+  ]],
+  [router.routes[NOT_FOUND], NotFoundPage],
+]);
+
+createRoot(document.getElementById('root')!).render(<RouterView />);
+```
+
+### `Link` / `useLink`
+
+`useLink` is a headless hook returning `href`, `onClick` and `isMatched`; `Link` is a thin render-prop wrapper over it. `isMatched` is computed (and subscribed) only with the `trackMatch` option - `true` tracks whether the route is matched, `'exact'` also compares the params and anchor the link points at.
+
+```tsx
+import Link from 'controlla/router/Link';
+
+<Link
+  to={router.navigation.catalog({ sort: 'price' })}
+  trackMatch
+  render={({ href, onClick, isMatched }) => (
+    <a href={href} onClick={onClick} className={isMatched ? 'active' : ''}>
+      Catalog
+    </a>
+  )}
+/>
+```
+
+### `navigate(to, replace?, ignoreBlock?, scrollToTop?, scrollRestoration?)`
+
+Programmatic navigation - pushes a history entry, or replaces it with `replace`. `<Redirect to={...} />` does the same on mount (replace by default).
+
+```ts
+import navigate from 'controlla/router/navigate';
+
+navigate(router.navigation.product({ id: 42 }));            // → /product/42
+navigate(router.navigation.product({ id: 42 }).reviews());  // → /product/42/reviews
+navigate(router.navigation.product().reviews());            // already on product/42 - same id, add reviews
+navigate(router.navigation.home(), true);                   // replace
+```
+
+Calling a chained segment with no arguments, like `.product()` above, keeps that route's params as currently set instead of changing them (it only works while that route is already matched - a required param can't be left unspecified otherwise). The same "leave as currently set" rule applies to the trailing anchor argument - pass `undefined`, or leave it off, to keep the hash untouched.
+
+### Route params are controls
+
+`selectParams(route)` returns the route's params as a regular control, shaped like whatever `param`/`query` declared - read it with [`useValue`](#usevaluecontrol), write it with [`setValue`](#setvaluecontrol-value-scheduler)/[`replaceValue`](#replacevaluecontrol-value-scheduler), and the URL follows automatically. Components subscribe to exactly the field they read.
+
+```tsx
+import selectParams from 'controlla/router/selectParams';
+
+const $catalog = selectParams(router.routes.catalog);
+
+const SortSelect = () => {
+  const sort = useValue($catalog.sort);            // re-renders only on sort change
+
+  return (
+    <select
+      value={sort ?? 'default'}
+      onChange={(e) => replaceValue($catalog.sort, e.target.value)}
+    />
+  );
+};
+
+setValue($catalog, { sort: 'price', page: 2 });    // whole object, pushes an entry
+```
+
+[`setValue`](#setvaluecontrol-value-scheduler)/[`replaceValue`](#replacevaluecontrol-value-scheduler) throw if the route isn't matched. If a `navigate()` also happens in the same tick, the write is dropped instead of applying - the navigation wins.
+
+### Anchors
+
+`anchor(getOptions?)` gives a route a typed anchor control (`selectAnchor`), stored in the URL as its hash. Writing to it, with [`setValue`](#setvaluecontrol-value-scheduler)/[`replaceValue`](#replacevaluecontrol-value-scheduler) or a navigation's anchor argument, scrolls to the element registered under that id with `registerAnchor(route, id)`. If the element isn't mounted yet (the page is still loading), the scroll retries, instantly, once it mounts, unless the user has scrolled in the meantime. An empty string clears the URL's hash without scrolling; leaving it `undefined` (no argument) leaves it untouched.
+
+```tsx
+import anchor from 'controlla/router/anchor';
+import registerAnchor from 'controlla/router/registerAnchor';
+import selectAnchor from 'controlla/router/selectAnchor';
+
+const paths = {
+  docs: createPath('docs', anchor<'intro' | 'api'>()),
+};
+
+const DocsPage = () => (
+  <>
+    <section {...registerAnchor(router.routes.docs, 'intro')}>…</section>
+    <section {...registerAnchor(router.routes.docs, 'api')}>…</section>
+  </>
+);
+
+const $section = selectAnchor(router.routes.docs);  // Control<'intro' | 'api' | ''>
+
+navigate(router.navigation.docs('api'));            // navigate straight to a section
+setValue($section, 'intro');                        // or just set it
+```
+
+`registerAnchor` throws if the route's path wasn't created with `anchor()`.
+
+### `registerAnchorOffset(route)`
+
+Registers the element the scroll math should account for - a sticky header, say - so `anchor()`'s scroll lands below it instead of underneath. Returns a cached ref, safe to call during render. Throws if the route's path wasn't created with `anchor()`.
+
+```tsx
+import registerAnchorOffset from 'controlla/router/registerAnchorOffset';
+
+<header ref={registerAnchorOffset(router.routes.docs)} />
+```
+
+### `selectRegisteredAnchors(route)`
+
+A reactive set of the ids currently mounted, for building a section nav that only shows what's on the page - `true` per mounted id, `undefined` when not mounted. With [`trackScroll`](#trackscrollanchor), the currently active id is `'active'` instead of `true`.
+
+```tsx
+import selectRegisteredAnchors from 'controlla/router/selectRegisteredAnchors';
+
+const $registered = selectRegisteredAnchors(router.routes.docs);
+
+const SectionNav = () => (
+  <nav>
+    {(['intro', 'api'] as const).map((id) => {
+      const state = useValue($registered[id]);
+      return state && (
+        <Link
+          key={id}
+          to={router.navigation.docs(id)}
+          render={({ href, onClick }) => (
+            <a href={href} onClick={onClick} className={state === 'active' ? 'active' : ''}>
+              {id}
+            </a>
+          )}
+        />
+      );
+    })}
+  </nav>
+);
+```
+
+### `trackScroll(anchor)`
+
+Tracks which registered section is currently on screen - wrap it around `anchor()`'s result and it keeps [`selectRegisteredAnchors`](#selectregisteredanchorsroute) marking that one `'active'` as the user scrolls.
+
+```tsx
+import anchor from 'controlla/router/anchor';
+import trackScroll from 'controlla/router/trackScroll';
+
+const paths = {
+  docs: createPath('docs', trackScroll(anchor<'intro' | 'api'>())),
+};
+
+const state = useValue(selectRegisteredAnchors(router.routes.docs).intro); // 'active' | true | undefined
+```
+
+### Blocking navigation
+
+Guard unsaved changes - while `navigationBlocker` is enabled, an attempted navigation is parked instead of applied. `isPendingNavigation` is just a control plus `allow()`/`deny()` - it doesn't render anything itself, so build whatever UI you want around it (dialog, toast, inline banner). Tab close is guarded via `beforeunload`.
+
+```tsx
+const { navigationBlocker } = router;
+
+useEffect(() => navigationBlocker.enable(), []);   // enable returns disable
+
+const pending = useValue(navigationBlocker.isPendingNavigation);
+
+if (pending) {
+  // show your own UI, then resolve it:
+  navigationBlocker.isPendingNavigation.allow();
+  navigationBlocker.isPendingNavigation.deny();
+}
+```
+
+The router also handles what you'd expect from the platform - scroll position is restored on back/forward and across refreshes, and the anchor is scrolled on first load.

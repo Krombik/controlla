@@ -18,13 +18,16 @@ export type LinkOptions = {
   /** Runs before the navigation on every click. */
   onClick?(e: MouseEvent<HTMLAnchorElement, any>): void;
   /**
-   * Computes `isMatched`, subscribing to changes: `true` — whether the
-   * target route is matched; `'exact'` — whether it's matched with exactly
-   * the params and anchor this link navigates to.
+   * Computes {@link LinkHandle.isMatched isMatched}, subscribing to changes:
+   * `true` whether the target route is matched; `'exact'` whether it's
+   * matched with exactly the params and anchor this link navigates to.
    */
   trackMatch?: boolean | 'exact';
+  /** Bypasses an enabled `navigationBlocker`. */
   ignoreBlock?: boolean;
+  /** Scrolls to the top after the navigation (default: only on a new page). */
   scrollToTop?: boolean;
+  /** Saves the scroll position for the back navigation (default: only on a new page). */
   scrollRestoration?: boolean;
 };
 
@@ -35,7 +38,7 @@ export type LinkHandle = {
   onClick(e: MouseEvent<HTMLAnchorElement, any>): void;
   /**
    * Whether the target route is currently matched (exactly, with
-   * `trackMatch: 'exact'`); always `false` when `trackMatch` isn't set.
+   * {@link LinkOptions.trackMatch trackMatch}: `'exact'`); always `false` when {@link LinkOptions.trackMatch trackMatch} isn't set.
    */
   isMatched: boolean;
 };
@@ -46,7 +49,7 @@ const throwNotMatched = () => {
 
 /**
  * Headless link primitive: subscribes to the target route's state and returns
- * everything needed to render an anchor — use it to build your own `Link`.
+ * everything needed to render an anchor: use it to build your own `Link`.
  *
  * @example
  * ```tsx

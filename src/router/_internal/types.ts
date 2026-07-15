@@ -13,7 +13,6 @@ import type {
   PrimitiveControlInternals,
 } from '#internal/types';
 import type { NavigationTarget } from '#router/types';
-import type { AnchorParam } from '#router/internal/anchor';
 import type { DerivedControlInternals } from '#internal/derivedControlUtils';
 
 export type IsUnion<T, U = T> = T extends any
@@ -59,14 +58,27 @@ export type Route<
   ReadonlyControl<boolean>;
 
 export type Router<Paths extends AnyPaths> = {
+  /**
+   * Blocks navigations while enabled (e.g. over an unsaved form): an
+   * attempted navigation is parked instead of applied and
+   * `isPendingNavigation` becomes `true`: `allow()` lets it proceed,
+   * `deny()` drops it. Closing the tab is guarded via `beforeunload`.
+   */
   readonly navigationBlocker: {
+    /** Enables the blocker; returns `disable`. */
     enable(): () => void;
     disable(): void;
+    /** Whether a navigation is parked awaiting `allow()`/`deny()`. */
     readonly isPendingNavigation: ReadonlyControl<boolean> & {
       allow(): void;
       deny(): void;
     };
   };
+  /**
+   * The route tree mirroring the paths: every route is a readonly boolean
+   * control of whether it's matched, and the argument for `selectParams`,
+   * `selectAnchor` and `createRouterView`.
+   */
   readonly routes: {
     readonly [key in keyof Paths]: Paths[key] extends Path<
       infer C,
@@ -78,6 +90,11 @@ export type Router<Paths extends AnyPaths> = {
       ? Route<C, P, A, H>
       : never;
   };
+  /**
+   * Builders of navigation targets for `navigate`/`Link`: call a route's
+   * path with its params (and anchor) to get a target:
+   * `navigation.product({ id: '42' })`.
+   */
   readonly navigation: {
     [key in keyof Paths]: Paths[key] extends Path<
       infer C,
@@ -89,6 +106,7 @@ export type Router<Paths extends AnyPaths> = {
       ? Navigation<C, P, O, A, H>
       : never;
   };
+  /** The last history action: `push`, `replace` or `pop` (with its delta). */
   readonly navigationState: ReadonlyControl<NavigationState>;
 };
 
@@ -110,6 +128,18 @@ export type RouteParams<Params, Async, Anchor> = {
   [PARAMS_MARKER]: [Params, Async, Anchor];
 };
 
+/** @internal a route typed as owning an anchor with the given ids; `never` (uncallable) otherwise */
+export type AnchorRoute<A extends string> = [A] extends [never]
+  ? never
+  : PageRoute<true> & RouteParams<any, any, A>;
+
+/**
+ * A navigation target builder for one route in the tree: call it with the
+ * route's params (and, at the leaf, an anchor) to get a `navigate`/`Link`
+ * target. Calling a chained segment with no arguments (or the anchor with
+ * `undefined`) leaves that segment's params, or the anchor, as currently
+ * set instead of changing them.
+ */
 export type Navigation<
   Paths extends AnyPaths = never,
   Params = never,
@@ -192,7 +222,7 @@ export type RouteData = {
     source: any,
     initial: boolean
   ): void;
-  /** one-shot boot mark for async params — their first parse runs later */
+  /** one-shot boot mark for async params: their first parse runs later */
   _initial?: boolean;
   _currentPath: string;
   _currentSearch: string;
@@ -210,17 +240,17 @@ export type RouterWrite = {
   readonly _root: RouterControlRoot;
   /** the value as resolved at call time */
   readonly _params: any;
-  /** the written control's path — scopes the patch to its slice */
+  /** the written control's path: scopes the patch to its slice */
   readonly _path: readonly string[] | undefined;
 };
 
-/** @internal `navigate` payload stored in the lane — wins over accumulated `setValue`/`replaceValue` */
+/** @internal `navigate` payload stored in the lane, wins over accumulated `setValue`/`replaceValue` */
 export type RouterNavigation = {
-  /** the navigation target — its chain, queue index and page setter */
+  /** the navigation target: its chain, queue index and page setter */
   readonly _methods: RouteMethods;
   /** stamped by the params handler when the chain changes */
   _isNewPage: boolean;
-  /** popstate/init matching — skips the `navigationState` write */
+  /** popstate/init matching: skips the `navigationState` write */
   readonly _isHistoryEvent: boolean;
   /**
    * skips the navigation blocker; stamped when the payload is parked so the
@@ -232,20 +262,20 @@ export type RouterNavigation = {
 };
 
 /**
- * @internal the params handler's pending patch in a lane's `_patchByControl`
- * — `setValue`/`replaceValue` accumulates one per lane (each scheduler commits its own
+ * @internal the params handler's pending patch in a lane's `_patchByControl`.
+ * `setValue`/`replaceValue` accumulates one per lane (each scheduler commits its own
  * batch), a navigation patch always lives in the microtask lane; handed to
  * the finalizer once committed
  */
 export type RouterPatch = {
-  /** navigation payload — wins over accumulated `_updates` */
+  /** navigation payload: wins over accumulated `_updates` */
   _navigation: RouterNavigation | undefined;
   /** accumulated `setValue`/`replaceValue` entries */
   readonly _updates: RouterWrite[];
-  /** history replace — only if every update in the flush asked for it (navigate overwrites) */
+  /** history replace: only if every update in the flush asked for it (navigate overwrites) */
   _replace: boolean;
   /**
-   * a hash write happened — the finalizer takes the URL hash from the anchor
+   * a hash write happened: the finalizer takes the URL hash from the anchor
    * control and scrolls to it when it's non-empty
    */
   _hashChanged: boolean;
@@ -255,7 +285,7 @@ export type RouterPatch = {
 export type RouterHandler = PendingItem & {
   /** lanes holding accumulated `setValue`/`replaceValue` patches */
   readonly _lanes: Lane[];
-  /** a navigation is queued and not yet committed — updates are ignored */
+  /** a navigation is queued and not yet committed: updates are ignored */
   _hasNavigation: boolean;
 };
 
@@ -265,7 +295,7 @@ export type RouterControlRoot = (
   | AsyncControlInternals
   | PrimitiveControlInternals
 ) & {
-  /** the raw `_enqueueSet` — internal router writes bypass the patch */
+  /** the raw `_enqueueSet`: internal router writes bypass the patch */
   _set?: PrimitiveControlInternals['_enqueueSet'];
 };
 
@@ -273,11 +303,11 @@ export type RouterControlRoot = (
 export type RouteMethods = {
   /** the target's current route chain */
   _routes(): RouteData[];
-  /** `useLink`'s hook-slot budget — the length of the longest route chain */
+  /** `useLink`'s hook-slot budget: the length of the longest route chain */
   _maxSlots(): number;
   /**
    * the chain's index in the router's queue; `-1` for current-chain targets
-   * (never read — their chain diff is empty)
+   * (never read, their chain diff is empty)
    */
   _index: number;
   /** the leaf page's component setter (`noop` until the page registers) */
@@ -510,9 +540,16 @@ export interface Path<
 export type AnyPaths = Record<string, Path<any, {}, any, boolean, string>>;
 
 export type OneOfOptions<V extends string[], O> = {
+  /** The allowed values of the segment. */
   variants: V;
+  /** Marks the segment as optional: the URL may omit it. */
   optional?: O;
-} & (O extends true ? { defaultValue?: V[number] } : {});
+} & (O extends true
+  ? {
+      /** Stands in for a missing segment, on parse and when writing the URL too. */
+      defaultValue?: V[number];
+    }
+  : {});
 
 export type ArrayOptions<V> = {
   parse?(value: string[]): V;
@@ -520,23 +557,46 @@ export type ArrayOptions<V> = {
 };
 
 export type ParamOptions<Value, O = false, Source = never> = {
+  /** Parses the raw URL string into the typed value (identity by default). */
   parse?(value: string, source: Source): Value;
+  /** Turns the value back into its URL string (identity by default). */
   stringify?(value: NoInfer<Value>): string;
+  /** Marks the param as optional: the URL may omit it. */
   optional?: O;
+  /**
+   * Replaces a value that failed to parse or didn't pass {@link isValid};
+   * without it such a value makes the route not match.
+   */
   fallbackValue?:
     | ((
         incorrectValue: string | (O extends true ? never : undefined),
         source: Source
       ) => Value)
     | Value;
+  /**
+   * Validates the parsed value: a failing one falls back or unmatches. Only
+   * guards the URL-to-value direction - building a navigation target skips
+   * it, trusting whatever value TypeScript's types let through.
+   */
   isValid?(value: NoInfer<Value>, source: Source): boolean;
 } & (O extends true
   ?
       | {
+          /**
+           * Stands in for a missing param, on parse and when writing the
+           * URL too - the param can't actually be cleared while this is
+           * set. Mutually exclusive with {@link initialValue}.
+           */
           defaultValue?: Value | ((source: Source) => Value);
           initialValue?: never;
         }
       | {
+          /**
+           * Applied to an absent param only on the very first load of the
+           * session, then written into the URL like a real value - unlike
+           * {@link defaultValue}, it can be cleared normally afterward.
+           * Mutually exclusive with `defaultValue`.
+           */
           initialValue?: Value | ((source: Source) => Value);
           defaultValue?: never;
         }
@@ -549,3 +609,70 @@ export type ValidateParams<P> = keyof P extends {
 }[keyof P]
   ? unknown
   : never;
+
+declare const ANCHOR_IDS: unique symbol;
+
+/** @internal a mounted `registerAnchor` element */
+export type AnchorEntry = {
+  _id: string;
+  _el: HTMLElement;
+};
+
+/** @internal a cached `registerAnchor` handle */
+export type AnchorHandle = {
+  id: string;
+  ref(el: HTMLElement | null): void;
+};
+
+export type AnchorScrollOptions = ScrollIntoViewOptions & {
+  /** Distance in px to keep above the element (e.g. a sticky header height). */
+  topOffset?: number;
+  /** Distance in px to keep left of the element. */
+  leftOffset?: number;
+};
+
+export type AnchorParam<Ids extends string = string> = {
+  /** @internal */
+  _anchor: true;
+  /** @internal called right before a scroll-to actually happens */
+  _onScrollStart(id: string, options: AnchorScrollOptions): void;
+  /** @internal */
+  _hash: PrimitiveControlInternals & {
+    _set?: PrimitiveControlInternals['_enqueueSet'];
+  };
+  /** @internal public anchor control */
+  _hashControl: Control<string>;
+  /** @internal reactive set of mounted anchor ids, `'active'` for the current one */
+  _registered: ControlScope<Record<string, 'active' | true | undefined>>;
+  /** @internal the id `trackScroll` last marked `'active'` in `_registered` */
+  _activeId: string | undefined;
+  /** @internal the anchor's scroll-options resolver */
+  _getOptions(el: HTMLElement | null): AnchorScrollOptions;
+  /** @internal the element `registerAnchorOffset` last registered */
+  _offsetEl: HTMLElement | null;
+  /** @internal cached `registerAnchorOffset` ref, stable across renders */
+  _offsetRef: ((el: HTMLElement | null) => void) | undefined;
+  /** @internal mounted elements, unordered: the spy works on positions */
+  _entries: AnchorEntry[];
+  /** @internal cached `registerAnchor` handles, keyed by id */
+  _handles: Map<string, AnchorHandle>;
+  /**
+   * @internal armed on `_activate`; the next `registerAnchor` mount gets one
+   * try at scrolling to the current hash. Cleared by that mount or by the
+   * user's first scroll, whichever comes first
+   */
+  _isPending: boolean;
+  /** @internal becomes the active anchor: (re)arms `_isPending`, starts the
+   * spy when tracking */
+  _activate(): void;
+  /** @internal starts the spy; noop unless wrapped with `trackScroll` */
+  _startTrack(): void;
+  /** @internal clears the hash, stops the spy */
+  _clear(): void;
+  /**
+   * @internal scrolls to the id if its element is registered, otherwise a
+   * no-op; {@link instant} forces non-smooth (used for the mount-time retry)
+   */
+  _scrollTo(id: string, instant?: boolean): void;
+  [ANCHOR_IDS]: Ids;
+};
