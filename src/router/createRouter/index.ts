@@ -76,6 +76,29 @@ const saveScroll = (state: HistoryState | null) => {
   );
 };
 
+/**
+ * Creates the app's router (there is exactly one) from the given path tree:
+ * matches the current URL right away, keeps every route's params control in
+ * sync with the address bar and takes over history, scroll restoration and
+ * anchor scrolling.
+ *
+ * Returns the typed `routes` tree (every route is a readonly `isMatched`
+ * control), the `navigation` tree for building `navigate`/`Link` targets,
+ * a `navigationState` control (`push` / `replace` / `pop`) and the
+ * `navigationBlocker`.
+ *
+ * @example
+ * ```ts
+ * const router = createRouter(
+ *   withNotFound({
+ *     home: createPath(),
+ *     product: createPath('product', param({ id: false })),
+ *   })
+ * );
+ *
+ * navigate(router.navigation.product({ id: '42' }));
+ * ```
+ */
 const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
   if (process.env.NODE_ENV !== 'production') {
     if (devPopStateListener) {
@@ -253,7 +276,9 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
           prevRoutesCount && currentRoutes[prevRoutesCount - 1]._anchor;
 
         if (prevAnchor) {
-          prevAnchor._clear(lane);
+          prevAnchor._hash._set!(undefined, lane);
+
+          prevAnchor._clear();
         }
 
         if (nextAnchor) {
@@ -304,8 +329,6 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
         item._root._set!(item._params, lane);
       }
-
-      methods._setComponents();
     } else {
       removeFromArray(paramsHandler._lanes, lane);
 
@@ -357,6 +380,10 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
     path = (path || '/') + search;
 
     const anchorParam = route!._anchor;
+
+    if (nav) {
+      nav._methods._setComponents();
+    }
 
     if (patch._hashChanged || (nav && nav._isNewPage)) {
       anchorValue = anchorParam ? anchorParam._hash._value : '';

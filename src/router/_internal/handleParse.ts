@@ -60,11 +60,7 @@ const handleParse = (
       err = error;
     }
 
-    const fallbackValue = getFallbackValue(value, source, err);
-
-    return fallbackValue !== undefined
-      ? fallbackValue
-      : getDefaultValue(source);
+    return getFallbackValue(value, source, err);
   };
 
   return optional

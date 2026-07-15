@@ -7,9 +7,21 @@ import {
 import navigateRoute from '#router/internal/navigateRoute';
 
 /**
- * Navigates to the given {@link to target} (pushes a history entry; pass
- * {@link replace} to replace the current one). The target's hash, when set,
- * scrolls to the registered anchor after the navigation commits.
+ * Navigates to the given {@link to target}: pushes a history entry, or
+ * replaces the current one with {@link replace}. The target's anchor, when
+ * set, scrolls to its registered element after the navigation commits.
+ * {@link ignoreBlock} bypasses an enabled `navigationBlocker`;
+ * {@link scrollToTop} and {@link scrollRestoration} override the defaults
+ * (both happen only on a new page otherwise).
+ *
+ * @example
+ * ```ts
+ * navigate(router.navigation.product({ id: '42' }));
+ *
+ * navigate(router.navigation.docs('usage'));         // with an anchor
+ *
+ * navigate(router.navigation.home(), true);          // replace
+ * ```
  */
 const navigate = (
   to: NavigationTarget<true>,

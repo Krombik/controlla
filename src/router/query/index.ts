@@ -7,6 +7,23 @@ import type {
   ValidateParams,
 } from '#router/internal/types';
 
+/**
+ * Declares the path's query params for `createPath`; place it after the
+ * path segments. Takes a `{ name: options }` record; each value is either a
+ * boolean (shorthand for the `optional` flag of a plain string param) or a
+ * {@link ParamOptions} object.
+ *
+ * Absent optional params are `undefined` in the params control, and
+ * `undefined` values are dropped from the URL.
+ *
+ * @example
+ * ```ts
+ * createPath(
+ *   'catalog',
+ *   query({ sort: true, page: { parse: Number, optional: true } })
+ * );
+ * ```
+ */
 const query = ((
     params: Record<string, ParamOptions<unknown, unknown, boolean> | boolean>
   ) =>

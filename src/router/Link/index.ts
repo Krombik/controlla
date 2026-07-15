@@ -9,7 +9,7 @@ export type LinkProps = LinkOptions & {
 
 /**
  * Render-prop link: subscribes to the target route and hands `href`,
- * `onClick` and `isMatched` to {@link LinkProps.render render} — a thin
+ * `onClick` and `isMatched` to {@link LinkProps.render render}: a thin
  * wrapper over the `useLink` hook. `isMatched` is computed (and subscribed)
  * only with the `trackMatch` option.
  *

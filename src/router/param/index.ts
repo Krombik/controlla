@@ -8,6 +8,26 @@ import type {
   ValidateParams,
 } from '#router/internal/types';
 
+/**
+ * Declares a dynamic path segment for `createPath`. Takes exactly one
+ * `{ name: options }` pair, the segment's value appears in the route's
+ * params control under that name.
+ *
+ * `options` is either a boolean (shorthand for the `optional` flag of a
+ * plain string param: `false` = required, `true` = the URL may omit the
+ * segment) or a {@link ParamOptions} object configuring parsing, validation
+ * and defaults.
+ *
+ * @example
+ * ```ts
+ * createPath('product', param({ id: false }));                // required string
+ *
+ * createPath(
+ *   'product',
+ *   param({ id: { parse: Number, stringify: String } })       // typed
+ * );
+ * ```
+ */
 const param = ((
     param: Record<string, ParamOptions<unknown, unknown, boolean> | boolean>
   ) =>
