@@ -1,4 +1,4 @@
-import identity from 'lodash.identity';
+import identity from '#internal/identity';
 import type { ParamStringifier } from '#router/internal/types';
 import nonUndefinedIdentity from '#router/internal/nonUndefinedIdentity';
 

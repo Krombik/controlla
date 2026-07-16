@@ -1,5 +1,5 @@
 import type { ControlInternals, Lane, PatchTreeNode } from '#internal/types';
-import noop from 'lodash.noop';
+import noop from '#internal/noop';
 import createScope from '#internal/createScope';
 import type { ControlScope, SyncExternalStorage } from '#types';
 import { commitPatchNode, UNCHANGED } from '#internal/commitPatchNode';

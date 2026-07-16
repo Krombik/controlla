@@ -6,7 +6,7 @@ import {
 } from 'react';
 
 import type { PageRoute } from '#router/internal/types';
-import noop from 'lodash.noop';
+import noop from '#internal/noop';
 import { jsx } from 'react/jsx-runtime';
 import { EMPTY_OBJECT } from '#router/internal/constants';
 import { EMPTY_ARR } from '#internal/constants';

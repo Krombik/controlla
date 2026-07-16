@@ -2,7 +2,7 @@ import useForceRerender from '#internal/useForceRerender';
 import type { ControlInternalsChild } from '#internal/types';
 import { INTERNALS } from '#internal/constants';
 import type { ReadonlyAsyncControl, ReadonlyControl } from '#types';
-import noop from 'lodash.noop';
+import noop from '#internal/noop';
 import { useLayoutEffect, useRef } from 'react';
 
 /**

@@ -1,6 +1,6 @@
 import type { Component, ContextType } from 'react';
 import ErrorBoundaryContext from '#internal/ErrorBoundaryContext';
-import noop from 'lodash.noop';
+import noop from '#internal/noop';
 import type SuspenseContext from '#internal/SuspenseContext';
 
 const ORIGINAL_RENDER = Symbol();

@@ -13,19 +13,7 @@ importers:
       keyweaver:
         specifier: ^1.0.3
         version: 1.0.3
-      lodash.identity:
-        specifier: ^3.0.0
-        version: 3.0.0
-      lodash.noop:
-        specifier: ^3.0.1
-        version: 3.0.1
     devDependencies:
-      '@types/lodash.identity':
-        specifier: ^3.0.9
-        version: 3.0.9
-      '@types/lodash.noop':
-        specifier: ^3.0.9
-        version: 3.0.9
       '@types/node':
         specifier: ^22.7.4
         version: 22.20.1
@@ -343,15 +331,6 @@ packages:
 
   '@types/json-schema@7.0.15':
     resolution: {integrity: sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==}
-
-  '@types/lodash.identity@3.0.9':
-    resolution: {integrity: sha512-6s0R34WvyuR0R6rZn0gwpYST3obCLzLi1XCg7nH600w9hhLbSx3yplfrbBljpae2QMsM3TiIrjty0lThC1NTjw==}
-
-  '@types/lodash.noop@3.0.9':
-    resolution: {integrity: sha512-KS47MA78vxE+Stvhpd5QEfNpFgwOmKcZMpT8ATNotTrlWdIxpDDPYCMJgcCFDaXHb2AmKhCu4oFM/2HezwUhGA==}
-
-  '@types/lodash@4.17.24':
-    resolution: {integrity: sha512-gIW7lQLZbue7lRSWEFql49QJJWThrTFFeIMJdp3eH4tKoxm1OvEPg02rm4wCCSHS0cL3/Fizimb35b7k8atwsQ==}
 
   '@types/node@22.20.1':
     resolution: {integrity: sha512-EANqOCF9QFyra+4pfxUcX9STKJpCLjMbObVzljIJomAWSnuSIEAvyzEU53GaajbXJEgdh0iEcPL+DGvpUd4k1Q==}
@@ -858,12 +837,6 @@ packages:
     resolution: {integrity: sha512-iPZK6eYjbxRu3uB4/WZ3EsEIMJFMqAoopl3R+zuq0UjcAm/MO6KCweDgPfP3elTztoKP3KtnVHxTn2NHBSDVUw==}
     engines: {node: '>=10'}
 
-  lodash.identity@3.0.0:
-    resolution: {integrity: sha512-AupTIzdLQxJS5wIYUQlgGyk2XRTfGXA+MCghDHqZk0pzUNYvd3EESS6dkChNauNYVIutcb0dfHw1ri9Q1yPV8Q==}
-
-  lodash.noop@3.0.1:
-    resolution: {integrity: sha512-TmYdmu/pebrdTIBDK/FDx9Bmfzs9x0sZG6QIJuMDTqEPfeciLcN13ij+cOd0i9vwJfBtbG9UQ+C7MkXgYxrIJg==}
-
   minimatch@10.2.5:
     resolution: {integrity: sha512-MULkVLfKGYDFYejP07QOurDLLQpcjk7Fw+7jXS2R2czRQzR56yHRveU5NDJEOviH+hETZKSkIk5c+T23GjFUMg==}
     engines: {node: 18 || 20 || >=22}
@@ -1300,16 +1273,6 @@ snapshots:
 
   '@types/json-schema@7.0.15': {}
 
-  '@types/lodash.identity@3.0.9':
-    dependencies:
-      '@types/lodash': 4.17.24
-
-  '@types/lodash.noop@3.0.9':
-    dependencies:
-      '@types/lodash': 4.17.24
-
-  '@types/lodash@4.17.24': {}
-
   '@types/node@22.20.1':
     dependencies:
       undici-types: 6.21.0
@@ -1718,10 +1681,6 @@ snapshots:
   locate-path@6.0.0:
     dependencies:
       p-locate: 5.0.0
-
-  lodash.identity@3.0.0: {}
-
-  lodash.noop@3.0.1: {}
 
   minimatch@10.2.5:
     dependencies:

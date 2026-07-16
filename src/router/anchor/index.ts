@@ -1,7 +1,7 @@
 import type { Control } from '#types';
 import makePrimitiveInternals from '#internal/makePrimitiveInternals';
 import createControl from '#core/createControl';
-import noop from 'lodash.noop';
+import noop from '#internal/noop';
 import { INTERNALS } from '#internal/constants';
 import { EMPTY_OBJECT, ONCE_PASSIVE } from '#router/internal/constants';
 import type { AnchorParam, AnchorScrollOptions } from '#router/internal/types';

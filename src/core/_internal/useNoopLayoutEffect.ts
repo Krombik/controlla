@@ -1,5 +1,5 @@
 import { useLayoutEffect } from 'react';
-import noop from 'lodash.noop';
+import noop from '#internal/noop';
 
 const DEPS = [0];
 

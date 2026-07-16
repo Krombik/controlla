@@ -1,5 +1,9 @@
 import type { ControlInternals } from '#internal/types';
-import type { AnchorEntry, AnchorRoute } from '#router/internal/types';
+import type {
+  AnchorEntry,
+  AnchorHandle,
+  AnchorRoute,
+} from '#router/internal/types';
 import { INTERNALS } from '#internal/constants';
 import { getLane, scheduleFlush } from '#internal/flushQueue';
 import removeFromArray from '#internal/removeFromArray';
@@ -16,7 +20,10 @@ import removeFromArray from '#internal/removeFromArray';
  * <section {...registerAnchor(route, 'filters')} />
  * ```
  */
-const registerAnchor = <A extends string>(route: AnchorRoute<A>, id: A) => {
+const registerAnchor = <A extends string>(
+  route: AnchorRoute<A>,
+  id: A
+): AnchorHandle => {
   const anchorParam = route._anchor!;
 
   let handle = anchorParam._handles.get(id);

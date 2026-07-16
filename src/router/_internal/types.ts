@@ -446,6 +446,10 @@ export type CreatePath<Source = never> = {
   >;
 };
 
+type OptionalKeysOf<P extends Record<string, ParamData<any, boolean>>> = {
+  [key in keyof P]: P[key][1] extends true ? key : never;
+}[keyof P];
+
 type HandlePath<
   P extends Record<string, ParamData<any, boolean>>,
   S,
@@ -453,14 +457,18 @@ type HandlePath<
   A extends string = never,
 > = Path<
   C,
-  [keyof P] extends [never] ? never : { [key in keyof P]: P[key][0] },
-  {
-    [key in keyof P]: key extends string
-      ? P[key][1] extends true
-        ? key
-        : never
-      : never;
-  }[keyof P],
+  [P] extends [never]
+    ? never
+    : [keyof P] extends [never]
+      ? never
+      : {
+            [key in keyof P as P[key][1] extends true ? never : key]: P[key][0];
+          } & {
+            [key in keyof P as P[key][1] extends true ? key : never]?: P[key][0];
+          } extends infer Params
+        ? { [key in keyof Params]: Params[key] }
+        : never,
+  OptionalKeysOf<P> & string,
   [S] extends [never] ? false : true,
   A
 >;
@@ -580,7 +588,7 @@ export type AnchorEntry = {
   _el: HTMLElement;
 };
 
-/** @internal */
+/** A cached `registerAnchor` handle: spread it onto the target element. */
 export type AnchorHandle = {
   id: string;
   ref(el: HTMLElement | null): void;

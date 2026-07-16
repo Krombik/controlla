@@ -1,5 +1,5 @@
 import type { PrimitiveOrNested } from 'keyweaver';
-import noop from 'lodash.noop';
+import noop from '#internal/noop';
 import type {
   Registry,
   AsyncControlOptions,

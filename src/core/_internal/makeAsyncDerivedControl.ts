@@ -1,5 +1,5 @@
-import identity from 'lodash.identity';
-import noop from 'lodash.noop';
+import identity from '#internal/identity';
+import noop from '#internal/noop';
 import { INTERNALS } from '#internal/constants';
 import { EMPTY_ARR, RELOAD, SILENT_RELOAD } from '#internal/constants';
 import createScope from '#internal/createScope';
