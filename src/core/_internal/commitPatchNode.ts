@@ -61,6 +61,62 @@ const notifyDescendants = (
 };
 
 /**
+ * Diffs one key pair, notifying the child subtree on change. Returns whether
+ * the values differ; without `scan` an unobserved pair reports `false`.
+ */
+const diffPair = (
+  a: any,
+  b: any,
+  child: ControlInternalsChild | undefined,
+  scan: boolean,
+  lane: Lane
+): boolean => {
+  if (a === b) {
+    return false;
+  }
+
+  const listeners = child && child._listeners;
+
+  const dependents = child && child._dependents;
+
+  const isListened =
+    !!(listeners && listeners.length) || !!(dependents && dependents.length);
+
+  const grandchildren = child && child._children;
+
+  if (!scan && !isListened && !grandchildren) {
+    return false;
+  }
+
+  const isAPrimitive = a == null || typeof a != 'object';
+
+  const isBPrimitive = b == null || typeof b != 'object';
+
+  if (
+    isAPrimitive ||
+    isBPrimitive ||
+    compareAndNotify(a, b, grandchildren, scan || isListened, lane)
+  ) {
+    if (isAPrimitive != isBPrimitive && grandchildren) {
+      notifyDescendants(
+        grandchildren,
+        isAPrimitive ? b : a,
+        isAPrimitive,
+        lane
+      );
+    }
+
+    if (isListened) {
+      notify(listeners!, dependents!, lane, b, a);
+    }
+
+    return true;
+  }
+
+  return false;
+};
+
+/**
  * Returns whether the values differ; `scanUntilMismatch` keeps scanning
  * unlistened keys only until the first proven difference.
  */
@@ -80,46 +136,13 @@ const compareAndNotify = (
       for (let i = children.size; i--; ) {
         const key = it.next().value!;
 
-        const child = children.get(key)!;
-
-        const listeners = child._listeners;
-
-        const dependents = child._dependents;
-
-        const isListened = !!listeners.length || !!dependents.length;
-
-        const grandchildren = child._children;
-
-        if (isListened || grandchildren) {
-          const a = prevValue[key];
-
-          const b = nextValue[key];
-
-          if (a !== b) {
-            const isAPrimitive = a == null || typeof a != 'object';
-
-            const isBPrimitive = b == null || typeof b != 'object';
-
-            if (
-              isAPrimitive ||
-              isBPrimitive ||
-              compareAndNotify(a, b, grandchildren, isListened, lane)
-            ) {
-              if (isAPrimitive != isBPrimitive && grandchildren) {
-                notifyDescendants(
-                  grandchildren,
-                  isAPrimitive ? b : a,
-                  isAPrimitive,
-                  lane
-                );
-              }
-
-              if (isListened) {
-                notify(listeners, dependents, lane, b, a);
-              }
-            }
-          }
-        }
+        diffPair(
+          prevValue[key],
+          nextValue[key],
+          children.get(key)!,
+          false,
+          lane
+        );
       }
     }
 
@@ -138,112 +161,68 @@ const compareAndNotify = (
     for (let i = 0; i < aL; i++) {
       const key = aKeys[i];
 
-      const child = children && children.get(key);
-
-      const listeners = child && child._listeners;
-
-      const dependents = child && child._dependents;
-
-      const isListened =
-        !!(listeners && listeners.length) ||
-        !!(dependents && dependents.length);
-
-      const grandchildren = child && child._children;
-
       if (key in nextValue) {
         sharedKeys++;
       }
 
-      if (scanUntilMismatch || isListened || grandchildren) {
-        const a = prevValue[key];
+      const child = children && children.get(key);
 
-        const b = nextValue[key];
-
-        if (a !== b) {
-          const isAPrimitive = a == null || typeof a != 'object';
-
-          const isBPrimitive = b == null || typeof b != 'object';
-
-          if (
-            isAPrimitive ||
-            isBPrimitive ||
-            compareAndNotify(
-              a,
-              b,
-              grandchildren,
-              scanUntilMismatch || isListened,
-              lane
-            )
-          ) {
-            if (scanUntilMismatch) {
-              if (!children) {
-                return true;
-              }
-
-              scanUntilMismatch = false;
+      if (scanUntilMismatch || child) {
+        if (
+          diffPair(
+            prevValue[key],
+            nextValue[key],
+            child,
+            scanUntilMismatch,
+            lane
+          )
+        ) {
+          if (scanUntilMismatch) {
+            if (!children) {
+              return true;
             }
 
-            if (isAPrimitive != isBPrimitive && grandchildren) {
-              notifyDescendants(
-                grandchildren,
-                isAPrimitive ? b : a,
-                isAPrimitive,
-                lane
-              );
-            }
-
-            if (isListened) {
-              notify(listeners!, dependents!, lane, b, a);
-            }
-
-            result = true;
+            scanUntilMismatch = false;
           }
+
+          result = true;
         }
       }
     }
 
-    const bKeys = Object.keys(nextValue);
+    // added keys can't matter once a difference is proven and nothing listens
+    if (children || scanUntilMismatch || !result) {
+      const bKeys = Object.keys(nextValue);
 
-    const bL = bKeys.length;
+      const bL = bKeys.length;
 
-    if (bL !== sharedKeys) {
-      for (let i = 0; i < bL; i++) {
-        const key = bKeys[i];
+      if (bL !== sharedKeys) {
+        for (let i = 0; i < bL; i++) {
+          const key = bKeys[i];
 
-        if (!(key in prevValue)) {
-          const child = children && children.get(key);
+          if (!(key in prevValue)) {
+            const child = children && children.get(key);
 
-          const listeners = child && child._listeners;
+            if (scanUntilMismatch || child) {
+              if (
+                diffPair(
+                  undefined,
+                  nextValue[key],
+                  child,
+                  scanUntilMismatch,
+                  lane
+                )
+              ) {
+                if (scanUntilMismatch) {
+                  if (!children) {
+                    return true;
+                  }
 
-          const dependents = child && child._dependents;
-
-          const isListened =
-            !!(listeners && listeners.length) ||
-            !!(dependents && dependents.length);
-
-          const grandchildren = child && child._children;
-
-          if (scanUntilMismatch || isListened || grandchildren) {
-            const b = nextValue[key];
-
-            if (b !== undefined) {
-              if (scanUntilMismatch) {
-                if (!children) {
-                  return true;
+                  scanUntilMismatch = false;
                 }
 
-                scanUntilMismatch = false;
+                result = true;
               }
-
-              if (grandchildren && b && typeof b == 'object') {
-                notifyDescendants(grandchildren, b, true, lane);
-              }
-
-              if (isListened) {
-                notify(listeners!, dependents!, lane, b, undefined);
-              }
-
-              result = true;
             }
           }
         }
@@ -269,64 +248,21 @@ const compareAndNotify = (
     }
 
     for (let i = 0; i < lNext; i++) {
-      const key = '' + i;
+      const child = children && children.get('' + i);
 
-      const child = children && children.get(key);
-
-      const listeners = child && child._listeners;
-
-      const dependents = child && child._dependents;
-
-      const isListened =
-        !!(listeners && listeners.length) ||
-        !!(dependents && dependents.length);
-
-      const grandchildren = child && child._children;
-
-      if (scanUntilMismatch || isListened || grandchildren) {
-        const a = prevValue[i];
-
-        const b = nextValue[i];
-
-        if (a !== b) {
-          const isAPrimitive = a == null || typeof a != 'object';
-
-          const isBPrimitive = b == null || typeof b != 'object';
-
-          if (
-            isAPrimitive ||
-            isBPrimitive ||
-            compareAndNotify(
-              a,
-              b,
-              grandchildren,
-              scanUntilMismatch || isListened,
-              lane
-            )
-          ) {
-            if (scanUntilMismatch) {
-              if (!children) {
-                return true;
-              }
-
-              scanUntilMismatch = false;
+      if (scanUntilMismatch || child) {
+        if (
+          diffPair(prevValue[i], nextValue[i], child, scanUntilMismatch, lane)
+        ) {
+          if (scanUntilMismatch) {
+            if (!children) {
+              return true;
             }
 
-            if (isAPrimitive != isBPrimitive && grandchildren) {
-              notifyDescendants(
-                grandchildren,
-                isAPrimitive ? b : a,
-                isAPrimitive,
-                lane
-              );
-            }
-
-            if (isListened) {
-              notify(listeners!, dependents!, lane, b, a);
-            }
-
-            result = true;
+            scanUntilMismatch = false;
           }
+
+          result = true;
         }
       }
     }
@@ -440,55 +376,41 @@ export const commitPatchNode = (
 
   const controlChildren = internals && internals._children;
 
+  let value: any;
+
   for (let i = 0; i < keysCount; i++) {
     const key = keys[i];
 
+    const prevChildValue = prevValue[key];
+
+    const child = controlChildren && controlChildren.get(key);
+
     const nextValue = commitPatchNode(
       children.get(key)!,
-      prevValue[key],
-      controlChildren && controlChildren.get(key),
+      prevChildValue,
+      child,
       lane
     );
 
     if (nextValue !== UNCHANGED) {
-      let value;
-
-      if (isArray(prevValue)) {
-        value = prevValue.slice();
-
-        value[key as `${number}`] = nextValue;
-      } else {
-        value = { ...prevValue, [key]: nextValue };
-      }
-
-      while (++i < keysCount) {
-        const key = keys[i];
-
-        const nextValue = commitPatchNode(
-          children.get(key)!,
-          prevValue[key],
-          controlChildren && controlChildren.get(key),
-          lane
-        );
-
-        if (nextValue !== UNCHANGED) {
-          value[key] = nextValue;
-        }
-      }
-
-      if (internals) {
+      // each level notifies its changed children; the root is the commit's job
+      if (child) {
         notify(
-          internals._listeners,
-          internals._dependents,
+          child._listeners,
+          child._dependents,
           lane,
-          value,
-          prevValue
+          nextValue,
+          prevChildValue
         );
       }
 
-      return value;
+      if (value === undefined) {
+        value = isArray(prevValue) ? prevValue.slice() : { ...prevValue };
+      }
+
+      value[key] = nextValue;
     }
   }
 
-  return UNCHANGED;
+  return value !== undefined ? value : UNCHANGED;
 };
