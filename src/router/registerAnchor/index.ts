@@ -3,13 +3,11 @@ import type { AnchorEntry, AnchorRoute } from '#router/internal/types';
 import { INTERNALS } from '#internal/constants';
 import { getLane, scheduleFlush } from '#internal/flushQueue';
 import removeFromArray from '#internal/removeFromArray';
-import getAnchorParam from '#router/internal/getAnchorParam';
 
 /**
  * Registers an element as the scroll target for the given anchor {@link id}
  * on {@link route}: spread the result onto the element. Scroll options come
- * from the route's `anchor()` declaration. Throws if the route's path was
- * created without `anchor()`.
+ * from the route's `anchor()` declaration.
  *
  * Returns a cached handle per id, safe to call during render.
  *
@@ -19,7 +17,7 @@ import getAnchorParam from '#router/internal/getAnchorParam';
  * ```
  */
 const registerAnchor = <A extends string>(route: AnchorRoute<A>, id: A) => {
-  const anchorParam = getAnchorParam(route);
+  const anchorParam = route._anchor!;
 
   let handle = anchorParam._handles.get(id);
 

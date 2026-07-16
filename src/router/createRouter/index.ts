@@ -49,6 +49,7 @@ import replacing from '#internal/replacing';
 import queueRouterPatch from '#router/internal/queueRouterPatch';
 import removeFromArray from '#internal/removeFromArray';
 import scheduleSet from '#internal/scheduleSet';
+import throwNotMatched from '#router/internal/throwNotMatched';
 
 type HistoryState = {
   idx?: number;
@@ -191,7 +192,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
     root._enqueueSet = (value, lane, path) => {
       if (!route._isMatched._value) {
-        throw new Error('the route is not matched');
+        throwNotMatched();
       }
 
       if (!paramsHandler._hasNavigation) {

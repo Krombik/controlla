@@ -1,5 +1,5 @@
 import identity from 'lodash.identity';
-import nonUndefinedIdentity from '#router/internal/nonUndefinedIdentity';
+import handleStringify from '#router/internal/handleStringify';
 import type {
   HandleUnknown,
   IsUnion,
@@ -27,30 +27,11 @@ const oneOf = ((param: Record<string, OneOfOptions<string[], true>>) =>
       .map((v) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
       .join('|')}))`;
 
-    const set = new Set(variants);
-
-    const isCorrectVariant = set.has.bind(set);
-
     parsers[name] =
       optional && defaultValue ? (value) => value || defaultValue : identity;
 
-    stringifies[name] = optional
-      ? (value, key) => {
-          value ||= defaultValue;
-
-          if (value === undefined || isCorrectVariant(value)) {
-            return value;
-          }
-
-          throw new Error(`${key} has incorrect "${value}" variant`);
-        }
-      : (value, key) => {
-          if (isCorrectVariant(nonUndefinedIdentity(value, key))) {
-            return value;
-          }
-
-          throw new Error(`${key} has incorrect "${value}" variant`);
-        };
+    // no variant check on write: the union type is the validation
+    stringifies[name] = handleStringify(undefined, optional, defaultValue);
 
     path.push(name);
 

@@ -1,12 +1,10 @@
-import getAnchorParam from '#router/internal/getAnchorParam';
 import type { AnchorRoute } from '#router/internal/types';
 import type { ReadonlyControlScope } from '#types';
 
 /**
  * Returns the reactive set of mounted anchor ids for the given {@link route}:
  * `true` per mounted id, `undefined` when not mounted. Drive a navigation
- * header that shows only the sections currently on the page. Throws if the
- * route's path was created without `anchor()`.
+ * header that shows only the sections currently on the page.
  *
  * With a `trackScroll` anchor, the currently active id is `'active'`
  * instead of `true`.
@@ -20,6 +18,6 @@ import type { ReadonlyControlScope } from '#types';
 const selectRegisteredAnchors = <A extends string>(
   route: AnchorRoute<A>
 ): ReadonlyControlScope<Record<A, 'active' | true | undefined>> =>
-  getAnchorParam(route)._registered as any;
+  route._anchor!._registered as any;
 
 export default selectRegisteredAnchors;

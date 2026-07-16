@@ -1158,11 +1158,9 @@ navigate(router.navigation.docs('api'));            // navigate straight to a se
 setValue($section, 'intro');                        // or just set it
 ```
 
-`registerAnchor` throws if the route's path wasn't created with `anchor()`.
-
 ### `registerAnchorOffset(route)`
 
-Registers the element the scroll math should account for - a sticky header, say - so `anchor()`'s scroll lands below it instead of underneath. Returns a cached ref, safe to call during render. Throws if the route's path wasn't created with `anchor()`.
+Registers the element the scroll math should account for - a sticky header, say - so `anchor()`'s scroll lands below it instead of underneath. Returns a cached ref, safe to call during render.
 
 ```tsx
 import registerAnchorOffset from 'controlla/router/registerAnchorOffset';
