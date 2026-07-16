@@ -1,7 +1,7 @@
 import { INTERNALS } from '#internal/constants';
 import type { AsyncControlInternals } from '#internal/types';
 
-const selectPromise = (root: AsyncControlInternals) => {
+const ensurePromise = (root: AsyncControlInternals) => {
   if (root._promise) {
     return root._promise._promise;
   }
@@ -33,4 +33,4 @@ const selectPromise = (root: AsyncControlInternals) => {
   return promise;
 };
 
-export default selectPromise;
+export default ensurePromise;

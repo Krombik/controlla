@@ -13,10 +13,6 @@ type StatusInternals = {
   readonly _dependents: Notifier[];
 };
 
-/**
- * Sets a status control value (loading/ready) and notifies on change.
- * Mutates the passed internals in place — allocates nothing.
- */
 export const commitStatusValue = (
   internals: StatusInternals,
   nextValue: any,
@@ -37,10 +33,6 @@ export const commitStatusValue = (
   }
 };
 
-/**
- * Sets an error control value, notifies on change and settles the pending
- * promise (if any). Mutates the passed internals in place — allocates nothing.
- */
 export const commitErrorValue = (
   root: Pick<AsyncControlInternals, '_value' | '_promise'>,
   internals: StatusInternals,

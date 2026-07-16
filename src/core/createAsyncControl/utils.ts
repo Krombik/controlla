@@ -7,7 +7,7 @@ import type {
 import scheduleMicrotask from '#internal/scheduleMicrotask';
 import { addListener, notify, removeListener } from '#internal/flushQueue';
 import { EMPTY_ARR, SILENT_RELOAD, INTERNALS } from '#internal/constants';
-import enqueue from '#internal/enqueue';
+import scheduleSet from '#internal/scheduleSet';
 
 const visibilityChangeQueue: AsyncControlInternals[] = [];
 
@@ -22,9 +22,9 @@ const visibilityChangeListener = () => {
 
       if (
         source._loadedAt &&
-        source._source.reloadOnFocus! + source._loadedAt < Date.now()
+        source._options.reloadOnFocus! + source._loadedAt < Date.now()
       ) {
-        enqueue(internals, SILENT_RELOAD);
+        scheduleSet(internals, SILENT_RELOAD);
       }
     }
   }
@@ -36,7 +36,7 @@ const endLoad = (internals: AsyncControlInternals) => {
   internals._attempt = 0;
 
   load._loadedAt =
-    load._source.reloadOnFocus || load._source.reloadIfStale ? Date.now() : 1;
+    load._options.reloadOnFocus || load._options.reloadIfStale ? Date.now() : 1;
 
   cleanupLoad(load);
 };
@@ -48,7 +48,7 @@ export const triggerLoad = (internals: AsyncControlInternals) => {
 
   data._loadedAt = 0;
 
-  data._cleanup = data._source.load!(
+  data._cleanup = data._options.load!(
     {
       setValue(value, scheduler) {
         const isLoaded = internals._isLoaded(
@@ -61,14 +61,14 @@ export const triggerLoad = (internals: AsyncControlInternals) => {
           endLoad(internals);
         }
 
-        enqueue(internals, value, scheduler);
+        scheduleSet(internals, value, scheduler);
 
         return !isLoaded;
       },
       setError(value, scheduler) {
         endLoad(internals);
 
-        enqueue(internals._errorControl[INTERNALS], value, scheduler);
+        scheduleSet(internals._errorControl[INTERNALS], value, scheduler);
       },
       stillLoading: () => !data._loadedAt,
       getValue: () => internals._get(),
@@ -78,7 +78,6 @@ export const triggerLoad = (internals: AsyncControlInternals) => {
 
   if (_slowLoadMonitor) {
     _slowLoadMonitor._timerId = setTimeout(() => {
-      // no dependents — the lane is never read
       notify(
         _slowLoadMonitor._listeners,
         EMPTY_ARR,
@@ -86,7 +85,7 @@ export const triggerLoad = (internals: AsyncControlInternals) => {
         undefined,
         undefined
       );
-    }, data._source.loadingTimeout!);
+    }, data._options.loadingTimeout!);
   }
 };
 
@@ -121,7 +120,7 @@ const handleUnloads = () => {
     if (!source._activeCount) {
       cleanupLoad(source);
 
-      if (source._source.reloadOnFocus) {
+      if (source._options.reloadOnFocus) {
         const last = visibilityChangeQueue.pop()!;
 
         if (last != internals) {
@@ -156,13 +155,13 @@ const attachLoad = (control: AsyncControlInternals) => {
     if (!data._loadedAt) {
       triggerLoad(control);
     } else if (
-      data._source.reloadIfStale &&
-      data._loadedAt + data._source.reloadIfStale < Date.now()
+      data._options.reloadIfStale &&
+      data._loadedAt + data._options.reloadIfStale < Date.now()
     ) {
-      enqueue(control, SILENT_RELOAD);
+      scheduleSet(control, SILENT_RELOAD);
     }
 
-    if (data._source.reloadOnFocus) {
+    if (data._options.reloadOnFocus) {
       if (!visibilityChangeQueue.length) {
         document.addEventListener('visibilitychange', visibilityChangeListener);
       }

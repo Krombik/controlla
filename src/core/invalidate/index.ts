@@ -1,6 +1,6 @@
 import type { AsyncControl, Scheduler } from '#types';
 import { RELOAD, SILENT_RELOAD, INTERNALS } from '#internal/constants';
-import enqueue from '#internal/enqueue';
+import scheduleSet from '#internal/scheduleSet';
 
 const invalidate: {
   /**
@@ -15,7 +15,7 @@ const invalidate: {
 } = (control: AsyncControl, schedulerOrKeepPrevValue?: Scheduler | boolean) => {
   const isLoud = schedulerOrKeepPrevValue !== true;
 
-  enqueue(
+  scheduleSet(
     control[INTERNALS]._root._errorControl[INTERNALS],
     isLoud ? RELOAD : SILENT_RELOAD,
     (isLoud && schedulerOrKeepPrevValue) || undefined

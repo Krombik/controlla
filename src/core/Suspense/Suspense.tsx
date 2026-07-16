@@ -15,7 +15,7 @@ import noop from 'lodash.noop';
 
 type Ctx = NonNullable<ContextType<typeof SuspenseContext>>;
 
-/** @link https://github.com/facebook/react/blob/main/packages/react-reconciler/src/ReactFiberWorkLoop.js#L531 */
+// https://github.com/facebook/react/blob/main/packages/react-reconciler/src/ReactFiberWorkLoop.js#L531
 const FALLBACK_THROTTLE_MS = 501;
 
 let queue: Array<() => void> = [];

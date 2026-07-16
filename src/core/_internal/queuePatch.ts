@@ -2,7 +2,7 @@ import type { Lane, PatchTreeNode, ControlInternals } from '#internal/types';
 import addToLevel from '#internal/addToLevel';
 import { PatchType } from '#internal/constants';
 
-const runPatching = (
+const queuePatch = (
   lane: Lane,
   internals: ControlInternals,
   nextValue: any,
@@ -73,4 +73,4 @@ const runPatching = (
   patchNode._type = PatchType.SET;
 };
 
-export default runPatching;
+export default queuePatch;

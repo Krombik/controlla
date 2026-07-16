@@ -11,7 +11,7 @@ import type {
 import type {
   ErrorControlInternals,
   AsyncControlInternals,
-  AsyncThings,
+  AsyncStatusControls,
   ChangeListener,
   ChildControlNode,
   ControlInternals,
@@ -42,7 +42,7 @@ import removeFromArray from '#internal/removeFromArray';
 import attachNotifier from '#internal/attachNotifier';
 import makeChildNode from '#internal/makeChildNode';
 import getStorageKey from '#internal/getStorageKey';
-import getToken from '#internal/getToken';
+import getObjectKey from '#internal/getObjectKey';
 import makeStatusInternals from '#internal/makeStatusInternals';
 import settlePromise from '#internal/settlePromise';
 import { AggregateControlError } from '#internal/AggregateControlError';
@@ -53,13 +53,13 @@ type Undefinable<O extends {}> = {
   [key in keyof O]: O[key] | undefined;
 };
 
-interface BoundedInternals
-  extends ControlInternals, Undefinable<AsyncThings<BoundedInternals>> {
+interface BoundInternals
+  extends ControlInternals, Undefinable<AsyncStatusControls<BoundInternals>> {
   _activeCount: number;
-  _holding: boolean;
+  _holdingPrev: boolean;
   _target: ControlInternals | AsyncControlInternals | undefined;
-  readonly _activeNodes: BoundedInternalsChild[];
-  readonly _changedNodes: BoundedInternalsChild[];
+  readonly _activeNodes: BoundInternalsChild[];
+  readonly _changedNodes: BoundInternalsChild[];
   readonly _notifiers: Notifier[];
   readonly _selfNotifier: Notifier;
   _keys: any[];
@@ -68,10 +68,10 @@ interface BoundedInternals
   readonly _errors: any[] | undefined;
 }
 
-type BoundedInternalsChild = ChildControlNode<BoundedInternals>;
+type BoundInternalsChild = ChildControlNode<BoundInternals>;
 
-const keyToBoundedKey = (kv: any) =>
-  (kv && kv[INTERNALS]) || getToken(getStorageKey(kv));
+const keyToBoundKey = (kv: any) =>
+  (kv && kv[INTERNALS]) || getObjectKey(getStorageKey(kv));
 
 const getControlType = (internals: ControlInternals | AsyncControlInternals) =>
   internals._load
@@ -80,8 +80,8 @@ const getControlType = (internals: ControlInternals | AsyncControlInternals) =>
       ? ControlType.ASYNC
       : ControlType.SYNC;
 
-function enqueueBoundedSet(
-  this: BoundedInternals,
+function enqueueBoundSet(
+  this: BoundInternals,
   value: any,
   lane: Lane,
   path: string[] | undefined
@@ -92,13 +92,13 @@ function enqueueBoundedSet(
     target._enqueueSet(value, lane, path);
   } else if (process.env.NODE_ENV !== 'production') {
     console.warn(
-      '[registry] setValue on bounded control with unresolved keys was ignored. Wait for all key controls to be ready before writing.'
+      '[registry] setValue on bound control with unresolved keys was ignored. Wait for all key controls to be ready before writing.'
     );
   }
 }
 
-function enqueueBoundedErrorSet(
-  this: ErrorControlInternals<BoundedInternals>,
+function enqueueBoundErrorSet(
+  this: ErrorControlInternals<BoundInternals>,
   value: any,
   lane: Lane,
   path: string[] | undefined
@@ -117,18 +117,18 @@ function enqueueBoundedErrorSet(
     );
   } else if (process.env.NODE_ENV !== 'production') {
     console.warn(
-      '[registry] invalidate on bounded control with unresolved or non-async target was ignored.'
+      '[registry] invalidate on bound control with unresolved or non-async target was ignored.'
     );
   }
 }
 
 const childNodeNotify = (
   _: Lane,
-  node: BoundedInternalsChild,
+  node: BoundInternalsChild,
   value: any,
   prevValue: any
 ) => {
-  const data = node._data!;
+  const data = node._boundData!;
 
   data._value = value;
 
@@ -137,7 +137,7 @@ const childNodeNotify = (
   node._root._changedNodes.push(node);
 };
 
-const cleanupPrevTarget = (root: BoundedInternals) => {
+const cleanupPrevTarget = (root: BoundInternals) => {
   const prevTarget = root._target;
 
   if (prevTarget) {
@@ -166,11 +166,11 @@ const cleanupPrevTarget = (root: BoundedInternals) => {
     removeFromArray(prevTarget._dependents, notifier);
 
     for (let i = 0, l = activeNodes.length; i < l; i++) {
-      const notifier = activeNodes[i]._data!._selfNotifier;
+      const notifier = activeNodes[i]._boundData!._selfNotifier;
 
-      removeFromArray(notifier._current!, notifier);
+      removeFromArray(notifier._attachedTo!, notifier);
 
-      notifier._current = EMPTY_ARR;
+      notifier._attachedTo = EMPTY_ARR;
     }
 
     if (root._changedNodes.length) {
@@ -182,7 +182,7 @@ const cleanupPrevTarget = (root: BoundedInternals) => {
 function keyChangeNotify(
   this: Notifier,
   lane: Lane,
-  root: BoundedInternals,
+  root: BoundInternals,
   value: any,
   _: any
 ) {
@@ -191,10 +191,10 @@ function keyChangeNotify(
   // seed the hold decision on the episode's first change (target still
   // attached), AND further changes into it; a stale false when targetless
   // and not holding is harmless — the value is already undefined
-  if (root._target || root._holding) {
+  if (root._target || root._holdingPrev) {
     const keepPrev = root._registry._keepPrev;
 
-    root._holding =
+    root._holdingPrev =
       keepPrev &&
       (typeof keepPrev == 'boolean' ? keepPrev : keepPrev[this._index]);
   }
@@ -207,7 +207,7 @@ function keyChangeNotify(
 function keyErrorChangeNotify(
   this: Notifier,
   lane: Lane,
-  root: BoundedInternals,
+  root: BoundInternals,
   value: any,
   _: any
 ) {
@@ -249,7 +249,7 @@ const getNextTarget = (registry: Registry<any, any>, keys: any[]) => {
       storage.set(
         key,
         (control = registry._createControl(
-          registry._arg1,
+          registry._initArg,
           registry._externalStorage,
           keys
         ))
@@ -260,7 +260,7 @@ const getNextTarget = (registry: Registry<any, any>, keys: any[]) => {
   }
 };
 
-function commitSet(this: BoundedInternals, _: any, lane: Lane) {
+function commitSet(this: BoundInternals, _: any, lane: Lane) {
   const root = this;
 
   const errors = root._errors;
@@ -288,7 +288,7 @@ function commitSet(this: BoundedInternals, _: any, lane: Lane) {
         ((currentTarget as AsyncControlInternals)._errorControl[INTERNALS]
           ._value !== undefined
           ? registry._suppressError
-          : root._holding)
+          : root._holdingPrev)
       ) {
         // hold the last value while the target is not ready (error →
         // suppressError; a later reload continues an ongoing hold)
@@ -299,7 +299,7 @@ function commitSet(this: BoundedInternals, _: any, lane: Lane) {
         for (let i = 0, l = changedNodes.length; i < l; i++) {
           const node = changedNodes[i];
 
-          const data = node._data!;
+          const data = node._boundData!;
 
           const { _prevValue: prevValue, _value: nextValue } = data;
 
@@ -327,7 +327,7 @@ function commitSet(this: BoundedInternals, _: any, lane: Lane) {
     currentTarget = getNextTarget(registry, root._keys);
 
     if (currentTarget) {
-      attachNotifierWithoutCurrentChange(currentTarget, root._selfNotifier);
+      attachUntrackedNotifier(currentTarget, root._selfNotifier);
 
       for (let i = 0, l = activeNodes.length; i < l; i++) {
         const node = activeNodes[i];
@@ -335,7 +335,7 @@ function commitSet(this: BoundedInternals, _: any, lane: Lane) {
         attachNotifierToTargetNode(
           currentTarget,
           node._path!,
-          node._data!._selfNotifier
+          node._boundData!._selfNotifier
         );
       }
 
@@ -346,7 +346,7 @@ function commitSet(this: BoundedInternals, _: any, lane: Lane) {
 
     if (
       errors &&
-      root._holding &&
+      root._holdingPrev &&
       newValue === undefined &&
       prevValue !== undefined
     ) {
@@ -410,10 +410,7 @@ function commitSet(this: BoundedInternals, _: any, lane: Lane) {
         if (isRetargeted) {
           const nextLoad = currentTarget._load;
 
-          attachNotifierWithoutCurrentChange(
-            errorInternals,
-            root._selfNotifier
-          );
+          attachUntrackedNotifier(errorInternals, root._selfNotifier);
 
           if (nextLoad && root._activeCount) {
             currentTarget._attach(undefined, undefined, true);
@@ -482,7 +479,7 @@ function commitSet(this: BoundedInternals, _: any, lane: Lane) {
       }
     }
 
-    root._holding = heldPrev;
+    root._holdingPrev = heldPrev;
 
     if (heldPrev) {
       // showing a held value: it's ready and its error is swallowed
@@ -535,7 +532,12 @@ const attachNotifierToTargetNode = (
 
       children.set(
         key,
-        makeChildNode(root, path, undefined, (notifier._current = [notifier]))
+        makeChildNode(
+          root,
+          path,
+          undefined,
+          (notifier._attachedTo = [notifier])
+        )
       );
 
       return;
@@ -549,7 +551,7 @@ const attachNotifierToTargetNode = (
   attachNotifier(target, notifier);
 };
 
-const loadAttach = (p: BoundedInternals) => {
+const loadAttach = (p: BoundInternals) => {
   const load = p._load;
 
   const target = p._target;
@@ -567,7 +569,7 @@ const loadAttach = (p: BoundedInternals) => {
   }
 };
 
-const loadDetach = (p: BoundedInternals) => {
+const loadDetach = (p: BoundInternals) => {
   const load = p._load;
 
   const target = p._target;
@@ -586,8 +588,8 @@ const loadDetach = (p: BoundedInternals) => {
 };
 
 function attach(
-  this: BoundedInternals,
-  control: BoundedInternalsChild | undefined,
+  this: BoundInternals,
+  control: BoundInternalsChild | undefined,
   listener: ChangeListener | undefined,
   isLoad: boolean
 ) {
@@ -597,17 +599,17 @@ function attach(
     if (control._path !== undefined && !control._listeners.length) {
       const target = self._target;
 
-      const data = control._data;
+      const data = control._boundData;
 
       let notifier: Notifier;
 
       if (data === undefined) {
-        (control as Mutable<typeof control>)._data = {
+        (control as Mutable<typeof control>)._boundData = {
           _selfNotifier: (notifier = {
             _ref: new WeakRef(control),
             _notify: childNodeNotify,
             _index: 0,
-            _current: EMPTY_ARR,
+            _attachedTo: EMPTY_ARR,
           }),
           _prevValue: undefined,
           _value: undefined,
@@ -632,8 +634,8 @@ function attach(
 }
 
 function detach(
-  this: BoundedInternals,
-  control: BoundedInternalsChild | undefined,
+  this: BoundInternals,
+  control: BoundInternalsChild | undefined,
   listener: ChangeListener | undefined,
   isLoad: boolean
 ) {
@@ -648,11 +650,11 @@ function detach(
       removeFromArray(self._activeNodes, control);
 
       if (target) {
-        const notifier = control._data!._selfNotifier;
+        const notifier = control._boundData!._selfNotifier;
 
-        removeFromArray(notifier._current!, notifier);
+        removeFromArray(notifier._attachedTo!, notifier);
 
-        notifier._current = EMPTY_ARR;
+        notifier._attachedTo = EMPTY_ARR;
       }
     }
   }
@@ -663,8 +665,8 @@ function detach(
 }
 
 function errorAttach(
-  this: ErrorControlInternals<BoundedInternals>,
-  control: ErrorControlInternals<BoundedInternals> | undefined,
+  this: ErrorControlInternals<BoundInternals>,
+  control: ErrorControlInternals<BoundInternals> | undefined,
   listener: ChangeListener | undefined,
   isLoad: boolean
 ) {
@@ -678,8 +680,8 @@ function errorAttach(
 }
 
 function errorDetach(
-  this: ErrorControlInternals<BoundedInternals>,
-  control: ErrorControlInternals<BoundedInternals> | undefined,
+  this: ErrorControlInternals<BoundInternals>,
+  control: ErrorControlInternals<BoundInternals> | undefined,
   listener: ChangeListener | undefined,
   isLoad: boolean
 ) {
@@ -692,7 +694,7 @@ function errorDetach(
   }
 }
 
-function _delete(this: Registry<any, any>, ...keys: any[]) {
+function registryDelete(this: Registry<any, any>, ...keys: any[]) {
   const self = this;
 
   const registryDepth = self._depth;
@@ -715,39 +717,39 @@ function _delete(this: Registry<any, any>, ...keys: any[]) {
     }
 
     if (keyValue && keyValue[INTERNALS]) {
-      let bounded = self._bounded;
+      let bound = self._bound;
 
-      for (let j = 0; j < endIndex && bounded; j++) {
-        bounded = bounded.get(keyToBoundedKey(keys[j]));
+      for (let j = 0; j < endIndex && bound; j++) {
+        bound = bound.get(keyToBoundKey(keys[j]));
       }
 
-      if (bounded === undefined) {
+      if (bound === undefined) {
         return false;
       }
 
-      const lastKey = keyToBoundedKey(keys[endIndex]);
+      const lastKey = keyToBoundKey(keys[endIndex]);
 
-      const boundedControl: ControlScope | undefined = bounded.get(lastKey);
+      const boundControl: ControlScope | undefined = bound.get(lastKey);
 
-      if (boundedControl == undefined) {
+      if (boundControl == undefined) {
         return false;
       }
 
       if (depth == registryDepth) {
-        const boundedInternals = boundedControl[INTERNALS] as BoundedInternals;
+        const boundInternals = boundControl[INTERNALS] as BoundInternals;
 
-        const notifiers = boundedInternals._notifiers;
+        const notifiers = boundInternals._notifiers;
 
-        cleanupPrevTarget(boundedInternals);
+        cleanupPrevTarget(boundInternals);
 
         for (let i = 0, l = notifiers.length; i < l; i++) {
           const notifier = notifiers[i];
 
-          removeFromArray(notifier._current!, notifier);
+          removeFromArray(notifier._attachedTo!, notifier);
         }
       }
 
-      return bounded.delete(lastKey);
+      return bound.delete(lastKey);
     }
 
     if (i == endIndex) {
@@ -765,10 +767,13 @@ function _delete(this: Registry<any, any>, ...keys: any[]) {
 function clear(this: Registry<any, any[]>) {
   this._storage.clear();
 
-  (this as Mutable<typeof this>)._bounded = undefined;
+  (this as Mutable<typeof this>)._bound = undefined;
 }
 
-function _invalidate(this: Registry<any, any>, ...keys: PrimitiveOrNested[]) {
+function registryInvalidate(
+  this: Registry<any, any>,
+  ...keys: PrimitiveOrNested[]
+) {
   const registryDepth = this._depth;
 
   if (registryDepth != 0) {
@@ -822,7 +827,7 @@ const throwUndefinedError = () => {
   throw new Error('Undefined cannot be used as a registry key.');
 };
 
-const attachNotifierWithoutCurrentChange = (
+const attachUntrackedNotifier = (
   targetInternals: ControlInternalsBase,
   notifier: Notifier
 ) => {
@@ -901,7 +906,11 @@ function get(this: Registry<any, any>, ...keys: any[]): any {
   if (control === undefined) {
     storage.set(
       storageKey,
-      (control = self._createControl(self._arg1, self._externalStorage, keys))
+      (control = self._createControl(
+        self._initArg,
+        self._externalStorage,
+        keys
+      ))
     );
 
     if (self._type == ControlType.UNDEFINED) {
@@ -919,10 +928,10 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
 
   const endIndex = depth - 1;
 
-  let bounded = self._bounded;
+  let bound = self._bound;
 
-  if (bounded === undefined) {
-    self._bounded = bounded = new WeakMap();
+  if (bound === undefined) {
+    self._bound = bound = new WeakMap();
   }
 
   for (let i = 0; ; i++) {
@@ -932,14 +941,14 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
       throwUndefinedError();
     }
 
-    const nextBounded: typeof bounded = bounded.get(keyToBoundedKey(item));
+    const nextBound: typeof bound = bound.get(keyToBoundKey(item));
 
-    if (nextBounded) {
+    if (nextBound) {
       if (i == endIndex) {
-        return nextBounded;
+        return nextBound;
       }
 
-      bounded = nextBounded;
+      bound = nextBound;
     } else {
       const loadableDependencies: ControlInternals[] = [];
 
@@ -955,15 +964,15 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
 
       let storage = self._storage;
 
-      let isControlExist = true;
+      let controlExists = true;
 
       let isReady = true;
 
-      const boundedInternals: BoundedInternals = {
+      const boundInternals: BoundInternals = {
         _load: undefined,
         _children: undefined,
         _dependents: EMPTY_ARR,
-        _enqueueSet: enqueueBoundedSet,
+        _enqueueSet: enqueueBoundSet,
         _get: readRootValue,
         _indexMap: undefined,
         _keys: keys,
@@ -979,7 +988,7 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
         _attach: attach,
         _detach: detach,
         _activeCount: 0,
-        _holding: false,
+        _holdingPrev: false,
         _activeNodes: [],
         _changedNodes: [],
         _notifiers: notifiers,
@@ -992,19 +1001,18 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
         _errors: undefined,
       };
 
-      const weakRef = new WeakRef(boundedInternals);
+      const weakRef = new WeakRef(boundInternals);
 
       const rootNotifier: Notifier = {
         _ref: weakRef,
         _notify: addToQueue,
         _index: 0,
-        _current: EMPTY_ARR,
+        _attachedTo: EMPTY_ARR,
       };
 
-      (boundedInternals as Mutable<BoundedInternals>)._selfNotifier =
-        rootNotifier;
+      (boundInternals as Mutable<BoundInternals>)._selfNotifier = rootNotifier;
 
-      (boundedInternals as Mutable<BoundedInternals>)._root = boundedInternals;
+      (boundInternals as Mutable<BoundInternals>)._root = boundInternals;
 
       for (let j = 0; ; j++) {
         let keyValue;
@@ -1017,7 +1025,7 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
         if (internals) {
           const root = internals._root;
 
-          const errorControl = (root as BoundedInternals)._errorControl;
+          const errorControl = (root as BoundInternals)._errorControl;
 
           keys[j] = keyValue = internals._get();
 
@@ -1038,11 +1046,11 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
               _ref: weakRef,
               _notify: keyErrorChangeNotify,
               _index: j,
-              _current: EMPTY_ARR,
+              _attachedTo: EMPTY_ARR,
             };
 
             if (errors === undefined) {
-              (boundedInternals as Mutable<BoundedInternals>)._errors = errors =
+              (boundInternals as Mutable<BoundInternals>)._errors = errors =
                 Array(depth + 1);
             }
 
@@ -1061,7 +1069,7 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
             _ref: weakRef,
             _notify: keyChangeNotify,
             _index: j,
-            _current: EMPTY_ARR,
+            _attachedTo: EMPTY_ARR,
           };
 
           attachNotifier(internals, notifier);
@@ -1092,14 +1100,14 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
               | AsyncControlInternals
               | undefined;
 
-            (boundedInternals as Mutable<BoundedInternals>)._level = ++maxLevel;
+            (boundInternals as Mutable<BoundInternals>)._level = ++maxLevel;
 
             if (isReady) {
               let control:
                 | ControlScope
                 | Control
                 | AsyncControlScope
-                | undefined = isControlExist
+                | undefined = controlExists
                 ? storage.get(storageKey)
                 : undefined;
 
@@ -1107,7 +1115,7 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
                 storage.set(
                   storageKey,
                   (control = self._createControl(
-                    self._arg1,
+                    self._initArg,
                     self._externalStorage,
                     keys
                   ))
@@ -1120,14 +1128,14 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
                 self._type = controlType = getControlType(targetInternals);
               }
 
-              boundedInternals._value = targetInternals._value;
+              boundInternals._value = targetInternals._value;
 
-              boundedInternals._target = targetInternals;
+              boundInternals._target = targetInternals;
 
-              attachNotifierWithoutCurrentChange(targetInternals, rootNotifier);
+              attachUntrackedNotifier(targetInternals, rootNotifier);
             } else if (controlType == ControlType.UNDEFINED) {
               self._type = controlType = getControlType(
-                self._createControl(self._arg1, undefined, undefined)[
+                self._createControl(self._initArg, undefined, undefined)[
                   INTERNALS
                 ] as ControlInternals
               );
@@ -1136,12 +1144,12 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
             let isLoadable = false;
 
             if (loadableDependencies.length) {
-              (boundedInternals as Mutable<BoundedInternals>)._load =
+              (boundInternals as Mutable<BoundInternals>)._load =
                 loadableDependencies;
 
               isLoadable = true;
             } else if (controlType == ControlType.LOADABLE) {
-              (boundedInternals as Mutable<BoundedInternals>)._load = EMPTY_ARR;
+              (boundInternals as Mutable<BoundInternals>)._load = EMPTY_ARR;
 
               isLoadable = true;
             }
@@ -1152,8 +1160,8 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
               let readyValue: undefined | true;
 
               if (errors === undefined) {
-                (boundedInternals as Mutable<BoundedInternals>)._errors =
-                  errors = Array(depth + 1);
+                (boundInternals as Mutable<BoundInternals>)._errors = errors =
+                  Array(depth + 1);
               }
 
               if (isReady) {
@@ -1174,29 +1182,26 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
                     isError = true;
                   }
 
-                  attachNotifierWithoutCurrentChange(
-                    errorInternals,
-                    rootNotifier
-                  );
+                  attachUntrackedNotifier(errorInternals, rootNotifier);
                 } else {
-                  loadingValue = boundedInternals._value === undefined;
+                  loadingValue = boundInternals._value === undefined;
 
                   readyValue = !loadingValue || undefined;
                 }
               }
 
-              const errorInternals: ErrorControlInternals<BoundedInternals> = {
+              const errorInternals: ErrorControlInternals<BoundInternals> = {
                 _root: undefined!,
                 _attach: errorAttach,
                 _detach: errorDetach,
                 _dependents: EMPTY_ARR,
-                _enqueueSet: enqueueBoundedErrorSet,
+                _enqueueSet: enqueueBoundErrorSet,
                 _get: readRootValue,
                 _indexMap: undefined,
                 _level: maxLevel,
                 _listeners: EMPTY_ARR,
                 _load: isLoadable,
-                _parent: boundedInternals,
+                _parent: boundInternals,
                 _path: undefined,
                 _value: isError
                   ? new AggregateControlError(errors!)
@@ -1206,44 +1211,40 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
               (errorInternals as Mutable<typeof errorInternals>)._root =
                 errorInternals;
 
-              (boundedInternals as Mutable<BoundedInternals>)._loadingControl =
-                {
-                  [INTERNALS]: makeStatusInternals(
-                    boundedInternals,
-                    loadingValue
-                  ),
-                };
-
-              (boundedInternals as Mutable<BoundedInternals>)._readyControl = {
-                [INTERNALS]: makeStatusInternals(boundedInternals, readyValue),
+              (boundInternals as Mutable<BoundInternals>)._loadingControl = {
+                [INTERNALS]: makeStatusInternals(boundInternals, loadingValue),
               };
 
-              (boundedInternals as Mutable<BoundedInternals>)._errorControl = {
+              (boundInternals as Mutable<BoundInternals>)._readyControl = {
+                [INTERNALS]: makeStatusInternals(boundInternals, readyValue),
+              };
+
+              (boundInternals as Mutable<BoundInternals>)._errorControl = {
                 [INTERNALS]: errorInternals,
               };
             }
 
-            const boundedControl = createScope(boundedInternals);
+            const boundControl = createScope(boundInternals);
 
-            bounded.set(internals || getToken(storageKey), boundedControl);
+            bound.set(internals || getObjectKey(storageKey), boundControl);
 
-            return boundedControl;
+            return boundControl;
           }
 
-          bounded.set(
-            internals || getToken(storageKey),
-            (bounded = new WeakMap())
+          bound.set(
+            internals || getObjectKey(storageKey),
+            (bound = new WeakMap())
           );
         }
 
         if (isReady) {
-          if (isControlExist) {
+          if (controlExists) {
             const nextStorage = storage.get(storageKey);
 
             if (nextStorage) {
               storage = nextStorage;
             } else {
-              isControlExist = false;
+              controlExists = false;
 
               storage.set(storageKey, (storage = new Map()));
             }
@@ -1331,14 +1332,14 @@ const createRegistry: {
 } = (createControl: any, arg1?: unknown, options?: RegistryOptions): any =>
   ({
     _storage: new Map(),
-    _bounded: undefined,
-    delete: _delete,
+    _bound: undefined,
+    delete: registryDelete,
     get,
     bind,
-    invalidate: _invalidate,
+    invalidate: registryInvalidate,
     clear,
     _createControl: createControl,
-    _arg1: arg1,
+    _initArg: arg1,
     _externalStorage: options && options.externalStorage,
     _type: ControlType.UNDEFINED,
     _depth: 0,

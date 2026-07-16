@@ -9,11 +9,8 @@ import removeFromArray from '#internal/removeFromArray';
 type Subscription = {
   _level: number;
   _callback(values?: any[], prevValues?: any[]): void | (() => void);
-  /** `undefined` if the callback takes no arguments */
   readonly _values: any[] | undefined;
-  /** `false` if previous values aren't tracked, `undefined` between flushes */
   _prevValues: any[] | false | undefined;
-  /** cleanup returned by the last call, run before the next one and on teardown */
   _cleanup(): void;
   _commitSet(data: null, lane: Lane): void;
 };
@@ -98,7 +95,7 @@ const watchValues = ((
         _ref: weakRef,
         _notify: notify,
         _index: i,
-        _current: EMPTY_ARR,
+        _attachedTo: EMPTY_ARR,
       })
     );
   }
@@ -116,7 +113,7 @@ const watchValues = ((
     for (let i = 0; i < count; i++) {
       const notifier = notifiers[i];
 
-      removeFromArray(notifier._current!, notifier);
+      removeFromArray(notifier._attachedTo!, notifier);
     }
 
     sub._cleanup();

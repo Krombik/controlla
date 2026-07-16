@@ -1,6 +1,6 @@
 import type { ReadonlyAsyncControl } from '#types';
 import { INTERNALS } from '#internal/constants';
-import selectPromise from '#internal/selectPromise';
+import ensurePromise from '#internal/ensurePromise';
 
 /**
  * Returns a promise reflecting the given async {@link control}: resolved with
@@ -20,8 +20,8 @@ const toPromise = <T>(control: ReadonlyAsyncControl<T>): Promise<T> => {
   const internals = control[INTERNALS];
 
   return internals._path
-    ? selectPromise(internals._root).then(() => internals._get())
-    : selectPromise(internals._root);
+    ? ensurePromise(internals._root).then(() => internals._get())
+    : ensurePromise(internals._root);
 };
 
 export default toPromise;

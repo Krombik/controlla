@@ -23,7 +23,7 @@ import {
   attachSingleLoad,
   detachSingleLoad,
   enqueueSet,
-  keyNotify,
+  sourceChangeNotify,
   type DerivedControlInternals,
 } from '#internal/derivedControlUtils';
 import { notify } from '#internal/flushQueue';
@@ -39,19 +39,19 @@ function commitSet(
 
   let nextValue: any;
 
-  if (root._equable) {
+  if (root._upToDate) {
     nextValue = commitPatchNode(patchNode, prevValue, root, lane);
   } else {
     let next;
 
-    root._equable = true;
+    root._upToDate = true;
 
     if (root._isSingleDependency) {
-      next = root._mapper(root._keys);
+      next = root._mapper(root._values);
 
-      root._keys = undefined;
+      root._values = undefined;
     } else {
-      next = root._mapper(...root._keys);
+      next = root._mapper(...root._values);
     }
 
     nextValue = commitNextValue(next, prevValue, root, lane);
@@ -87,9 +87,9 @@ const makeDerivedControl = (params: any[]) => {
     _detach: detach,
     _load: false,
     _mapper: identity,
-    _keys: undefined,
+    _values: undefined,
     _isSingleDependency: controlCount < 2,
-    _equable: true,
+    _upToDate: true,
     _notifiers: undefined!,
   };
 
@@ -125,9 +125,9 @@ const makeDerivedControl = (params: any[]) => {
         internals,
         (notifiers[i] = {
           _ref: weakRef,
-          _notify: keyNotify,
+          _notify: sourceChangeNotify,
           _index: i,
-          _current: EMPTY_ARR,
+          _attachedTo: EMPTY_ARR,
         })
       );
 
@@ -142,7 +142,7 @@ const makeDerivedControl = (params: any[]) => {
 
     (derivedRoot as Mutable<typeof derivedRoot>)._notifiers = notifiers;
 
-    derivedRoot._keys = values;
+    derivedRoot._values = values;
 
     applyLoadWiring(derivedRoot, loadableRoots);
   } else {
@@ -176,9 +176,9 @@ const makeDerivedControl = (params: any[]) => {
       internals,
       ((derivedRoot as Mutable<typeof derivedRoot>)._notifiers = {
         _ref: weakRef,
-        _notify: keyNotify,
+        _notify: sourceChangeNotify,
         _index: 0,
-        _current: EMPTY_ARR,
+        _attachedTo: EMPTY_ARR,
       })
     );
   }

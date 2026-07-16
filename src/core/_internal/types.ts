@@ -13,7 +13,6 @@ import type { PatchType } from '#internal/constants';
 export type PendingItem = Pick<ControlInternals, '_commitSet' | '_level'>;
 
 export type Lane = {
-  /** the scheduler this lane belongs to — the one that flushes it */
   readonly _scheduler: Scheduler;
   _canScheduleFlush: boolean;
   _minPendingLevel: number;
@@ -42,10 +41,6 @@ export type PatchTreeNode = {
   readonly _patchedKeys: string[];
 };
 
-/**
- * INVARIANT: `_listeners === EMPTY_ARR` iff `_indexMap == null`.
- * Mutate only via flushQueue's addListener / removeListener.
- */
 export type Listeners<T extends Function> = {
   _indexMap: Map<T, number> | undefined;
   readonly _listeners: T[];
@@ -55,7 +50,7 @@ export type Notifier = {
   _notify(lane: Lane, item: any, value: any, prevValue: any): void;
   readonly _ref: WeakRef<any>;
   readonly _index: number;
-  _current: Notifier[];
+  _attachedTo: Notifier[];
 };
 
 export interface ControlInternalsBase extends Listeners<ChangeListener> {
@@ -92,13 +87,7 @@ interface Settable {
 }
 
 export type WithExternalStorage = {
-  /**
-   * syncs the committed value to its external representation (a storage, the
-   * router's URL caches) — `noop` when there is none, so commits skip the
-   * branch
-   */
   _setExternal(value: any): void;
-  /** Unsubscribes from external storage changes; consumed by `useControl` on unmount. */
   _unobserve?: (() => void) | undefined;
 };
 
@@ -122,7 +111,7 @@ export interface ControlInternals extends PrimitiveControlInternals {
           this,
           '_children' | '_storage' | '_root' | keyof ControlInternalsBase
         > & {
-          readonly _data?: {
+          readonly _boundData?: {
             readonly _selfNotifier: Notifier;
             _prevValue: any;
             _value: any;
@@ -130,13 +119,12 @@ export interface ControlInternals extends PrimitiveControlInternals {
         }
       >
     | undefined;
-  /** storage of proxies */
   _storage: Map<string, any> | undefined;
 }
 
 export type ControlInternalsChild = ChildControlNode<ControlInternals>;
 
-export type AsyncThings<Parent> = {
+export type AsyncStatusControls<Parent> = {
   readonly _errorControl: {
     [INTERNALS]: ErrorControlInternals<Parent>;
   };
@@ -156,7 +144,7 @@ export type AsyncThings<Parent> = {
 };
 
 export interface AsyncControlInternals
-  extends ControlInternals, AsyncThings<AsyncControlInternals> {
+  extends ControlInternals, AsyncStatusControls<AsyncControlInternals> {
   _isLoaded(nextValue: any, prevValue: any, attempt: number): boolean;
   _attempt: number;
   readonly _load:
@@ -166,7 +154,7 @@ export interface AsyncControlInternals
         _cleanup: (() => void) | void | undefined;
         _loadedAt: number;
         readonly _keys?: any[];
-        readonly _source: AsyncControlOptions<any, any, any[]>;
+        readonly _options: AsyncControlOptions<any, any, any[]>;
         readonly _slowLoadMonitor:
           | (Listeners<() => void> & {
               _timerId: ReturnType<typeof setTimeout> | undefined;
@@ -210,15 +198,6 @@ export type ExtractErrors<T extends Array<ReadonlyAsyncControl | Falsy>> =
       : undefined;
   }>;
 
-export interface PollableMethods {
-  /** Pauses the current polling process. */
-  pause(): void;
-  /** Resumes a polling process. */
-  resume(): void;
-  /** Resets the loading process, starting it from the beginning. */
-  reset(): void;
-}
-
 export type StorageItem = Control | ScopeMarker;
 
 declare const CONTROL_STORAGE_IDENTIFIER: unique symbol;
@@ -241,7 +220,7 @@ export type ContainerComponent =
   | keyof JSX.IntrinsicElements;
 
 /** @internal */
-export type PendingControl = {
+export type NeverControl = {
   _fakeSuspense(
     suspenseCtx: NonNullable<ContextType<typeof SuspenseContext>>
   ): Promise<any>;

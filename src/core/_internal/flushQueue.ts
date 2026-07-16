@@ -12,10 +12,8 @@ let currentLane: Lane | null = null;
 
 const NOT_ITERATED: readonly Function[] = [];
 
-/** the listeners array being iterated by {@link notify} right now */
 let iteratedListeners = NOT_ITERATED;
 
-/** deferred listener changes — flat `[apply, internals, listener]` triples */
 const deferredListenerChanges: any[] = [];
 
 export const notify = (

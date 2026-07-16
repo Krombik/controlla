@@ -22,10 +22,10 @@ const makeUseDerivedControl =
           for (let i = 0, l = notifiers.length; i < l; i++) {
             const notifier = notifiers[i];
 
-            removeFromArray(notifier._current, notifier);
+            removeFromArray(notifier._attachedTo, notifier);
           }
         } else {
-          removeFromArray(notifiers._current, notifiers);
+          removeFromArray(notifiers._attachedTo, notifiers);
         }
       },
       []

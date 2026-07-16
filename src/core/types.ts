@@ -131,7 +131,7 @@ export type AsyncControlOptions<
   Keys extends PrimitiveOrNested[] = [],
 > = {
   /** The initial value of the control or a function to resolve it using keys. */
-  value?: T | ((...args: Keys) => T);
+  initialValue?: T | ((...args: Keys) => T);
   /** A function to determine if the control is considered loaded, based on the {@link value current} and {@link prevValue previous} values and the number of loading {@link attempt attempts}. */
   isLoaded?(value: T, prevValue: T | undefined, attempt: number): boolean;
   /**
@@ -229,7 +229,7 @@ export type Registry<
   /** Removes all entries from the registry (does not reset the controls themselves). */
   clear(): void;
   /** @internal */
-  _bounded: WeakMap<any, any> | undefined;
+  _bound: WeakMap<any, any> | undefined;
   /** @internal */
   readonly _storage: Map<any, any>;
   /** @internal */
@@ -241,7 +241,7 @@ export type Registry<
     keys: any[] | undefined
   ): Control | ControlScope | AsyncControlScope;
   /** @internal */
-  readonly _arg1: any;
+  readonly _initArg: any;
   /** @internal */
   readonly _externalStorage: SyncExternalStorage | undefined;
   /** @internal */
@@ -291,10 +291,7 @@ export type Scheduler = {
   (cb: () => void): any;
   /** @internal */
   _debounce?(): void;
-  /**
-   * @internal a sync scheduler — updates made during a flush join the
-   * flushing lane instead of scheduling their own
-   */
+  /** @internal */
   _sync?: boolean;
 };
 

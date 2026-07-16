@@ -7,15 +7,15 @@ import type {
   Notifier,
 } from '#internal/types';
 import { addListener, removeListener } from '#internal/flushQueue';
-import runPatching from '#internal/runPatching';
+import queuePatch from '#internal/queuePatch';
 import addToQueue from '#internal/addToQueue';
 
 export type DerivedControlInternals = ControlInternals & {
   readonly _load: ReadonlyArray<ControlInternals> | ControlInternals | false;
   readonly _notifiers: Notifier | Notifier[];
   _mapper(...args: any[]): any;
-  _keys: any;
-  _equable: boolean;
+  _values: any;
+  _upToDate: boolean;
   readonly _isSingleDependency: boolean;
 };
 
@@ -71,7 +71,7 @@ function detachMultipleLoads(
   }
 }
 
-export function keyNotify(
+export function sourceChangeNotify(
   this: Notifier,
   lane: Lane,
   root: DerivedControlInternals,
@@ -79,12 +79,12 @@ export function keyNotify(
   _: any
 ) {
   if (root._isSingleDependency) {
-    root._keys = value;
+    root._values = value;
   } else {
-    root._keys[this._index] = value;
+    root._values[this._index] = value;
   }
 
-  root._equable = false;
+  root._upToDate = false;
 
   addToQueue(lane, root);
 }
@@ -95,15 +95,11 @@ export function enqueueSet(
   lane: Lane,
   path: string[] | undefined
 ) {
-  if (this._equable) {
-    runPatching(lane, this, value, path);
+  if (this._upToDate) {
+    queuePatch(lane, this, value, path);
   }
 }
 
-/**
- * Wires the derived control's load dependencies based on the collected
- * loadable roots. Mutates the passed root in place — allocates nothing.
- */
 export const applyLoadWiring = (
   root: DerivedControlInternals,
   loadableRoots: ControlInternals[]
