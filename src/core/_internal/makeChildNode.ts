@@ -35,7 +35,7 @@ const makeChildNode = (
   _root: root,
   _children: children,
   _storage: undefined,
-  _data: undefined,
+  _boundData: undefined,
 });
 
 export default makeChildNode;

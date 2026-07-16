@@ -24,18 +24,18 @@ import { INTERNALS } from '#internal/constants';
 const createPrimitiveControl: {
   <T>(): Control<T | undefined>;
   <T>(
-    value: T | (() => T),
+    initialValue: T | (() => T),
     syncExternalStorage?: SyncExternalStorage<T>
   ): Control<T>;
 } = (
-  value?: unknown | (() => unknown),
+  initialValue?: unknown | (() => unknown),
   syncExternalStorage?: SyncExternalStorage,
   keys?: any[]
 ) =>
   ({
     [INTERNALS]: initControl<PrimitiveControlInternals>(
       makePrimitiveInternals(undefined),
-      value,
+      initialValue,
       syncExternalStorage,
       keys,
       true

@@ -11,7 +11,7 @@ import type {
   ControlInternals,
   Lane,
   PatchTreeNode,
-  AsyncThings,
+  AsyncStatusControls,
   ErrorControlInternals,
   Notifier,
 } from '#internal/types';
@@ -25,7 +25,7 @@ import attachNotifier from '#internal/attachNotifier';
 import {
   applyLoadWiring,
   enqueueSet,
-  keyNotify,
+  sourceChangeNotify,
   type DerivedControlInternals,
 } from '#internal/derivedControlUtils';
 import { commitErrorValue, commitStatusValue } from '#internal/commitStatus';
@@ -37,15 +37,13 @@ import { AggregateControlError } from '#internal/AggregateControlError';
 import { notify } from '#internal/flushQueue';
 
 interface AsyncDerivedControlInternals
-  extends DerivedControlInternals, AsyncThings<AsyncDerivedControlInternals> {
-  /**
-   * Positional errors of all dependencies followed by the mapper error in the
-   * last slot. Length is `dependencyCount + 1`. Always present.
-   */
+  extends
+    DerivedControlInternals,
+    AsyncStatusControls<AsyncDerivedControlInternals> {
   readonly _errors: any[];
 }
 
-function keyErrorNotify(
+function sourceErrorNotify(
   this: Notifier,
   lane: Lane,
   root: AsyncDerivedControlInternals,
@@ -54,7 +52,7 @@ function keyErrorNotify(
 ) {
   root._errors[this._index] = value;
 
-  root._equable = false;
+  root._upToDate = false;
 
   addToQueue(lane, root);
 }
@@ -103,7 +101,7 @@ function commitSet(
 
   const prevValue = root._value;
 
-  if (root._equable) {
+  if (root._upToDate) {
     const nextValue = commitPatchNode(patchNode, prevValue, root, lane);
 
     if (nextValue !== UNCHANGED) {
@@ -121,7 +119,7 @@ function commitSet(
     return;
   }
 
-  root._equable = true;
+  root._upToDate = true;
 
   const errors = root._errors;
 
@@ -129,7 +127,7 @@ function commitSet(
 
   const isSingle = root._isSingleDependency;
 
-  const values = root._keys;
+  const values = root._values;
 
   const count = isSingle ? 1 : (values as any[]).length;
 
@@ -274,9 +272,9 @@ const makeAsyncDerivedControl = (params: any[]) => {
     _detach: detach,
     _load: false,
     _mapper: mapper,
-    _keys: undefined,
+    _values: undefined,
     _isSingleDependency: isSingle,
-    _equable: true,
+    _upToDate: true,
     _notifiers: notifiers,
     _errorControl: undefined!,
     _loadingControl: undefined!,
@@ -333,9 +331,9 @@ const makeAsyncDerivedControl = (params: any[]) => {
 
       const errorNotifier: Notifier = {
         _ref: weakRef,
-        _notify: keyErrorNotify,
+        _notify: sourceErrorNotify,
         _index: i,
-        _current: EMPTY_ARR,
+        _attachedTo: EMPTY_ARR,
       };
 
       attachNotifier(errorInternals, errorNotifier);
@@ -345,9 +343,9 @@ const makeAsyncDerivedControl = (params: any[]) => {
 
     const notifier: Notifier = {
       _ref: weakRef,
-      _notify: keyNotify,
+      _notify: sourceChangeNotify,
       _index: i,
-      _current: EMPTY_ARR,
+      _attachedTo: EMPTY_ARR,
     };
 
     attachNotifier(internals, notifier);
@@ -355,7 +353,7 @@ const makeAsyncDerivedControl = (params: any[]) => {
     notifiers.push(notifier);
   }
 
-  derivedRoot._keys = isSingle ? values[0] : values;
+  derivedRoot._values = isSingle ? values[0] : values;
 
   if (isReady) {
     try {

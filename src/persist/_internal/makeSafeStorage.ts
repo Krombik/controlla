@@ -3,14 +3,6 @@ import removeFromArray from '#internal/removeFromArray';
 
 type Listener = (value: string | undefined) => void;
 
-/**
- * Wraps {@link localStorage} or {@link sessionStorage} into an observable
- * {@link PersistStorage}, or returns `undefined` if the storage is unavailable
- * (e.g. blocked by privacy settings or running outside a browser).
- *
- * All subscriptions share a single `storage` event listener, attached while at
- * least one key is observed.
- */
 const makeSafeStorage = (storage: Storage) => {
   try {
     const testKey = '__storage_test__';

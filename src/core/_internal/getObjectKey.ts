@@ -2,7 +2,7 @@ import type { Primitive } from 'keyweaver';
 
 const map = new Map<Primitive, {}>();
 
-const getToken = (storageKey: Primitive) => {
+const getObjectKey = (storageKey: Primitive) => {
   let token = map.get(storageKey);
 
   if (token === undefined) {
@@ -12,4 +12,4 @@ const getToken = (storageKey: Primitive) => {
   return token;
 };
 
-export default getToken;
+export default getObjectKey;

@@ -128,7 +128,7 @@ export type RouteParams<Params, Async, Anchor> = {
   [PARAMS_MARKER]: [Params, Async, Anchor];
 };
 
-/** @internal a route typed as owning an anchor with the given ids; `never` (uncallable) otherwise */
+/** @internal */
 export type AnchorRoute<A extends string> = [A] extends [never]
   ? never
   : PageRoute<true> & RouteParams<any, any, A>;
@@ -222,95 +222,62 @@ export type RouteData = {
     source: any,
     initial: boolean
   ): void;
-  /** one-shot boot mark for async params: their first parse runs later */
   _initial?: boolean;
   _currentPath: string;
   _currentSearch: string;
 };
 
-/** @internal a navigation target's param entry */
+/** @internal */
 export type TargetParams = {
   readonly _params: ValueOrUpdater<Record<string, any>>;
   readonly _route: RouteData;
 };
 
-/** @internal accumulated router write (`setValue`/`replaceValue` on a params control) */
+/** @internal */
 export type RouterWrite = {
-  /** the written control's root */
   readonly _root: RouterControlRoot;
-  /** the value as resolved at call time */
   readonly _params: any;
-  /** the written control's path: scopes the patch to its slice */
   readonly _path: readonly string[] | undefined;
 };
 
-/** @internal `navigate` payload stored in the lane, wins over accumulated `setValue`/`replaceValue` */
+/** @internal */
 export type RouterNavigation = {
-  /** the navigation target: its chain, queue index and page setter */
   readonly _methods: RouteMethods;
-  /** stamped by the params handler when the chain changes */
   _isNewPage: boolean;
-  /** popstate/init matching: skips the `navigationState` write */
   readonly _isHistoryEvent: boolean;
-  /**
-   * skips the navigation blocker; stamped when the payload is parked so the
-   * allowed re-dispatch passes the still-enabled blocker
-   */
   _ignoreBlock: boolean | undefined;
   readonly _scrollToTop: boolean | undefined;
   readonly _scrollRestoration: boolean | undefined;
 };
 
-/**
- * @internal the params handler's pending patch in a lane's `_patchByControl`.
- * `setValue`/`replaceValue` accumulates one per lane (each scheduler commits its own
- * batch), a navigation patch always lives in the microtask lane; handed to
- * the finalizer once committed
- */
+/** @internal */
 export type RouterPatch = {
-  /** navigation payload: wins over accumulated `_updates` */
   _navigation: RouterNavigation | undefined;
-  /** accumulated `setValue`/`replaceValue` entries */
   readonly _updates: RouterWrite[];
-  /** history replace: only if every update in the flush asked for it (navigate overwrites) */
   _replace: boolean;
-  /**
-   * a hash write happened: the finalizer takes the URL hash from the anchor
-   * control and scrolls to it when it's non-empty
-   */
   _hashChanged: boolean;
 };
 
-/** @internal the params handler node carrying the router's cross-lane state */
+/** @internal */
 export type RouterHandler = PendingItem & {
-  /** lanes holding accumulated `setValue`/`replaceValue` patches */
   readonly _lanes: Lane[];
-  /** a navigation is queued and not yet committed: updates are ignored */
   _hasNavigation: boolean;
 };
 
-/** @internal a control root wired to the router via `_route` */
+/** @internal */
 export type RouterControlRoot = (
   | ControlInternals
   | AsyncControlInternals
   | PrimitiveControlInternals
 ) & {
-  /** the raw `_enqueueSet`: internal router writes bypass the patch */
   _set?: PrimitiveControlInternals['_enqueueSet'];
 };
 
 /** @internal */
 export type RouteMethods = {
-  /** the target's current route chain */
   _routes(): RouteData[];
-  /** `useLink`'s hook-slot budget: the length of the longest route chain */
   _maxSlots(): number;
-  /**
-   * the chain's index in the router's queue; `-1` for current-chain targets
-   * (never read, their chain diff is empty)
-   */
   _index: number;
-  /** the leaf page's component setter (`noop` until the page registers) */
   _setComponents(): void;
 };
 
@@ -612,13 +579,13 @@ export type ValidateParams<P> = keyof P extends {
 
 declare const ANCHOR_IDS: unique symbol;
 
-/** @internal a mounted `registerAnchor` element */
+/** @internal */
 export type AnchorEntry = {
   _id: string;
   _el: HTMLElement;
 };
 
-/** @internal a cached `registerAnchor` handle */
+/** @internal */
 export type AnchorHandle = {
   id: string;
   ref(el: HTMLElement | null): void;
@@ -634,45 +601,37 @@ export type AnchorScrollOptions = ScrollIntoViewOptions & {
 export type AnchorParam<Ids extends string = string> = {
   /** @internal */
   _anchor: true;
-  /** @internal called right before a scroll-to actually happens */
+  /** @internal */
   _onScrollStart(id: string, options: AnchorScrollOptions): void;
   /** @internal */
   _hash: PrimitiveControlInternals & {
     _set?: PrimitiveControlInternals['_enqueueSet'];
   };
-  /** @internal public anchor control */
+  /** @internal */
   _hashControl: Control<string>;
-  /** @internal reactive set of mounted anchor ids, `'active'` for the current one */
+  /** @internal */
   _registered: ControlScope<Record<string, 'active' | true | undefined>>;
-  /** @internal the id `trackScroll` last marked `'active'` in `_registered` */
+  /** @internal */
   _activeId: string | undefined;
-  /** @internal the anchor's scroll-options resolver */
+  /** @internal */
   _getOptions(el: HTMLElement | null): AnchorScrollOptions;
-  /** @internal the element `registerAnchorOffset` last registered */
+  /** @internal */
   _offsetEl: HTMLElement | null;
-  /** @internal cached `registerAnchorOffset` ref, stable across renders */
+  /** @internal */
   _offsetRef: ((el: HTMLElement | null) => void) | undefined;
-  /** @internal mounted elements, unordered: the spy works on positions */
+  /** @internal */
   _entries: AnchorEntry[];
-  /** @internal cached `registerAnchor` handles, keyed by id */
+  /** @internal */
   _handles: Map<string, AnchorHandle>;
-  /**
-   * @internal armed on `_activate`; the next `registerAnchor` mount gets one
-   * try at scrolling to the current hash. Cleared by that mount or by the
-   * user's first scroll, whichever comes first
-   */
+  /** @internal */
   _isPending: boolean;
-  /** @internal becomes the active anchor: (re)arms `_isPending`, starts the
-   * spy when tracking */
+  /** @internal */
   _activate(): void;
-  /** @internal starts the spy; noop unless wrapped with `trackScroll` */
+  /** @internal */
   _startTrack(): void;
-  /** @internal clears the hash, stops the spy */
+  /** @internal */
   _clear(): void;
-  /**
-   * @internal scrolls to the id if its element is registered, otherwise a
-   * no-op; {@link instant} forces non-smooth (used for the mount-time retry)
-   */
+  /** @internal */
   _scrollTo(id: string, instant?: boolean): void;
   [ANCHOR_IDS]: Ids;
 };

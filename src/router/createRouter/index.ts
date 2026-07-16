@@ -48,7 +48,7 @@ import {
 import replacing from '#internal/replacing';
 import queueRouterPatch from '#router/internal/queueRouterPatch';
 import removeFromArray from '#internal/removeFromArray';
-import enqueue from '#internal/enqueue';
+import scheduleSet from '#internal/scheduleSet';
 
 type HistoryState = {
   idx?: number;
@@ -808,8 +808,8 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
                       route._buildSearch(searchParams, false, false);
 
-                      if ('_equable' in paramsControl) {
-                        paramsControl._equable = false;
+                      if ('_upToDate' in paramsControl) {
+                        paramsControl._upToDate = false;
 
                         route._initial = initial;
 
@@ -909,7 +909,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
     if (isBlockedPop) {
       isBlockedPop = false;
 
-      enqueue(pendingNavigationRoot, true);
+      scheduleSet(pendingNavigationRoot, true);
     } else if (isScrollSavePop) {
       isScrollSavePop = false;
 
@@ -1077,14 +1077,14 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
       isPendingNavigation: {
         [INTERNALS]: pendingNavigationRoot,
         allow() {
-          enqueue(pendingNavigationRoot, false);
+          scheduleSet(pendingNavigationRoot, false);
 
           resumeNavigation();
 
           resumeNavigation = noop;
         },
         deny() {
-          enqueue(pendingNavigationRoot, false);
+          scheduleSet(pendingNavigationRoot, false);
 
           resumeNavigation = noop;
         },

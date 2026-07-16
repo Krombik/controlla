@@ -6,7 +6,7 @@ import { commitPatchNode, UNCHANGED } from '#internal/commitPatchNode';
 import initControl from '#internal/initControl';
 import readRootValue from '#internal/readRootValue';
 import { EMPTY_ARR } from '#internal/constants';
-import runPatching from '#internal/runPatching';
+import queuePatch from '#internal/queuePatch';
 import { attach, detach } from '#internal/syncLifecycle';
 import { notify } from '#internal/flushQueue';
 
@@ -16,7 +16,7 @@ function enqueueSet(
   lane: Lane,
   path: string[] | undefined
 ) {
-  runPatching(lane, this, value, path);
+  queuePatch(lane, this, value, path);
 }
 
 function commitSet(
@@ -44,7 +44,7 @@ function commitSet(
  * value: nested fields are reachable as controls of their own via property
  * access, and a change notifies only the paths it actually touched.
  *
- * The initial {@link value} can be a plain value or a lazy initializer.
+ * The initial {@link initialValue} can be a plain value or a lazy initializer.
  * Pass a {@link syncExternalStorage} to back the value with an external
  * storage — the control starts from the stored value and writes changes
  * back (and, if the storage is observable, picks up external changes).
@@ -69,11 +69,11 @@ function commitSet(
 const createControl: {
   <T>(): ControlScope<T | undefined>;
   <T>(
-    value: T | (() => T),
+    initialValue: T | (() => T),
     syncExternalStorage?: SyncExternalStorage<T>
   ): ControlScope<T>;
 } = (
-  value?: unknown | (() => unknown),
+  initialValue?: unknown | (() => unknown),
   syncExternalStorage?: SyncExternalStorage,
   keys?: any[]
 ) =>
@@ -97,7 +97,7 @@ const createControl: {
         _enqueueSet: enqueueSet,
         _setExternal: noop,
       },
-      value,
+      initialValue,
       syncExternalStorage,
       keys,
       true

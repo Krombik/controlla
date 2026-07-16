@@ -15,7 +15,7 @@ const attachNotifier = (
     ];
   }
 
-  notifier._current = dependents;
+  notifier._attachedTo = dependents;
 };
 
 export default attachNotifier;

@@ -1,6 +1,5 @@
 import type { PageRoute } from '#router/internal/types';
 
-/** @internal resolves {@link route}'s `AnchorParam`, throwing if it has none */
 const getAnchorParam = (route: PageRoute<true>) => {
   const anchorParam = route._anchor;
 

@@ -121,7 +121,7 @@ See the [Router](#router) section for paths, navigation, params, anchors and mor
 - **Subscribing**: [`watchValue`](#watchvaluecontrol-callback-immediate), [`watchValues`](#watchvaluescontrols-callback-immediate), [`load`](#loadcontrol), [`watchSlowLoading`](#watchslowloadingcontrol-callback)
 - **Async status**: [`selectLoading`](#selectloadingcontrol), [`selectReady`](#selectreadycontrol), [`selectError`](#selecterrorcontrol)
 - **Components**: [`ControlConsumer`](#controlconsumer), [`ControlsConsumer`](#controlsconsumer), [`InfiniteControlsConsumer`](#infinitecontrolsconsumer), [`Suspense`](#suspense), [`SuspenseControlConsumer`](#suspensecontrolconsumer), [`SuspenseControlsConsumer`](#suspensecontrolsconsumer), [`wrapErrorBoundary`](#wraperrorboundaryboundarycomponent)
-- **Utils**: [`$pending`](#pending), [`isAggregateControlError`](#isaggregatecontrolerrorerr)
+- **Utils**: [`$never`](#never), [`isAggregateControlError`](#isaggregatecontrolerrorerr)
 - **Registry**: [`createRegistry`](#createregistrycreate-initarg-options)
 - **Loaders**: [`requestLoader`](#requestloaderfetch-options-scheduler), [`pollLoader`](#pollloaderfetch-options-scheduler)
 - **Persistence**: [`getPersistStorage`](#getpersiststorageoptions), [`safeLocalStorage`](#safelocalstorage), [`safeSessionStorage`](#safesessionstorage)
@@ -140,13 +140,13 @@ Each creator has a `use*` twin (`controlla/core/use*`) that does the same but bi
 A control with **granular reactivity**: nested fields are reachable as controls of their own via property access, and a change notifies only the paths it actually touched.
 
 ```ts
-createControl(value?, externalStorage?)
-useControl(value?, externalStorage?)
+createControl(initialValue?, externalStorage?)
+useControl(initialValue?, externalStorage?)
 ```
 
 | Parameter | Type | Description |
 |---|---|---|
-| `value?` | `T` or `() => T` | Initial value, or a lazy initializer. |
+| `initialValue?` | `T` or `() => T` | Initial value, or a lazy initializer. |
 | `externalStorage?` | `SyncExternalStorage` | External storage backing the value: the control starts from the stored value, writes changes back and, if the storage is observable, picks up external changes. Any storage with sync reads works: e.g. one from [`getPersistStorage`](#getpersiststorageoptions). |
 
 ```ts
@@ -165,13 +165,13 @@ const $local = useControl(0);         // component-scoped (inside a component)
 A lightweight control whose value is **opaque** - no nested-path access, changes detected by reference (`!==`). Cheaper than `createControl` - replace objects instead of mutating them.
 
 ```ts
-createPrimitiveControl(value?, externalStorage?)
-usePrimitiveControl(value?, externalStorage?)
+createPrimitiveControl(initialValue?, externalStorage?)
+usePrimitiveControl(initialValue?, externalStorage?)
 ```
 
 | Parameter | Type | Description |
 |---|---|---|
-| `value?` | `T` or `() => T` | Initial value, or a lazy initializer. |
+| `initialValue?` | `T` or `() => T` | Initial value, or a lazy initializer. |
 | `externalStorage?` | `SyncExternalStorage` | External storage backing the value, as in [`createControl`](#createcontrol--usecontrol). |
 
 ```ts
@@ -198,7 +198,7 @@ useAsyncControl(options?, externalStorage?)   // options or () => options
 
 | Field | Type | Description |
 |---|---|---|
-| `value?` | `T` or `(...keys) => T` | Initial value (keys come from a registry). |
+| `initialValue?` | `T` or `(...keys) => T` | Initial value (keys come from a registry). |
 | `load?` | `(handle, keys?) => void` | Starts loading; reports via `handle`. Usually from a [loader](#loaders). Omit for a manual control. May return a cleanup run when loading ends/cancels. |
 | `isLoaded?` | `(value, prevValue, attempt) => boolean` | Whether a committed value is final; until `true` the control stays loading (multi-attempt/streamed). |
 | `reloadIfStale?` | `number` (ms) | Reload on use if this long passed since the last load. |
@@ -611,14 +611,14 @@ export default wrapErrorBoundary(ErrorBoundary);
 
 ## Utils
 
-### `$pending`
+### `$never`
 
 An async control stuck **loading forever** (value `undefined`, never settles, writes are no-ops). A placeholder where a control is expected but not yet available.
 
 ```jsx
-{/* $user may be undefined until selected: $pending keeps the fallback shown */}
+{/* $user may be undefined until selected - $never keeps the fallback shown */}
 <SuspenseControlConsumer
-  control={$user || $pending}
+  control={$user || $never}
   fallback={<p>Loading…</p>}
   render={(user) => <h2>{user.name}</h2>}
 />
@@ -649,7 +649,7 @@ A **keyed collection** of controls - one control per distinct key tuple, created
 | Parameter | Type | Description |
 |---|---|---|
 | `create` | `createControl`, `createPrimitiveControl`, or `createAsyncControl` | The control constructor. |
-| `initArg?` | constructor's arg | For async, an `AsyncControlOptions` (its `value` and a loader's `fetch` receive the item's keys); otherwise a default value or `(...keys) => value`. |
+| `initArg?` | constructor's arg | For async, an `AsyncControlOptions` (its `initialValue` and a loader's `fetch` receive the item's keys); otherwise a default value or `(...keys) => value`. |
 | `options?` | `RegistryOptions` | See below. |
 
 **`RegistryOptions`**
@@ -732,7 +732,7 @@ Re-fetches on an interval until the result is loaded. Returns `AsyncControlOptio
 |---|---|---|
 | `interval` | `number` or `(value) => number` | **Required.** Delay between polls (number only when `syncedKeysCount` is set). |
 | `isLoaded` | `(value, prevValue, attempt) => boolean` | **Required.** When `true`, polling stops. |
-| `value?` | `T` or `(...keys) => T` | Initial value. |
+| `initialValue?` | `T` or `(...keys) => T` | Initial value. |
 | `syncedKeysCount?` | `number` | Trailing keys whose controls poll in sync (share one clock); omit for independent polling. |
 | `isolatedLanes?` | `boolean` | Each synced group commits on its own lane. |
 | `reloadIfStale?` / `reloadOnFocus?` / `loadingTimeout?` / … | | Async options, as in `AsyncControlOptions`. |

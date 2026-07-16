@@ -9,15 +9,19 @@ import { INTERNALS, RELOAD } from '#internal/constants';
 
 const initControl = <I extends PrimitiveControlInternals>(
   internals: I,
-  value: unknown | (() => unknown) | undefined,
+  initialValue: unknown | (() => unknown) | undefined,
   syncExternalStorage: SyncExternalStorage | undefined,
   keys: any[] | undefined,
   isSync: boolean
 ): I => {
   (internals as Mutable<I>)._root = internals;
 
-  const defaultValue =
-    typeof value != 'function' ? value : keys ? value(...keys) : value();
+  const resolvedInitial =
+    typeof initialValue != 'function'
+      ? initialValue
+      : keys
+        ? initialValue(...keys)
+        : initialValue();
 
   if (syncExternalStorage) {
     const externalStorage = syncExternalStorage(keys);
@@ -33,10 +37,14 @@ const initControl = <I extends PrimitiveControlInternals>(
             const lane = getSchedulerLane();
 
             if (isSync || value !== undefined) {
-              if (isSync && value === undefined && defaultValue !== undefined) {
-                value = defaultValue;
+              if (
+                isSync &&
+                value === undefined &&
+                resolvedInitial !== undefined
+              ) {
+                value = resolvedInitial;
 
-                externalStorage.set(defaultValue);
+                externalStorage.set(resolvedInitial);
               }
 
               self._enqueueSet(value, lane);
@@ -59,10 +67,10 @@ const initControl = <I extends PrimitiveControlInternals>(
     if (storageValue !== undefined) {
       internals._value = storageValue;
     } else {
-      if (defaultValue !== undefined) {
-        externalStorage.set(defaultValue);
+      if (resolvedInitial !== undefined) {
+        externalStorage.set(resolvedInitial);
 
-        internals._value = defaultValue;
+        internals._value = resolvedInitial;
       }
     }
 
@@ -70,7 +78,7 @@ const initControl = <I extends PrimitiveControlInternals>(
     (internals as Mutable<I>)._setExternal = (value) =>
       externalStorage.set(value);
   } else {
-    internals._value = defaultValue;
+    internals._value = resolvedInitial;
   }
 
   return internals;

@@ -1,6 +1,6 @@
 import noop from 'lodash.noop';
 import type {
-  PendingControl,
+  NeverControl,
   Mutable,
   AsyncControlInternals,
   ErrorControlInternals,
@@ -52,7 +52,7 @@ const internals = {
   },
   _loadingControl: undefined!,
   _readyControl: undefined!,
-} as Partial<PendingControl> as PendingControl;
+} as Partial<NeverControl> as NeverControl;
 
 (internals as Mutable<typeof internals>)._root = internals;
 
@@ -79,23 +79,23 @@ const internals = {
  * `undefined`, `loading` is always `true`, its promise never settles and it
  * suspends indefinitely. Writes and `invalidate` are no-ops. Use it as a
  * placeholder where a control is expected but the real one isn't available
- * yet — nested paths of it are pending too.
+ * yet - nested paths of it never settle either.
  *
  * @example
  * ```jsx
  * const Card = ({ $user }) => (
  *   <SuspenseControlConsumer
- *     control={$user || $pending}
+ *     control={$user || $never}
  *     fallback="Loading..." // shown forever while $user is absent
  *     render={(user) => <h2>{user.name}</h2>}
  *   />
  * );
  * ```
  */
-const $pending: AsyncControlScope = new Proxy(internals, {
+const $never: AsyncControlScope = new Proxy(internals, {
   get(target, key, proxy) {
     return key === INTERNALS ? target : proxy;
   },
 }) as any;
 
-export default $pending;
+export default $never;

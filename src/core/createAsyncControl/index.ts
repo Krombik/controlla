@@ -22,7 +22,7 @@ import {
   RELOAD,
   SILENT_RELOAD,
 } from '#internal/constants';
-import runPatching from '#internal/runPatching';
+import queuePatch from '#internal/queuePatch';
 import {
   commitNextValue,
   commitPatchNode,
@@ -59,7 +59,7 @@ function asyncEnqueueSet(
     throwIfUndefined();
   }
 
-  runPatching(lane, this, value, path);
+  queuePatch(lane, this, value, path);
 }
 
 function errorEnqueueSet(
@@ -144,7 +144,7 @@ function commitAsyncSet(
     nextValue = commitNextValue(undefined, prevValue, internals, lane);
 
     nextErrorValue = patchNode._value;
-  } else if (PatchType.RELOAD) {
+  } else if (patchType == PatchType.RELOAD) {
     nextValue = commitNextValue(undefined, prevValue, internals, lane);
 
     nextLoadingValue = true;
@@ -196,7 +196,9 @@ function commitAsyncSet(
 
   if (!nextLoadingValue && load) {
     load._loadedAt =
-      load._source.reloadOnFocus || load._source.reloadIfStale ? Date.now() : 1;
+      load._options.reloadOnFocus || load._options.reloadIfStale
+        ? Date.now()
+        : 1;
   }
 
   if (nextLoadingValue != prevLoading) {
@@ -307,7 +309,7 @@ const createAsyncControl: {
       _load: isLoadable && {
         _activeCount: 0,
         _canScheduleUnload: true,
-        _source: options,
+        _options: options,
         _cleanup: undefined,
         _loadedAt: 0,
         _keys: keys,
@@ -323,7 +325,7 @@ const createAsyncControl: {
       _attempt: 0,
       _promise: undefined,
     },
-    options && options.value,
+    options && options.initialValue,
     syncExternalStorage,
     keys,
     false

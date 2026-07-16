@@ -13,13 +13,13 @@ type Clock = {
 
 type Solo = Clock & {
   _isIdle: boolean;
-  _run(): void;
+  _request(): void;
 };
 
 type Group = Clock & {
   readonly _members: Array<(group: Group) => void>;
   readonly _scheduler: Scheduler | undefined;
-  _barrier: number;
+  _pendingCount: number;
 };
 
 export type PollOptions<
@@ -103,8 +103,8 @@ const tickGroup = (group: Group, interval: number) => {
 
   const membersCount = members.length;
 
-  if (!--group._barrier && membersCount) {
-    group._barrier = 1;
+  if (!--group._pendingCount && membersCount) {
+    group._pendingCount = 1;
 
     group._timerId = setTimeout(() => {
       group._timerId = undefined;
@@ -134,7 +134,7 @@ function groupLoad(
   const key = getKey(keys, self._groupSize, true);
 
   const request = (group: Group) => {
-    group._barrier++;
+    group._pendingCount++;
 
     fetch(...keys).then(
       (value) => {
@@ -161,7 +161,7 @@ function groupLoad(
       key,
       (group = {
         _members: [request],
-        _barrier: 1,
+        _pendingCount: 1,
         _timerId: setTimeout(() => {
           group!._timerId = undefined;
 
@@ -204,7 +204,7 @@ function groupPause(this: PollActions<any[], number>, ...keys: any[]) {
   if (group && group._isRunning) {
     group._isRunning = false;
 
-    group._barrier++;
+    group._pendingCount++;
   }
 }
 
@@ -296,7 +296,7 @@ function load(
     _isRunning: true,
     _isIdle: true,
     _timerId: undefined,
-    _run: request,
+    _request: request,
   };
 
   storage.set(key, item);
@@ -331,7 +331,7 @@ function resume(this: PollActions<any[], number>, ...keys: any[]) {
     item._isRunning = true;
 
     if (item._isIdle && item._timerId == null) {
-      item._run();
+      item._request();
     }
   }
 }
@@ -346,7 +346,7 @@ function reset(this: PollActions<any[], number>, ...keys: any[]) {
 
     item._timerId = undefined;
 
-    item._run();
+    item._request();
   }
 }
 

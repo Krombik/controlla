@@ -1,11 +1,11 @@
 import type { ContextType } from 'react';
-import type { AsyncControlInternals, PendingControl } from '#internal/types';
+import type { AsyncControlInternals, NeverControl } from '#internal/types';
 import type ErrorBoundaryContext from '#internal/ErrorBoundaryContext';
 import type SuspenseContext from '#internal/SuspenseContext';
-import selectPromise from '#internal/selectPromise';
+import ensurePromise from '#internal/ensurePromise';
 
 const suspendOnControl = (
-  root: AsyncControlInternals | PendingControl,
+  root: AsyncControlInternals | NeverControl,
   errorBoundaryCtx: ContextType<typeof ErrorBoundaryContext>,
   suspenseCtx: ContextType<typeof SuspenseContext>
 ) => {
@@ -23,11 +23,11 @@ const suspendOnControl = (
 
       suspenseCtx.push(root);
     } else {
-      return (root as PendingControl)._fakeSuspense(suspenseCtx);
+      return (root as NeverControl)._fakeSuspense(suspenseCtx);
     }
   }
 
-  return selectPromise(root);
+  return ensurePromise(root);
 };
 
 export default suspendOnControl;

@@ -34,7 +34,6 @@ function commitSet(this: ControlInternals, nextValue: any, lane: Lane) {
   }
 }
 
-/** Creates ready-to-use primitive control internals holding the given value. */
 const makePrimitiveInternals = (value: any): PrimitiveControlInternals => {
   const internals: PrimitiveControlInternals = {
     _root: undefined!,
