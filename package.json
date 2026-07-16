@@ -1,7 +1,7 @@
 {
   "name": "controlla",
   "version": "0.0.1",
-  "description": "Fine-grained reactive state for React — async, derived, persisted, and keyed, with surgical re-renders",
+  "description": "Fine-grained reactive state and fully typed router for React - async, derived, persisted, and keyed controls with surgical re-renders",
   "author": "Krombik",
   "license": "MIT",
   "repository": {
@@ -15,12 +15,13 @@
   "type": "module",
   "source": "src/index.ts",
   "engines": {
-    "node": ">=10"
+    "node": ">=18"
   },
   "scripts": {
     "build": "tsdown",
     "watch": "tsdown --watch",
-    "release": "tsdown && npm publish ./build"
+    "release": "tsdown && npm publish ./build",
+    "test": "tsdown && node --test --experimental-transform-types --no-warnings \"tests/*.test.ts\""
   },
   "peerDependencies": {
     "@types/react": ">=17.0.0",
@@ -31,7 +32,23 @@
       "optional": true
     }
   },
-  "keywords": [],
+  "keywords": [
+    "react",
+    "state",
+    "state-management",
+    "router",
+    "routing",
+    "reactive",
+    "typescript",
+    "typed",
+    "async",
+    "derived",
+    "persist",
+    "signals",
+    "fine-grained",
+    "url-state",
+    "hooks"
+  ],
   "imports": {
     "#internal/*": "./src/core/_internal/*.ts",
     "#core/*": "./src/core/*/index.ts",
@@ -45,13 +62,9 @@
     "#types": "./src/core/types.ts"
   },
   "dependencies": {
-    "keyweaver": "^1.0.3",
-    "lodash.identity": "^3.0.0",
-    "lodash.noop": "^3.0.1"
+    "keyweaver": "^1.0.3"
   },
   "devDependencies": {
-    "@types/lodash.identity": "^3.0.9",
-    "@types/lodash.noop": "^3.0.9",
     "@types/node": "^22.7.4",
     "@types/react": "^19.2.17",
     "eslint": "^10.7.0",

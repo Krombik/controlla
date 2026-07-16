@@ -1,4 +1,4 @@
-import noop from 'lodash.noop';
+import noop from '#internal/noop';
 import type { ReadonlyAsyncControl, ReadonlyControl } from '#types';
 import type { Lane, Notifier } from '#internal/types';
 import { EMPTY_ARR, INTERNALS } from '#internal/constants';

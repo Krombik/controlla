@@ -14,7 +14,7 @@ import type {
   RouterWrite,
 } from '#router/internal/types';
 
-import noop from 'lodash.noop';
+import noop from '#internal/noop';
 
 import {
   ROUTE_METHODS,

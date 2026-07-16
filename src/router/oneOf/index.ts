@@ -1,4 +1,4 @@
-import identity from 'lodash.identity';
+import identity from '#internal/identity';
 import handleStringify from '#router/internal/handleStringify';
 import type {
   HandleUnknown,

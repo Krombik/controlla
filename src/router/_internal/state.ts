@@ -1,4 +1,4 @@
-import noop from 'lodash.noop';
+import noop from '#internal/noop';
 
 import type { Lane, Mutable, PendingItem } from '#internal/types';
 import type { RouterPatch, RouterHandler } from '#router/internal/types';

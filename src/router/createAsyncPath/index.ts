@@ -1,4 +1,8 @@
-import type { AsyncControl } from '#types';
+import type {
+  AsyncControl,
+  ReadonlyAsyncControl,
+  ReadonlyControl,
+} from '#types';
 import handlePath from '#router/internal/handlePath';
 import type {
   CreatePath,
@@ -66,9 +70,10 @@ const makeControl = (
  * ```
  */
 const createAsyncPath: {
-  <S>(source: AsyncControl<S>): CreatePath<S>;
+  <S>(source: ReadonlyAsyncControl<S>): CreatePath<S>;
+  <S>(source: ReadonlyControl<S>): CreatePath<Exclude<S, undefined>>;
 } =
-  (source: AsyncControl) =>
+  (source: ReadonlyControl) =>
   (
     ...path: Array<
       | string
@@ -77,6 +82,6 @@ const createAsyncPath: {
       | QueryParam<Record<string, any>>
     >
   ): any =>
-    handlePath(path, makeControl, source);
+    handlePath(path, makeControl, source as AsyncControl);
 
 export default createAsyncPath;

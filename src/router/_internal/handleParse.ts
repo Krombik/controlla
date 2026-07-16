@@ -1,4 +1,4 @@
-import identity from 'lodash.identity';
+import identity from '#internal/identity';
 import nonUndefinedIdentity from '#router/internal/nonUndefinedIdentity';
 import alwaysTrue from '#internal/alwaysTrue';
 import type { ParamParser } from '#router/internal/types';

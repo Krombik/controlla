@@ -11,7 +11,7 @@ import {
 import SuspenseContext from '#internal/SuspenseContext';
 import ErrorBoundaryContext from '#internal/ErrorBoundaryContext';
 import scheduleMicrotask from '#internal/scheduleMicrotask';
-import noop from 'lodash.noop';
+import noop from '#internal/noop';
 
 type Ctx = NonNullable<ContextType<typeof SuspenseContext>>;
 

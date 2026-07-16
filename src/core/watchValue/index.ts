@@ -1,7 +1,7 @@
 import type { ChangeListener } from '#internal/types';
 import { INTERNALS } from '#internal/constants';
 import type { ReadonlyAsyncControl, ReadonlyControl } from '#types';
-import noop from 'lodash.noop';
+import noop from '#internal/noop';
 
 const watchValue: {
   /**

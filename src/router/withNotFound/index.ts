@@ -1,4 +1,4 @@
-import identity from 'lodash.identity';
+import identity from '#internal/identity';
 import createPath from '#router/createPath';
 import type { AnyPaths, Path, PathParam } from '#router/internal/types';
 import NOT_FOUND from '#router/NOT_FOUND';
