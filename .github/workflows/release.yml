@@ -12,13 +12,13 @@ jobs:
       # required for npm --provenance
       id-token: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 11
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -32,6 +32,10 @@ jobs:
 
       - run: pnpm exec node --test --experimental-transform-types "tests/*.test.ts"
 
-      - run: npm publish ./build --provenance --access public
+      # prerelease versions (1.0.0-alpha.0) go to the `alpha` dist-tag, so
+      # `latest` only ever points at stable releases
+      - run: |
+          TAG=$(node -p "require('./build/package.json').version.includes('-') ? 'alpha' : 'latest'")
+          npm publish ./build --provenance --access public --tag "$TAG"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
