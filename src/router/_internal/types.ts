@@ -464,7 +464,9 @@ type HandlePath<
       : {
             [key in keyof P as P[key][1] extends true ? never : key]: P[key][0];
           } & {
-            [key in keyof P as P[key][1] extends true ? key : never]?: P[key][0];
+            [
+              key in keyof P as P[key][1] extends true ? key : never
+            ]?: P[key][0];
           } extends infer Params
         ? { [key in keyof Params]: Params[key] }
         : never,
