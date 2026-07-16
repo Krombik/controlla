@@ -1,6 +1,6 @@
 <h1 align="center">🎮 controlla</h1>
 
-<p align="center">Fine-grained reactive state for React - async, derived, persisted, and keyed, with surgical re-renders.</p>
+<p align="center">Fine-grained reactive state and fully typed router for React - async, derived, persisted, and keyed controls with surgical re-renders.</p>
 
 <p align="center">
   <img alt="npm" src="https://img.shields.io/npm/v/controlla.svg" />
@@ -11,14 +11,14 @@
 
 A **control** is a reactive value you read, write, derive from, persist, and subscribe to. Writes notify only the paths that actually changed - no selectors, no context, no re-render storms.
 
-- 🗺️ **Typed router**: a typed path tree instead of URL strings, params/query/hash as controls, anchors with scroll restoration, and navigation blocking - all built in.
 - 🎯 **Fine-grained**: a write touches only the fields that changed - `$user.profile.name` is its own control.
 - ⚡ **Built-in async**: loading / ready / error states, Suspense, request & polling loaders.
 - 🔗 **Derived & combined**: controls that recompute only when their sources are ready.
 - 🗂️ **Keyed registries**: one control per key, created on demand.
+- 🗺️ **Typed router**: a typed path tree instead of URL strings, params/query/hash as controls, anchors with scroll restoration, and navigation blocking - all built in.
 - 💾 **Persistence**: `localStorage` / `sessionStorage`, observable across tabs.
 - ⏱️ **Batching & scheduling**: microtask by default; throttle, debounce, manual.
-- 🌳 **Tree-shakeable & typed**: every export is its own import, no barrel.
+- 🌳 **Tree-shakeable & typed**: zero setup, one tiny dependency, and per-export subpath imports for guaranteed minimal bundles.
 
 ```bash
 pnpm add controlla
@@ -109,7 +109,7 @@ const ProductPage = () => {
 
 See the [Router](#router) section for paths, navigation, params, anchors and more.
 
-> Every export is its own subpath import (`controlla/<domain>/<name>`): no barrel, fully tree-shakeable. Controls are conventionally named with a leading `$`.
+> Everything is importable two ways: from the root (`import { createControl, useValue } from 'controlla'`) or as its own subpath (`controlla/<domain>/<name>`, as in the examples above). Both tree-shake in a modern bundler, but subpaths make the minimal bundle a guarantee instead of an optimization - prefer them. Controls are conventionally named with a leading `$`.
 
 ---
 
@@ -963,7 +963,7 @@ const paths = withNotFound({
 
 ### `createAsyncPath(source)`
 
-Like `createPath`, but for a path whose params need data that isn't available synchronously - a lookup dictionary, a feature config, and so on. Pass the async `source` control first - every `parse`, `stringify`, `isValid` and default of the path's params then receives the source's current value as an extra argument.
+Like `createPath`, but for a path whose params need data that isn't available synchronously - a lookup dictionary, a feature config, and so on. Pass the `source` control first - every `parse`, `stringify`, `isValid` and default of the path's params then receives the source's current value as an extra argument. A sync control works as a source too - it counts as "ready" once its value isn't `undefined`.
 
 The route matches immediately, but its params control is **async** - `undefined` until `source` is ready, the parsed params once it resolves. If `source` changes later, the same URL strings are re-parsed against the new value, and when that yields different params, the URL is rewritten in place to match.
 
