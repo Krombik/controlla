@@ -9,7 +9,9 @@ import removeFromArray from '#internal/removeFromArray';
 type Subscription = {
   _level: number;
   _callback(values?: any[], prevValues?: any[]): void | (() => void);
+  /** `undefined` when the callback takes no arguments */
   readonly _values: any[] | undefined;
+  /** `false`: not tracked (callback arity < 2); `undefined`: nothing changed since last flush */
   _prevValues: any[] | false | undefined;
   _cleanup(): void;
   _commitSet(data: null, lane: Lane): void;

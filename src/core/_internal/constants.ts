@@ -15,6 +15,7 @@ export const enum ControlType {
   LOADABLE,
 }
 
+/** Order matters: commits branch on `< ERROR`. */
 export const enum PatchType {
   UNSET,
   SET,

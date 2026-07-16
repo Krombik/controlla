@@ -190,6 +190,7 @@ function commitSet(
       }
     }
   } else {
+    // a cleared slot changes the aggregate even if the remaining errors are identical
     if (hadClearedError && status == Status.ERROR_UNCHANGED) {
       status = Status.ERROR_CHANGED;
     }

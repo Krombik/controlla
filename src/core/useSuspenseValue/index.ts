@@ -65,6 +65,7 @@ const useSuspenseValue: {
 
         errInternals._attach(errInternals, forceRerender, false);
 
+        // the value may have changed between render and subscription
         if (value !== internals._get() || err !== errInternals._value) {
           forceRerender();
         }

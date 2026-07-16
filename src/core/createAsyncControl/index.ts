@@ -213,6 +213,7 @@ function commitAsyncSet(
     );
 
     if (load) {
+      // still in use, or the deferred unload cleanup hasn't flushed yet
       if (load._activeCount || !load._canScheduleUnload) {
         if (nextLoadingValue) {
           triggerLoad(internals);

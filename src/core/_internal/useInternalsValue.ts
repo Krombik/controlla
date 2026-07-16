@@ -15,6 +15,7 @@ const useInternalsValue = (
 
     root._attach(internals, forceRerender, true);
 
+    // the value may have changed between render and subscription
     if (value !== internals._get()) {
       forceRerender();
     }

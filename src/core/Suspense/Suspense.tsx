@@ -16,8 +16,11 @@ import noop from 'lodash.noop';
 type Ctx = NonNullable<ContextType<typeof SuspenseContext>>;
 
 // https://github.com/facebook/react/blob/main/packages/react-reconciler/src/ReactFiberWorkLoop.js#L531
+// just above React's fallback throttle: a fallback that committed has run its effect by then
 const FALLBACK_THROTTLE_MS = 501;
 
+// release-cleanups of fallbacks rendered this tick: a committed fallback removes
+// its own (the effect ran), the timeout releases the rest (render was discarded)
 let queue: Array<() => void> = [];
 
 let indexMap = new Map<() => void, number>();

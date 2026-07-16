@@ -37,6 +37,7 @@ const initControl = <I extends PrimitiveControlInternals>(
             const lane = getSchedulerLane();
 
             if (isSync || value !== undefined) {
+              // sync storage was cleared externally - reseed it with the initial value
               if (
                 isSync &&
                 value === undefined &&

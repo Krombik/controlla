@@ -12,6 +12,7 @@ import type { PatchType } from '#internal/constants';
 
 export type PendingItem = Pick<ControlInternals, '_commitSet' | '_level'>;
 
+/** Pending items commit in ascending `_level` order, so deriveds commit after their sources. */
 export type Lane = {
   readonly _scheduler: Scheduler;
   _canScheduleFlush: boolean;
@@ -33,7 +34,7 @@ export type Falsy = Nil | false | 0 | '';
 
 export type ChangeListener<T = any> = (newValue: T, prevValue: T) => void;
 
-/** @internal */
+/** `_type` UNSET: only the `_patchedKeys` subtrees apply; SET: `_value` replaces the whole node. */
 export type PatchTreeNode = {
   _type: PatchType;
   _value: any;
@@ -41,6 +42,7 @@ export type PatchTreeNode = {
   readonly _patchedKeys: string[];
 };
 
+/** Invariant: `_indexMap` is null iff `_listeners` is the shared `EMPTY_ARR`. */
 export type Listeners<T extends Function> = {
   _indexMap: Map<T, number> | undefined;
   readonly _listeners: T[];
@@ -152,6 +154,7 @@ export interface AsyncControlInternals
         _activeCount: number;
         _canScheduleUnload: boolean;
         _cleanup: (() => void) | void | undefined;
+        /** 0: load in flight; 1: loaded, staleness untracked; else: load end timestamp */
         _loadedAt: number;
         readonly _keys?: any[];
         readonly _options: AsyncControlOptions<any, any, any[]>;
@@ -221,6 +224,7 @@ export type ContainerComponent =
 
 /** @internal */
 export type NeverControl = {
+  /** Settles only when the suspense boundary cleans up, letting React drop the tree. */
   _fakeSuspense(
     suspenseCtx: NonNullable<ContextType<typeof SuspenseContext>>
   ): Promise<any>;

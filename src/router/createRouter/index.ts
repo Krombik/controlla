@@ -808,6 +808,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
                       route._buildSearch(searchParams, false, false);
 
+                      // async-path params are derived: mark stale, their mapper re-parses
                       if ('_upToDate' in paramsControl) {
                         paramsControl._upToDate = false;
 
@@ -922,6 +923,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
       if (nextHistoryIndex != null) {
         const scroll = state && state.scroll;
 
+        // blocker active: undo the pop and park it for allow()/deny()
         isBlockedPop = canBlockPop && !canNavigate;
 
         delta = nextHistoryIndex - currentHistoryIndex;
@@ -942,6 +944,8 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
           return;
         }
 
+        // the target entry restores scroll: hop back to stamp the current
+        // entry's scroll first, then re-run the pop
         isScrollSavePop = !!scroll && !isScrollRestorePop;
 
         if (isScrollSavePop) {
@@ -982,6 +986,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
   buildRoutes(routes, navigations, paths, EMPTY_ARR, '', 0, false);
 
+  // the finalizer commits after every params control
   urlFinalizer._level = ++maxParamControlLevel;
 
   if (pathname.length > 1 && pathname.at(-1) == '/') {
