@@ -4,7 +4,7 @@ const parseSearch = (search: string): Record<string, string> => {
   if (search) {
     const params: Record<string, string> = {};
 
-    for (let i = 1, l = search.length; i < l; ) {
+    for (let i = 1, l = search.length; i < l;) {
       const eq = search.indexOf('=', i) + 1;
 
       let end = search.indexOf('&', i);

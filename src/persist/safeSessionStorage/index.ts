@@ -5,6 +5,9 @@ import makeSafeStorage from '#persist/internal/makeSafeStorage';
  * if `sessionStorage` is unavailable. Changes are observable within browsing
  * contexts sharing the session (same-origin iframes and `window.open` popups).
  */
-const safeSessionStorage = makeSafeStorage(sessionStorage);
+const safeSessionStorage =
+  typeof sessionStorage != 'undefined'
+    ? makeSafeStorage(sessionStorage)
+    : undefined;
 
 export default safeSessionStorage;

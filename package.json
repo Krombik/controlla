@@ -1,6 +1,6 @@
 {
   "name": "controlla",
-  "version": "0.0.1-alpha.44",
+  "version": "0.0.1",
   "description": "Fine-grained reactive state for React — async, derived, persisted, and keyed, with surgical re-renders",
   "author": "Krombik",
   "license": "MIT",
@@ -18,9 +18,9 @@
     "node": ">=10"
   },
   "scripts": {
-    "build": "tsup",
-    "watch": "tsup --watch",
-    "release": "tsup && npm publish ./build"
+    "build": "tsdown",
+    "watch": "tsdown --watch",
+    "release": "tsdown && npm publish ./build"
   },
   "peerDependencies": {
     "@types/react": ">=17.0.0",
@@ -54,11 +54,14 @@
     "@types/lodash.noop": "^3.0.9",
     "@types/node": "^22.7.4",
     "@types/react": "^19.2.17",
-    "eslint": "^10.4.1",
-    "prettier": "3.8.4",
-    "tsup": "^8.5.0",
-    "typescript-eslint": "^8.61.0",
-    "typescript": "^6.0.3"
+    "eslint": "^10.7.0",
+    "prettier": "^3.9.5",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "tsdown": "^0.22.8",
+    "typescript": "^7.0.2",
+    "typescript-eslint": "^8.64.0",
+    "unrun": "^0.3.1"
   },
   "sideEffects": false
 }

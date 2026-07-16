@@ -42,7 +42,7 @@ const wrapErrorBoundary = <T extends typeof Component>(Component: T): T => {
 
       const it = ctx.values();
 
-      for (let i = ctx.size; i--; ) {
+      for (let i = ctx.size; i--;) {
         const items: NonNullable<ContextType<typeof SuspenseContext>> =
           it.next().value!;
 

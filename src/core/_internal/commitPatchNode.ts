@@ -36,7 +36,7 @@ const notifyDescendants = (
 
     const it = children.keys();
 
-    for (let i = children.size; i--; ) {
+    for (let i = children.size; i--;) {
       const key = it.next().value!;
 
       const childValue = value[key];
@@ -133,7 +133,7 @@ const compareAndNotify = (
     if (children) {
       const it = children.keys();
 
-      for (let i = children.size; i--; ) {
+      for (let i = children.size; i--;) {
         const key = it.next().value!;
 
         diffPair(

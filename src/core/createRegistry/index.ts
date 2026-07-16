@@ -360,7 +360,7 @@ function commitSet(this: BoundInternals, _: any, lane: Lane) {
         heldPrev = true;
 
         if (!registry._suppressError) {
-          for (let i = registry._depth; i--; ) {
+          for (let i = registry._depth; i--;) {
             if (errors[i] !== undefined) {
               heldPrev = false;
 
@@ -798,7 +798,7 @@ function registryInvalidate(
 
           const it = storage.values();
 
-          for (let i = storage.size; i--; ) {
+          for (let i = storage.size; i--;) {
             nextQueue.push(it.next().value);
           }
         }
@@ -811,7 +811,7 @@ function registryInvalidate(
 
         const it = storage.values();
 
-        for (let i = storage.size; i--; ) {
+        for (let i = storage.size; i--;) {
           invalidate(it.next().value);
         }
       }
@@ -1064,20 +1064,14 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
             let controlType = self._type;
 
             let targetInternals:
-              | ControlInternals
-              | AsyncControlInternals
-              | undefined;
+              ControlInternals | AsyncControlInternals | undefined;
 
             (boundInternals as Mutable<BoundInternals>)._level = ++maxLevel;
 
             if (isReady) {
               let control:
-                | ControlScope
-                | Control
-                | AsyncControlScope
-                | undefined = controlExists
-                ? storage.get(storageKey)
-                : undefined;
+                ControlScope | Control | AsyncControlScope | undefined =
+                controlExists ? storage.get(storageKey) : undefined;
 
               if (!control) {
                 storage.set(

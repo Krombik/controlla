@@ -35,7 +35,7 @@ const makeSafeStorage = (storage: Storage) => {
           }
         }
       } else {
-        for (let i = subscriptions.size, it = subscriptions.values(); i--; ) {
+        for (let i = subscriptions.size, it = subscriptions.values(); i--;) {
           const listeners = it.next().value!;
 
           for (let i = 0; i < listeners.length; i++) {

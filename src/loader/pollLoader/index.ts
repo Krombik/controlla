@@ -198,8 +198,7 @@ function groupLoad(
 
 function groupPause(this: PollActions<any[], number>, ...keys: any[]) {
   const group = this._storage.get(getKey(keys, this._groupSize, false)) as
-    | Group
-    | undefined;
+    Group | undefined;
 
   if (group && group._isRunning) {
     group._isRunning = false;
@@ -212,8 +211,7 @@ function groupResume(this: PollActions<any[], number>, ...keys: any[]) {
   const self = this;
 
   const group = self._storage.get(getKey(keys, self._groupSize, false)) as
-    | Group
-    | undefined;
+    Group | undefined;
 
   if (group && !group._isRunning) {
     group._isRunning = true;
@@ -226,8 +224,7 @@ function groupReset(this: PollActions<any[], number>, ...keys: any[]) {
   const self = this;
 
   const group = self._storage.get(getKey(keys, self._groupSize, false)) as
-    | Group
-    | undefined;
+    Group | undefined;
 
   if (group && group._timerId != null) {
     clearTimeout(group._timerId);
@@ -314,8 +311,7 @@ function load(
 
 function pause(this: PollActions<any[], number>, ...keys: any[]) {
   const item = this._storage.get(getKey(keys, this._groupSize, false)) as
-    | Solo
-    | undefined;
+    Solo | undefined;
 
   if (item) {
     item._isRunning = false;
@@ -324,8 +320,7 @@ function pause(this: PollActions<any[], number>, ...keys: any[]) {
 
 function resume(this: PollActions<any[], number>, ...keys: any[]) {
   const item = this._storage.get(getKey(keys, this._groupSize, false)) as
-    | Solo
-    | undefined;
+    Solo | undefined;
 
   if (item && !item._isRunning) {
     item._isRunning = true;
@@ -338,8 +333,7 @@ function resume(this: PollActions<any[], number>, ...keys: any[]) {
 
 function reset(this: PollActions<any[], number>, ...keys: any[]) {
   const item = this._storage.get(getKey(keys, this._groupSize, false)) as
-    | Solo
-    | undefined;
+    Solo | undefined;
 
   if (item && item._timerId != null) {
     clearTimeout(item._timerId);
