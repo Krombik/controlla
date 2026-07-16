@@ -55,7 +55,7 @@ export const notify = (
 
   // GC'd dependents are compacted in place via swap-pop
   if (l) {
-    for (let i = 0, item = dependents[0]; ; ) {
+    for (let i = 0, item = dependents[0]; ;) {
       const control = item._ref.deref();
 
       if (control) {

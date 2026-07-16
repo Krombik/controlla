@@ -1,6 +1,5 @@
 {
   "compilerOptions": {
-    "outDir": "build",
     "module": "preserve",
     "target": "es2020",
     "lib": ["dom", "esnext"],
@@ -23,6 +22,6 @@
     "preserveConstEnums": false,
     "types": ["node"]
   },
-  "include": ["src"],
+  "include": ["src", "tsdown.config.ts"],
   "exclude": ["node_modules"]
 }

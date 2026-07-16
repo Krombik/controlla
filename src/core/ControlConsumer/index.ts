@@ -33,9 +33,7 @@ type PrimitiveDisplayProps = {
 
 const ControlConsumer = ((
   props:
-    | RenderProps<ReadonlyAsyncControl>
-    | TruthyGateProps
-    | PrimitiveDisplayProps
+    RenderProps<ReadonlyAsyncControl> | TruthyGateProps | PrimitiveDisplayProps
 ) => {
   const value = useInternalsValue(props.control[INTERNALS], useForceRerender());
 

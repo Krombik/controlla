@@ -127,7 +127,6 @@ export type RouteParams<Params, Async, Anchor> = {
   [PARAMS_MARKER]: [Params, Async, Anchor];
 };
 
-/** @internal */
 export type AnchorRoute<A extends string> = [A] extends [never]
   ? never
   : PageRoute<true> & RouteParams<any, any, A>;
@@ -265,9 +264,7 @@ export type RouterHandler = PendingItem & {
 
 /** @internal */
 export type RouterControlRoot = (
-  | ControlInternals
-  | AsyncControlInternals
-  | PrimitiveControlInternals
+  ControlInternals | AsyncControlInternals | PrimitiveControlInternals
 ) & {
   _set?: PrimitiveControlInternals['_enqueueSet'];
 };
@@ -546,26 +543,25 @@ export type ParamOptions<Value, O = false, Source = never> = {
    */
   isValid?(value: NoInfer<Value>, source: Source): boolean;
 } & (O extends true
-  ?
-      | {
-          /**
-           * Stands in for a missing param, on parse and when writing the
-           * URL too - the param can't actually be cleared while this is
-           * set. Mutually exclusive with {@link initialValue}.
-           */
-          defaultValue?: Value | ((source: Source) => Value);
-          initialValue?: never;
-        }
-      | {
-          /**
-           * Applied to an absent param only on the very first load of the
-           * session, then written into the URL like a real value - unlike
-           * {@link defaultValue}, it can be cleared normally afterward.
-           * Mutually exclusive with `defaultValue`.
-           */
-          initialValue?: Value | ((source: Source) => Value);
-          defaultValue?: never;
-        }
+  ? | {
+        /**
+         * Stands in for a missing param, on parse and when writing the
+         * URL too - the param can't actually be cleared while this is
+         * set. Mutually exclusive with {@link initialValue}.
+         */
+        defaultValue?: Value | ((source: Source) => Value);
+        initialValue?: never;
+      }
+    | {
+        /**
+         * Applied to an absent param only on the very first load of the
+         * session, then written into the URL like a real value - unlike
+         * {@link defaultValue}, it can be cleared normally afterward.
+         * Mutually exclusive with `defaultValue`.
+         */
+        initialValue?: Value | ((source: Source) => Value);
+        defaultValue?: never;
+      }
   : {});
 
 export type ValidateParams<P> = keyof P extends {

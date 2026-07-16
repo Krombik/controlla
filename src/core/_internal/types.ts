@@ -219,8 +219,7 @@ export type PartialTuple<T extends unknown[]> = T extends [
   : never;
 
 export type ContainerComponent =
-  | ComponentType<PropsWithChildren>
-  | keyof JSX.IntrinsicElements;
+  ComponentType<PropsWithChildren> | keyof JSX.IntrinsicElements;
 
 /** @internal */
 export type NeverControl = {

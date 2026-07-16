@@ -13,8 +13,7 @@ export const paramsHandler: RouterHandler = {
 
 export const getRouterPatch = (lane: Lane) => {
   let patch = lane._patchByControl.get(paramsHandler) as
-    | RouterPatch
-    | undefined;
+    RouterPatch | undefined;
 
   if (!patch) {
     queueRouterPatch(

@@ -152,13 +152,12 @@ const watchValues = ((
       },
       prevValues: {
         [index in keyof S]: S[index] extends ReadonlyControl<infer K>
-          ?
-              | K
-              | (I extends false
-                  ? S[index] extends ReadonlyAsyncControl
-                    ? undefined
-                    : never
-                  : undefined)
+          ? | K
+            | (I extends false
+                ? S[index] extends ReadonlyAsyncControl
+                  ? undefined
+                  : never
+                : undefined)
           : never;
       }
     ) => void | (() => void),

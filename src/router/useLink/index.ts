@@ -166,7 +166,7 @@ const useLink = ({
     throwNotMatched();
   }
 
-  for (let fillerCount = methods._maxSlots() - routesCount; fillerCount--; ) {
+  for (let fillerCount = methods._maxSlots() - routesCount; fillerCount--;) {
     useNoopLayoutEffect();
   }
 
