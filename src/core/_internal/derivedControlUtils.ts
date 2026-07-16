@@ -15,6 +15,7 @@ export type DerivedControlInternals = ControlInternals & {
   readonly _notifiers: Notifier | Notifier[];
   _mapper(...args: any[]): any;
   _values: any;
+  /** `false` while a source change awaits recompute; local writes are dropped meanwhile */
   _upToDate: boolean;
   readonly _isSingleDependency: boolean;
 };
@@ -89,6 +90,7 @@ export function sourceChangeNotify(
   addToQueue(lane, root);
 }
 
+/** Drops the write while sources are stale: the recompute would overwrite it anyway. */
 export function enqueueSet(
   this: DerivedControlInternals,
   value: any,

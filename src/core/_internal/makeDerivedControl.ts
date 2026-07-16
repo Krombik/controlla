@@ -46,6 +46,7 @@ function commitSet(
 
     root._upToDate = true;
 
+    // single-dependency mode keeps the latest source value itself in _values
     if (root._isSingleDependency) {
       next = root._mapper(root._values);
 

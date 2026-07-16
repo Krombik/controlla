@@ -16,8 +16,7 @@ import type { NavigationTarget } from '#router/types';
 import type { DerivedControlInternals } from '#internal/derivedControlUtils';
 
 export type IsUnion<T, U = T> = T extends any
-  ? // isUnion check
-    [U] extends [T]
+  ? [U] extends [T]
     ? false
     : true
   : never;

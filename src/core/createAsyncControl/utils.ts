@@ -173,6 +173,7 @@ const attachLoad = (control: AsyncControlInternals) => {
   }
 };
 
+/** Unload is deferred a microtask so re-attaching within the same tick keeps the load alive. */
 const detachLoad = (control: AsyncControlInternals) => {
   const data = control._load!;
 

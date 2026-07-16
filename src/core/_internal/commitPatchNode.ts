@@ -17,6 +17,10 @@ const getPrototypeOf = Object.getPrototypeOf;
 
 const isArray = Array.isArray;
 
+/**
+ * A subtree appeared or vanished: children get `(value, undefined)` when
+ * `emitSourceValues`, `(undefined, value)` otherwise.
+ */
 const notifyDescendants = (
   children: Map<string, ControlInternalsChild>,
   source: any,
@@ -56,6 +60,10 @@ const notifyDescendants = (
   } while (queue.length);
 };
 
+/**
+ * Returns whether the values differ; `scanUntilMismatch` keeps scanning
+ * unlistened keys only until the first proven difference.
+ */
 const compareAndNotify = (
   prevValue: any,
   nextValue: any,

@@ -71,6 +71,7 @@ const handlePath = (
       last = path[--end - 1];
     }
 
+    // query declarators take 3 args, path param declarators 4
     if (end && typeof last == 'function' && last.length == 3) {
       (last as QueryParam<{}>)(parsers, stringifies, queryParams);
 

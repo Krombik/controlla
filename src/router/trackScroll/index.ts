@@ -105,6 +105,7 @@ const trackScroll = <Ids extends string>(
           lowestId = entry._id;
         }
 
+        // active = the lowest section whose top is at or above the offset line
         if (top <= 1 && top > bestTop) {
           bestTop = top;
 
@@ -116,6 +117,7 @@ const trackScroll = <Ids extends string>(
         window.innerHeight + window.scrollY >=
         document.documentElement.scrollHeight - 1
       ) {
+        // page bottom: force the last section active
         nextId = lowestId;
       }
 

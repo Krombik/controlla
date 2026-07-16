@@ -66,6 +66,7 @@ const useLink = ({
   scrollRestoration,
   onClick,
 }: LinkOptions): LinkHandle => {
+  // the hook count must stay identical for any target: useNoopLayoutEffect fills unused slots
   const forceRerender = useForceRerender();
 
   const methods = to[ROUTE_METHODS];

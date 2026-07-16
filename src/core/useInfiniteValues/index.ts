@@ -41,6 +41,7 @@ const useInfiniteValues = <C extends ReadonlyControl>(
   const handleSubscriptionsRef =
     useRef<(internals: ControlInternalsChild[]) => void>(noop);
 
+  // every render: diff subscriptions against the previous controls list
   useLayoutEffect(() => {
     handleSubscriptionsRef.current(internals);
   });

@@ -70,6 +70,7 @@ interface BoundInternals
 
 type BoundInternalsChild = ChildControlNode<BoundInternals>;
 
+/** Control keys map by internals identity, plain keys by a canonical token object. */
 const keyToBoundKey = (kv: any) =>
   (kv && kv[INTERNALS]) || getObjectKey(getStorageKey(kv));
 
@@ -188,9 +189,8 @@ function keyChangeNotify(
 ) {
   root._keys[this._index] = value;
 
-  // seed the hold decision on the episode's first change (target still
-  // attached), AND further changes into it; a stale false when targetless
-  // and not holding is harmless — the value is already undefined
+  // (re)decide the hold on each change while a target is attached or a hold is
+  // ongoing; a stale false when targetless and not holding is harmless
   if (root._target || root._holdingPrev) {
     const keepPrev = root._registry._keepPrev;
 
@@ -290,8 +290,8 @@ function commitSet(this: BoundInternals, _: any, lane: Lane) {
           ? registry._suppressError
           : root._holdingPrev)
       ) {
-        // hold the last value while the target is not ready (error →
-        // suppressError; a later reload continues an ongoing hold)
+        // hold the last value while the target is not ready (on error only
+        // with suppressError; a later reload continues an ongoing hold)
         heldPrev = true;
 
         changedNodes.length = 0;
@@ -827,6 +827,7 @@ const throwUndefinedError = () => {
   throw new Error('Undefined cannot be used as a registry key.');
 };
 
+/** Skips `_attachedTo` tracking: rebinds remove these via `cleanupPrevTarget` instead. */
 const attachUntrackedNotifier = (
   targetInternals: ControlInternalsBase,
   notifier: Notifier
@@ -1091,6 +1092,7 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
 
         const storageKey = getStorageKey(keyValue);
 
+        // notifiers attach for every key; bound-tree nodes only from the miss point on
         if (j >= i) {
           if (j == endIndex) {
             let controlType = self._type;

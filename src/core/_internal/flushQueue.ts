@@ -10,6 +10,7 @@ import scheduleMicrotask from '#internal/scheduleMicrotask';
 
 let currentLane: Lane | null = null;
 
+/** Listener add/remove during notify is deferred to keep the iterated array stable. */
 const NOT_ITERATED: readonly Function[] = [];
 
 let iteratedListeners = NOT_ITERATED;
@@ -52,6 +53,7 @@ export const notify = (
 
   let l = dependents.length;
 
+  // GC'd dependents are compacted in place via swap-pop
   if (l) {
     for (let i = 0, item = dependents[0]; ; ) {
       const control = item._ref.deref();
@@ -100,6 +102,7 @@ const flushQueue = (
 
         internals._commitSet(data, lane);
 
+        // the commit enqueued lower-level items - drain them before continuing
         if (lane._minPendingLevel < level) {
           flushQueue(lane, pendingControlLevels, patchByControl, level);
         }
