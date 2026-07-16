@@ -11,6 +11,7 @@ import navigateRoute from '#router/internal/navigateRoute';
 import useForceRerender from '#internal/useForceRerender';
 import useNoopLayoutEffect from '#internal/useNoopLayoutEffect';
 import useInternalsValue from '#internal/useInternalsValue';
+import throwNotMatched from '#router/internal/throwNotMatched';
 
 export type LinkOptions = {
   /** The navigation target. */
@@ -41,10 +42,6 @@ export type LinkHandle = {
    * {@link LinkOptions.trackMatch trackMatch}: `'exact'`); always `false` when {@link LinkOptions.trackMatch trackMatch} isn't set.
    */
   isMatched: boolean;
-};
-
-const throwNotMatched = () => {
-  throw new Error('route not mounted');
 };
 
 /**

@@ -7,6 +7,7 @@ import type {
 import { getSchedulerLane, scheduleFlush } from '#internal/flushQueue';
 import queueRouterPatch from '#router/internal/queueRouterPatch';
 import { clearWrites, paramsHandler } from '#router/internal/state';
+import throwNotMatched from '#router/internal/throwNotMatched';
 
 const navigateRoute = (
   methods: RouteMethods,
@@ -51,13 +52,15 @@ const navigateRoute = (
           _path: undefined,
         });
       } else if (!route._isMatched._value) {
-        throw new Error('navigate: params are required for an unmatched route');
+        // params must be given for a route that isn't currently matched
+        throwNotMatched();
       }
     }
   }
 
   if (u != updatesCount) {
-    throw new Error('navigate: params were passed for an unmatched route');
+    // leftover params target a route outside the chain
+    throwNotMatched();
   }
 
   if (toAnchor) {

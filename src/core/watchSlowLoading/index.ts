@@ -20,7 +20,7 @@ const watchSlowLoading = (control: AsyncControl, cb: () => void) => {
   const slowLoadMonitor = control[INTERNALS]._root._load!._slowLoadMonitor;
 
   if (!slowLoadMonitor) {
-    throw new Error('slow loading timeout was not provided');
+    throw new Error('the control has no loadingTimeout');
   }
 
   addListener(slowLoadMonitor, cb);

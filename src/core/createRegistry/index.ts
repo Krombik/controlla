@@ -712,10 +712,6 @@ function registryDelete(this: Registry<any, any>, ...keys: any[]) {
   for (let i = 0; true; i++) {
     const keyValue = keys[i];
 
-    if (keyValue === undefined) {
-      throwUndefinedError();
-    }
-
     if (keyValue && keyValue[INTERNALS]) {
       let bound = self._bound;
 
@@ -823,10 +819,6 @@ function registryInvalidate(
   }
 }
 
-const throwUndefinedError = () => {
-  throw new Error('Undefined cannot be used as a registry key.');
-};
-
 /** Skips `_attachedTo` tracking: rebinds remove these via `cleanupPrevTarget` instead. */
 const attachUntrackedNotifier = (
   targetInternals: ControlInternalsBase,
@@ -848,7 +840,7 @@ const getRegistryDepth = (registry: Registry<any, any>, keys: any[]) => {
 
   if (registryDepth != depth) {
     if (registryDepth) {
-      throw new Error('inconsistent registry depth');
+      throw new Error('inconsistent keys count');
     }
 
     (registry as Mutable<typeof registry>)._depth = depth;
@@ -865,13 +857,7 @@ function get(this: Registry<any, any>, ...keys: any[]): any {
   let storage = self._storage;
 
   for (let i = 0; i < endIndex; i++) {
-    const keyValue = keys[i];
-
-    if (keyValue === undefined) {
-      throwUndefinedError();
-    }
-
-    const storageKey = getStorageKey(keyValue);
+    const storageKey = getStorageKey(keys[i]);
 
     const nextStorage = storage.get(storageKey);
 
@@ -881,26 +867,14 @@ function get(this: Registry<any, any>, ...keys: any[]): any {
       storage.set(storageKey, (storage = new Map()));
 
       while (++i < endIndex) {
-        const keyValue = keys[i];
-
-        if (keyValue === undefined) {
-          throwUndefinedError();
-        }
-
-        storage.set(getStorageKey(keyValue), (storage = new Map()));
+        storage.set(getStorageKey(keys[i]), (storage = new Map()));
       }
 
       break;
     }
   }
 
-  const keyValue = keys[endIndex];
-
-  if (keyValue === undefined) {
-    throwUndefinedError();
-  }
-
-  const storageKey = getStorageKey(keyValue);
+  const storageKey = getStorageKey(keys[endIndex]);
 
   let control = storage.get(storageKey);
 
@@ -937,10 +911,6 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
 
   for (let i = 0; ; i++) {
     const item = keys[i];
-
-    if (item === undefined) {
-      throwUndefinedError();
-    }
 
     const nextBound: typeof bound = bound.get(keyToBoundKey(item));
 
@@ -1084,10 +1054,6 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
           }
         } else {
           keyValue = item;
-
-          if (keyValue === undefined) {
-            throwUndefinedError();
-          }
         }
 
         const storageKey = getStorageKey(keyValue);

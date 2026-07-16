@@ -11,7 +11,7 @@ const suspendOnControl = (
 ) => {
   if (root._load || '_fakeSuspense' in root) {
     if (!suspenseCtx) {
-      throw new Error('No Suspense Wrapper');
+      throw new Error('no Suspense boundary');
     }
 
     if (errorBoundaryCtx) {

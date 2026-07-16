@@ -44,9 +44,7 @@ import { commitErrorValue, commitStatusValue } from '#internal/commitStatus';
 import { notify } from '#internal/flushQueue';
 
 const throwIfUndefined = () => {
-  throw new Error(
-    '[control] Cannot set undefined directly. Use invalidate(control) to trigger a reload'
-  );
+  throw new Error('cannot be set to undefined, use invalidate to reload');
 };
 
 function asyncEnqueueSet(
