@@ -1248,7 +1248,7 @@ const createRegistry: {
    * ```
    */
   <T, Keys extends Exclude<PrimitiveOrNested, undefined>[], E = any>(
-    createAsyncControl: typeof _createAsyncControl,
+    create: typeof _createAsyncControl,
     options?: AsyncControlOptions<T, E, Keys>,
     registryOptions?: RegistryOptions<T | undefined, Keys>
   ): Registry<AsyncControlScope<T, E>, Keys>;
@@ -1265,7 +1265,7 @@ const createRegistry: {
    * ```
    */
   <T, Keys extends Exclude<PrimitiveOrNested, undefined>[]>(
-    createControl: typeof _createControl,
+    create: typeof _createControl,
     defaultValue?: T | ((...keys: Keys) => T),
     registryOptions?: RegistryOptions<T, Keys>
   ): Registry<ControlScope<T>, Keys>;
@@ -1287,7 +1287,7 @@ const createRegistry: {
    * ```
    */
   <T, Keys extends Exclude<PrimitiveOrNested, undefined>[]>(
-    createControl: typeof _createPrimitiveControl,
+    create: typeof _createPrimitiveControl,
     defaultValue?: T | ((...keys: Keys) => T),
     registryOptions?: RegistryOptions<T, Keys>
   ): Registry<Control<T>, Keys>;
