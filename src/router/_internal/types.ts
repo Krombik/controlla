@@ -29,6 +29,20 @@ export type HandleUnknown<T, Fallback> = 0 extends 1 & T
       : T
     : T;
 
+type UnionToIntersection<U> = (
+  U extends any ? (arg: U) => void : never
+) extends (arg: infer I) => void
+  ? I
+  : never;
+
+/**
+ * Conditionally spread path records (`...(flag ? { a } : { b })`) infer as a
+ * union - merge it so every branch's routes are reachable. Kept as a default
+ * type parameter at each use site: the mapped types over it stay homomorphic,
+ * preserving rename/go-to-definition links to the path declarations.
+ */
+type MergePaths<Paths> = UnionToIntersection<Paths> & Paths;
+
 export type Route<
   Paths = never,
   Params = never,
@@ -39,12 +53,13 @@ export type Route<
     : Paths & 1 extends 0
       ? boolean
       : false,
+  MergedPaths = MergePaths<Paths>,
 > = PageRoute<IsPage> &
   RouteParams<Params, Async, Anchor> &
   ([Paths] extends [never]
     ? {}
     : {
-        readonly [key in keyof Paths]: Paths[key] extends Path<
+        readonly [key in keyof MergedPaths]: MergedPaths[key] extends Path<
           infer C,
           infer P,
           any,
@@ -56,7 +71,10 @@ export type Route<
       }) &
   ReadonlyControl<boolean>;
 
-export type Router<Paths extends AnyPaths> = {
+export type Router<
+  Paths extends AnyPaths,
+  MergedPaths extends AnyPaths = MergePaths<Paths>,
+> = {
   /**
    * Blocks navigations while enabled (e.g. over an unsaved form): an
    * attempted navigation is parked instead of applied and
@@ -79,7 +97,7 @@ export type Router<Paths extends AnyPaths> = {
    * `selectAnchor` and `createRouterView`.
    */
   readonly routes: {
-    readonly [key in keyof Paths]: Paths[key] extends Path<
+    readonly [key in keyof MergedPaths]: MergedPaths[key] extends Path<
       infer C,
       infer P,
       any,
@@ -95,7 +113,7 @@ export type Router<Paths extends AnyPaths> = {
    * `navigation.product({ id: '42' })`.
    */
   readonly navigation: {
-    [key in keyof Paths]: Paths[key] extends Path<
+    [key in keyof MergedPaths]: MergedPaths[key] extends Path<
       infer C,
       infer P,
       infer O,
@@ -144,10 +162,11 @@ export type Navigation<
   OptionalParams extends string = never,
   Async extends boolean = false,
   Anchor extends string = never,
+  MergedPaths = MergePaths<Paths>,
   Children = [Paths] extends [never]
     ? {}
     : {
-        [key in keyof Paths]: Paths[key] extends Path<
+        [key in keyof MergedPaths]: MergedPaths[key] extends Path<
           infer C,
           infer P,
           infer O,
@@ -300,7 +319,7 @@ export type ParamStringifier = (value: any, key: string) => string;
 type ParamData<V, O extends boolean> = [V, O];
 
 export type QueryParam<
-  P extends Record<string, [value: any, optional: boolean]>,
+  P extends Record<string, ParamData<any, boolean>>,
   Source = never,
 > = {
   /** @internal */
@@ -451,21 +470,27 @@ type OptionalKeysOf<P extends Record<string, ParamData<any, boolean>>> = {
 }[keyof P];
 
 type HandlePath<
-  P extends Record<string, ParamData<any, boolean>>,
+  U extends Record<string, ParamData<any, boolean>>,
   S,
   C extends AnyPaths = never,
   A extends string = never,
+  // each `param`/`query` declarator contributes its own record - merge them
+  P extends Record<string, ParamData<any, boolean>> = MergePaths<U>,
 > = Path<
   C,
-  [P] extends [never]
+  [U] extends [never]
     ? never
     : [keyof P] extends [never]
       ? never
-      : {
-            [key in keyof P as P[key][1] extends true ? never : key]: P[key][0];
+      : // a key is optional only when its value can actually be `undefined`:
+        // an optional param with a `defaultValue` always holds a value
+        {
+            [
+              key in keyof P as undefined extends P[key][0] ? never : key
+            ]: P[key][0];
           } & {
             [
-              key in keyof P as P[key][1] extends true ? key : never
+              key in keyof P as undefined extends P[key][0] ? key : never
             ]?: P[key][0];
           } extends infer Params
         ? { [key in keyof Params]: Params[key] }
