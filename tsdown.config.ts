@@ -14,10 +14,13 @@ const _pickFrom = (obj: Record<string, any>, keys: string[]) =>
 
 const _toRoot = (path: string) => `./${path}`;
 
-const _getIndexFile = (path: string, ext: string) =>
-  _toRoot(join(path, `./index.${ext}`));
+const _getFile = (path: string, name: string, ext: string) =>
+  _toRoot(join(path, `./${name}.${ext}`));
 
-type _Module = { types: string; default: string };
+const _getIndexFile = (path: string, ext: string) =>
+  _getFile(path, 'index', ext);
+
+type _Module = { types: string; default?: string };
 
 type _Export = { require: _Module; import: _Module };
 
@@ -36,6 +39,28 @@ const _getExport = (path: string): _Exports => ({
   },
 });
 
+/**
+ * A `types.ts` entry is declarations-only: drop the empty runtime files
+ * tsdown emits for it and export just the `types` conditions.
+ */
+const _getTypesExport = async (folderPath: string, path: string) => {
+  for (const file of [
+    'types.js',
+    'types.js.map',
+    'types.cjs',
+    'types.cjs.map',
+  ]) {
+    await fs.rm(join(folderPath, file), { force: true });
+  }
+
+  return {
+    [_toRoot(join(path, 'types'))]: {
+      require: { types: _getFile(path, 'types', 'd.cts') },
+      import: { types: _getFile(path, 'types', 'd.ts') },
+    },
+  } as _Exports;
+};
+
 const _exists = (path: string) =>
   fs.access(path).then(
     () => true,
@@ -49,11 +74,17 @@ const _getExports = async (path: string, obj: _Exports) => {
     const folderPath = `${path}/${dirs[i]}`;
 
     if ((await fs.lstat(folderPath)).isDirectory()) {
+      const folderRoot = _toRoot(relative(outDir, folderPath));
+
       obj = {
         ...obj,
         // chunk folders have no index — only real entry points are exported
         ...((await _exists(join(folderPath, 'index.js')))
-          ? _getExport(_toRoot(relative(outDir, folderPath)))
+          ? _getExport(folderRoot)
+          : undefined),
+        // domain-level type modules (core/types, router/types, …)
+        ...((await _exists(join(folderPath, 'types.d.ts')))
+          ? await _getTypesExport(folderPath, folderRoot)
           : undefined),
         ...(await _getExports(folderPath, obj)),
       };
@@ -73,6 +104,10 @@ const _getEntries = async () => {
 
     if (!(await fs.lstat(domainPath)).isDirectory()) {
       continue;
+    }
+
+    if (await _exists(`${domainPath}/types.ts`)) {
+      entries.push(`${domainPath}/types.ts`);
     }
 
     const modules = await fs.readdir(domainPath);

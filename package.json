@@ -2,7 +2,7 @@
   "name": "controlla",
   "version": "0.0.1",
   "description": "Fine-grained reactive state and fully typed router for React - async, derived, persisted, and keyed controls with surgical re-renders",
-  "author": "Krombik",
+  "author": "Andrii Dubetskyi",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -62,7 +62,7 @@
     "#types": "./src/core/types.ts"
   },
   "dependencies": {
-    "keyweaver": "^1.0.3"
+    "keyweaver": "^1.0.4"
   },
   "devDependencies": {
     "@types/node": "^22.7.4",

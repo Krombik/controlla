@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      # required for npm --provenance
+      # required for npm trusted publishing (OIDC) and --provenance
       id-token: write
     steps:
       - uses: actions/checkout@v7
@@ -22,7 +22,6 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          registry-url: https://registry.npmjs.org
 
       - run: pnpm install --frozen-lockfile
 
@@ -32,10 +31,11 @@ jobs:
 
       - run: pnpm exec node --test --experimental-transform-types "tests/*.test.ts"
 
+      # trusted publishing needs npm >= 11.5.1
+      - run: npm install -g npm@latest
+
       # prerelease versions (1.0.0-alpha.0) go to the `alpha` dist-tag, so
       # `latest` only ever points at stable releases
       - run: |
           TAG=$(node -p "require('./build/package.json').version.includes('-') ? 'alpha' : 'latest'")
           npm publish ./build --provenance --access public --tag "$TAG"
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
