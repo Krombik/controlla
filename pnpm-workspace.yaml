@@ -1,1 +1,3 @@
 autoInstallPeers: false
+minimumReleaseAgeExclude:
+  - keyweaver@1.0.4
