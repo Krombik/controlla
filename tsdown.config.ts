@@ -1,6 +1,33 @@
 import { defineConfig } from 'tsdown';
 import fs from 'fs/promises';
 import { join, relative } from 'path';
+import { minify } from 'terser';
+
+/**
+ * Shared across every chunk of every format, so `_field` mangles to the
+ * same name everywhere (chunks exchange objects at runtime).
+ */
+const _mangleNameCache = {};
+
+const _mangleInternals = {
+  name: 'mangle-internals',
+  async renderChunk(code: string, chunk: { fileName: string }) {
+    if (!/\.c?js$/.test(chunk.fileName)) {
+      return null;
+    }
+
+    const result = await minify(code, {
+      module: chunk.fileName.endsWith('.js'),
+      compress: false,
+      nameCache: _mangleNameCache,
+      // covers `o._x`, `o['_x']` and `'_x' in o`
+      mangle: { keep_fnames: true, properties: { regex: /^_/ } },
+      sourceMap: true,
+    });
+
+    return { code: result.code!, map: result.map as string };
+  },
+};
 
 const outDir = 'build';
 
@@ -141,6 +168,7 @@ export default defineConfig({
   target: 'es2020',
   treeshake: true,
   dts: true,
+  plugins: [_mangleInternals],
   // We generate package.json (and its exports) ourselves in build:done.
   exports: false,
   hooks: {
