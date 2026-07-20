@@ -72,9 +72,9 @@ const SuspendingControlsConsumer: FC<Props<any[]>> = ({
  * ```
  */
 const SuspenseControlsConsumer = <
-  const S extends Array<ReadonlyAsyncControl | Falsy>,
+  const Controls extends Array<ReadonlyAsyncControl | Falsy>,
 >(
-  props: Props<S>
+  props: Props<Controls>
 ) => (
   <Suspense fallback={wrapWithContainer(props.container, props.fallback)}>
     {jsx(SuspendingControlsConsumer, props)}

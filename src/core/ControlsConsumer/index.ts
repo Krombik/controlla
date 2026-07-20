@@ -6,18 +6,20 @@ import useForceRerender from '#internal/useForceRerender';
 import useNoopLayoutEffect from '#internal/useNoopLayoutEffect';
 import useInternalsValue from '#internal/useInternalsValue';
 
-type Props<C extends Array<ReadonlyControl | Falsy>> = {
-  controls: C;
+type Props<Controls extends Array<ReadonlyControl | Falsy>> = {
+  controls: Controls;
   /** Function that renders the controls value. */
   render(
     ...values: {
-      [index in keyof C]:
-        | (Exclude<C[index], Falsy> extends ReadonlyAsyncControl<infer K>
+      [index in keyof Controls]:
+        | (Exclude<Controls[index], Falsy> extends ReadonlyAsyncControl<infer K>
             ? K | undefined
-            : Exclude<C[index], Falsy> extends ReadonlyControl<infer K>
+            : Exclude<Controls[index], Falsy> extends ReadonlyControl<infer K>
               ? K
               : never)
-        | ([Extract<C[index], Falsy>] extends [never] ? never : undefined);
+        | ([Extract<Controls[index], Falsy>] extends [never]
+            ? never
+            : undefined);
     }
   ): ReactNode;
 };
@@ -46,7 +48,9 @@ const ControlsConsumer: {
    * />
    * ```
    */
-  <C extends Array<ReadonlyControl | Falsy>>(props: Props<C>): ReactNode;
+  <const Controls extends Array<ReadonlyControl | Falsy>>(
+    props: Props<Controls>
+  ): ReactNode;
 } = (props: Props<Array<ReadonlyControl | Falsy>>) => {
   const forceRerender = useForceRerender();
 
