@@ -1,6 +1,6 @@
 {
   "name": "controlla",
-  "version": "1.0.0-alpha.3",
+  "version": "1.0.0-alpha.4",
   "description": "Fine-grained reactive state and fully typed router for React - async, derived, persisted, and keyed controls with surgical re-renders",
   "author": "Andrii Dubetskyi",
   "license": "MIT",
