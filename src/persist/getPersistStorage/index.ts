@@ -14,9 +14,9 @@ type Options<T> = {
   /** The underlying storage, e.g. `safeLocalStorage`; `undefined` makes the control non-persistent. */
   storage: PersistStorage | undefined;
   /** Validates a stored value on read — an invalid one is treated as absent. */
-  isValid?(value: T): boolean;
+  isValid?(value: Exclude<T, undefined>): boolean;
   /** Serializes the value to and from a string. @default JSON */
-  converter?: Converter<T>;
+  converter?: Converter<Exclude<T, undefined>>;
   /** If `true` (and the storage supports it), the control picks up external changes — e.g. from another tab. */
   observable?: boolean;
 };
@@ -52,7 +52,7 @@ const getPersistStorage = <T>({
           const str = storage.getItem(key);
 
           if (str != null) {
-            let value: T;
+            let value: Exclude<T, undefined>;
 
             try {
               value = converter.parse(str);
@@ -79,7 +79,7 @@ const getPersistStorage = <T>({
             ? (onChange) =>
                 storage.listen!(key, (value) => {
                   if (value !== undefined) {
-                    let parsedValue: T;
+                    let parsedValue: Exclude<T, undefined>;
 
                     try {
                       parsedValue = converter.parse(value);
