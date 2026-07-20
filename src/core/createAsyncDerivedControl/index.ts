@@ -79,7 +79,7 @@ const createAsyncDerivedControl: {
    * );
    * ```
    */
-  <C extends ReadonlyControl[], V>(
+  <const C extends ReadonlyControl[], V>(
     ...args: [
       ...controls: C,
       combiner: (

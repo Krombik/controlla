@@ -114,7 +114,7 @@ const CombinedControlsConsumer = ((
    * />
    * ```
    */
-  <Controls extends ReadonlyControl[], T>(
+  <const Controls extends ReadonlyControl[], T>(
     props: RenderProps<Controls, T>
   ): ReactNode;
   /**
@@ -132,7 +132,7 @@ const CombinedControlsConsumer = ((
    * </CombinedControlsConsumer>
    * ```
    */
-  <Controls extends ReadonlyControl[]>(
+  <const Controls extends ReadonlyControl[]>(
     props: TruthyGateProps<Controls>
   ): ReactNode;
   /**
@@ -151,7 +151,7 @@ const CombinedControlsConsumer = ((
    * </span>
    * ```
    */
-  <Controls extends ReadonlyControl[]>(
+  <const Controls extends ReadonlyControl[]>(
     props: PrimitiveDisplayProps<Controls>
   ): ReactNode;
 };
