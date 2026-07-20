@@ -5,7 +5,7 @@ import alwaysTrue from '#internal/alwaysTrue';
 
 type Converter<T> = {
   parse(value: string): T;
-  stringify(value: T): string;
+  stringify(value: Exclude<T, undefined>): string;
 };
 
 type Options<T> = {
@@ -14,9 +14,9 @@ type Options<T> = {
   /** The underlying storage, e.g. `safeLocalStorage`; `undefined` makes the control non-persistent. */
   storage: PersistStorage | undefined;
   /** Validates a stored value on read — an invalid one is treated as absent. */
-  isValid?(value: Exclude<T, undefined>): boolean;
+  isValid?(value: T): boolean;
   /** Serializes the value to and from a string. @default JSON */
-  converter?: Converter<Exclude<T, undefined>>;
+  converter?: Converter<T>;
   /** If `true` (and the storage supports it), the control picks up external changes — e.g. from another tab. */
   observable?: boolean;
 };
@@ -52,7 +52,7 @@ const getPersistStorage = <T>({
           const str = storage.getItem(key);
 
           if (str != null) {
-            let value: Exclude<T, undefined>;
+            let value: T;
 
             try {
               value = converter.parse(str);
@@ -79,7 +79,7 @@ const getPersistStorage = <T>({
             ? (onChange) =>
                 storage.listen!(key, (value) => {
                   if (value !== undefined) {
-                    let parsedValue: Exclude<T, undefined>;
+                    let parsedValue: T;
 
                     try {
                       parsedValue = converter.parse(value);
