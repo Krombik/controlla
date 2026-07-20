@@ -12,6 +12,7 @@ import SuspenseContext from '#internal/SuspenseContext';
 import ErrorBoundaryContext from '#internal/ErrorBoundaryContext';
 import scheduleMicrotask from '#internal/scheduleMicrotask';
 import noop from '#internal/noop';
+import { EMPTY_ARR } from '#internal/constants';
 
 type Ctx = NonNullable<ContextType<typeof SuspenseContext>>;
 
@@ -98,7 +99,7 @@ const Fallback: FC<PropsWithChildren<{ _ctx: Ctx }>> = (props) => {
     };
   }
 
-  useEffect(effectRef.current, []);
+  useEffect(effectRef.current, EMPTY_ARR);
 
   return props.children;
 };
