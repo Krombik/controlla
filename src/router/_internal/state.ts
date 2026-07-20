@@ -46,3 +46,9 @@ export const urlFinalizer: Mutable<PendingItem> = {
   _level: 0,
   _commitSet: noop,
 };
+
+/**
+ * True only while `replaceValue`'s enqueue runs; the router turns such
+ * writes into history replaces.
+ */
+export const replacing = { _value: false };

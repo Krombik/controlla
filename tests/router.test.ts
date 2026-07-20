@@ -23,7 +23,7 @@ import query from '../build/router/query/index.js';
 import anchor from '../build/router/anchor/index.js';
 import navigate from '../build/router/navigate/index.js';
 import setValue from '../build/core/setValue/index.js';
-import replaceValue from '../build/core/replaceValue/index.js';
+import replaceValue from '../build/router/replaceValue/index.js';
 import selectParams from '../build/router/selectParams/index.js';
 import selectAnchor from '../build/router/selectAnchor/index.js';
 import selectRegisteredAnchors from '../build/router/selectRegisteredAnchors/index.js';

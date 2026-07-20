@@ -117,7 +117,7 @@ See the [Router](#router) section for paths, navigation, params, anchors and mor
 
 - **Controls**: [`createControl`](#createcontrol--usecontrol), [`createPrimitiveControl`](#createprimitivecontrol--useprimitivecontrol), [`createAsyncControl`](#createasynccontrol--useasynccontrol), [`createDerivedControl`](#createderivedcontrol--usederivedcontrol), [`createAsyncDerivedControl`](#createasyncderivedcontrol--useasyncderivedcontrol)
 - **Reading values**: [`getValue`](#getvaluecontrol), [`useValue`](#usevaluecontrol), [`toPromise`](#topromisecontrol), [`useSuspenseValue`](#usesuspensevaluecontrol-safe), [`useSuspenseValues`](#usesuspensevaluescontrols-safe), [`useInfiniteValues`](#useinfinitevaluescontrols)
-- **Writing values**: [`setValue`](#setvaluecontrol-value-scheduler), [`replaceValue`](#replacevaluecontrol-value-scheduler), [`invalidate`](#invalidatecontrol-silentorscheduler)
+- **Writing values**: [`setValue`](#setvaluecontrol-value-scheduler), [`invalidate`](#invalidatecontrol-silentorscheduler)
 - **Subscribing**: [`watchValue`](#watchvaluecontrol-callback-immediate), [`watchValues`](#watchvaluescontrols-callback-immediate), [`load`](#loadcontrol), [`watchSlowLoading`](#watchslowloadingcontrol-callback)
 - **Async status**: [`selectLoading`](#selectloadingcontrol), [`selectReady`](#selectreadycontrol), [`selectError`](#selecterrorcontrol)
 - **Components**: [`ControlConsumer`](#controlconsumer), [`ControlsConsumer`](#controlsconsumer), [`CombinedControlsConsumer`](#combinedcontrolsconsumer), [`InfiniteControlsConsumer`](#infinitecontrolsconsumer), [`Suspense`](#suspense), [`SuspenseControlConsumer`](#suspensecontrolconsumer), [`SuspenseControlsConsumer`](#suspensecontrolsconsumer), [`wrapErrorBoundary`](#wraperrorboundaryboundarycomponent)
@@ -127,7 +127,7 @@ See the [Router](#router) section for paths, navigation, params, anchors and mor
 - **Persistence**: [`getPersistStorage`](#getpersiststorageoptions), [`safeLocalStorage`](#safelocalstorage), [`safeSessionStorage`](#safesessionstorage)
 - **DOM**: [`mediaQuery`](#mediaqueryquery), [`$online`](#online), [`$pageVisible`](#pagevisible), [`$windowSize`](#windowsize)
 - **Schedulers**: [`batch`](#batchcallback-scheduler), [`createManualScheduler`](#createmanualscheduler), [`createThrottleScheduler`](#createthrottleschedulerms), [`createDebounceScheduler`](#createdebounceschedulerms)
-- **Router**: [`createRouter`](#createrouterpaths), [`createPath`](#createpathpath), [`createAsyncPath`](#createasyncpathsource), [`param`](#paramoptions), [`query`](#queryoptions), [`oneOf`](#oneofoptions), [`arrayParam`](#arrayparamoptions), [`createRouterView`](#createrouterviewroutes), [`Link` / `useLink`](#link--uselink), [`navigate`](#navigateto-replace-ignoreblock-scrolltotop-scrollrestoration), [params as controls](#route-params-are-controls), [anchors](#anchors), [`registerAnchorOffset`](#registeranchoroffsetroute), [`selectRegisteredAnchors`](#selectregisteredanchorsroute), [`trackScroll`](#trackscrollanchor), [`navigationBlocker`](#blocking-navigation)
+- **Router**: [`createRouter`](#createrouterpaths), [`createPath`](#createpathpath), [`createAsyncPath`](#createasyncpathsource), [`param`](#paramoptions), [`query`](#queryoptions), [`oneOf`](#oneofoptions), [`arrayParam`](#arrayparamoptions), [`createRouterView`](#createrouterviewroutes), [`Link` / `useLink`](#link--uselink), [`navigate`](#navigateto-replace-ignoreblock-scrolltotop-scrollrestoration), [params as controls](#route-params-are-controls), [`replaceValue`](#replacevaluecontrol-value-scheduler), [anchors](#anchors), [`registerAnchorOffset`](#registeranchoroffsetroute), [`selectRegisteredAnchors`](#selectregisteredanchorsroute), [`trackScroll`](#trackscrollanchor), [`navigationBlocker`](#blocking-navigation)
 
 ---
 
@@ -370,14 +370,6 @@ setValue($count, 5);
 setValue($count, (prev) => prev + 1);
 setValue($user.profile.name, 'Jane');           // nested
 setValue($filter, value, requestAnimationFrame); // commit before next paint (any scheduler works)
-```
-
-### `replaceValue(control, value, scheduler?)`
-
-Exactly `setValue`, but the write is marked as a *replacement* - for router controls it replaces the history entry instead of pushing one; for ordinary controls it's identical to `setValue`.
-
-```ts
-replaceValue(selectParams(router.routes.catalog), { sort: 'price' }); // no new history entry
 ```
 
 ### `invalidate(control, silentOrScheduler?)`
@@ -1150,6 +1142,14 @@ setValue($catalog, { sort: 'price', page: 2 });    // whole object, pushes an en
 ```
 
 [`setValue`](#setvaluecontrol-value-scheduler)/[`replaceValue`](#replacevaluecontrol-value-scheduler) throw if the route isn't matched. If a `navigate()` also happens in the same tick, the write is dropped instead of applying - the navigation wins.
+
+### `replaceValue(control, value, scheduler?)`
+
+Writes to a router params control like `setValue`, but replaces the current history entry instead of pushing a new one (only if every write in the flush was a replacement). Router-only - on any non-router control it does nothing special, identical to `setValue`, so use `setValue` there.
+
+```ts
+replaceValue(selectParams(router.routes.catalog), { sort: 'price' }); // no new history entry
+```
 
 ### Anchors
 
