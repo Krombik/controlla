@@ -1,5 +1,5 @@
 import type { DerivedControlInternals } from '#internal/derivedControlUtils';
-import { INTERNALS } from '#internal/constants';
+import { EMPTY_ARR, INTERNALS } from '#internal/constants';
 import { useEffect, useRef } from 'react';
 import removeFromArray from '#internal/removeFromArray';
 
@@ -10,7 +10,7 @@ const makeUseDerivedControl =
       [INTERNALS]: DerivedControlInternals;
     }>(null);
 
-    if (itemRef.current == null) {
+    if (itemRef.current === null) {
       itemRef.current = makeDerivedControl(params);
     }
 
@@ -28,7 +28,7 @@ const makeUseDerivedControl =
           removeFromArray(notifiers._attachedTo, notifiers);
         }
       },
-      []
+      EMPTY_ARR
     );
 
     return itemRef.current;

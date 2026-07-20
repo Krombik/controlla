@@ -1,6 +1,6 @@
 import useForceRerender from '#internal/useForceRerender';
 import type { ControlInternalsChild } from '#internal/types';
-import { INTERNALS } from '#internal/constants';
+import { EMPTY_ARR, INTERNALS } from '#internal/constants';
 import type { ReadonlyAsyncControl, ReadonlyControl } from '#types';
 import noop from '#internal/noop';
 import { useLayoutEffect, useRef } from 'react';
@@ -110,7 +110,7 @@ const useInfiniteValues = <C extends ReadonlyControl>(
         item._root._detach(item, forceRerender, true);
       }
     };
-  }, []);
+  }, EMPTY_ARR);
 
   for (let i = 0; i < controlsCount; i++) {
     const item = controls[i][INTERNALS];

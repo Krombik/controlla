@@ -1,6 +1,7 @@
 import { type FC, useEffect } from 'react';
 import navigate from '#router/navigate';
 import type { NavigationTarget } from '#router/types';
+import { EMPTY_ARR } from '#internal/constants';
 
 export type RedirectProps = {
   /** The navigation target. */
@@ -16,7 +17,7 @@ export type RedirectProps = {
 const Redirect: FC<RedirectProps> = (props) => {
   useEffect(() => {
     navigate(props.to, !props.push, true);
-  }, []);
+  }, EMPTY_ARR);
 
   return null;
 };

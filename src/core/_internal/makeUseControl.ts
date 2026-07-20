@@ -1,4 +1,4 @@
-import { INTERNALS } from '#internal/constants';
+import { EMPTY_ARR, INTERNALS } from '#internal/constants';
 import type { SyncExternalStorage } from '#types';
 import { useEffect, useRef } from 'react';
 import type { ControlInternals } from '#internal/types';
@@ -26,7 +26,7 @@ const makeUseControl =
           internals._unobserve();
         }
       },
-      []
+      EMPTY_ARR
     );
 
     return controlRef.current;
