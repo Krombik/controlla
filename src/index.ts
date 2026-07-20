@@ -4,6 +4,7 @@ export type * from './persist/types';
 
 export { default as ControlConsumer } from './core/ControlConsumer';
 export { default as ControlsConsumer } from './core/ControlsConsumer';
+export { default as CombinedControlsConsumer } from './core/CombinedControlsConsumer';
 export { default as InfiniteControlsConsumer } from './core/InfiniteControlsConsumer';
 export { default as Suspense } from './core/Suspense';
 export { default as SuspenseControlConsumer } from './core/SuspenseControlConsumer';

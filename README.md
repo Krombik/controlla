@@ -120,7 +120,7 @@ See the [Router](#router) section for paths, navigation, params, anchors and mor
 - **Writing values**: [`setValue`](#setvaluecontrol-value-scheduler), [`replaceValue`](#replacevaluecontrol-value-scheduler), [`invalidate`](#invalidatecontrol-silentorscheduler)
 - **Subscribing**: [`watchValue`](#watchvaluecontrol-callback-immediate), [`watchValues`](#watchvaluescontrols-callback-immediate), [`load`](#loadcontrol), [`watchSlowLoading`](#watchslowloadingcontrol-callback)
 - **Async status**: [`selectLoading`](#selectloadingcontrol), [`selectReady`](#selectreadycontrol), [`selectError`](#selecterrorcontrol)
-- **Components**: [`ControlConsumer`](#controlconsumer), [`ControlsConsumer`](#controlsconsumer), [`InfiniteControlsConsumer`](#infinitecontrolsconsumer), [`Suspense`](#suspense), [`SuspenseControlConsumer`](#suspensecontrolconsumer), [`SuspenseControlsConsumer`](#suspensecontrolsconsumer), [`wrapErrorBoundary`](#wraperrorboundaryboundarycomponent)
+- **Components**: [`ControlConsumer`](#controlconsumer), [`ControlsConsumer`](#controlsconsumer), [`CombinedControlsConsumer`](#combinedcontrolsconsumer), [`InfiniteControlsConsumer`](#infinitecontrolsconsumer), [`Suspense`](#suspense), [`SuspenseControlConsumer`](#suspensecontrolconsumer), [`SuspenseControlsConsumer`](#suspensecontrolsconsumer), [`wrapErrorBoundary`](#wraperrorboundaryboundarycomponent)
 - **Utils**: [`$never`](#never), [`isAggregateControlError`](#isaggregatecontrolerrorerr)
 - **Registry**: [`createRegistry`](#createregistrycreate-initarg-options)
 - **Loaders**: [`requestLoader`](#requestloaderfetch-options-scheduler), [`pollLoader`](#pollloaderfetch-options-scheduler)
@@ -520,6 +520,25 @@ Multi-control `ControlConsumer`.
 <ControlsConsumer
   controls={[$user, $cart]}
   render={(user, cart) => <p>{user.name}: {cart.length} items</p>}
+/>
+```
+
+### `<CombinedControlsConsumer>`
+
+Combines multiple controls through a `combiner` and consumes the result — re-renders only when the **combined value** changes (unlike `ControlsConsumer`, which reruns on every source change). Component form of [`useDerivedControl`](#createderivedcontrol--usederivedcontrol) + `ControlConsumer`. Same three forms as `ControlConsumer`. Sources captured once — control identities must stay stable.
+
+| Prop | Type | Description |
+|---|---|---|
+| `controls` | `ReadonlyControl[]` | Combined positionally; async controls give `value \| undefined`. |
+| `combiner` | `(...values) => T` | Derives the value; reruns per source change, deduped on result. |
+| `render?` | `(value: T) => ReactNode` | Render-prop form. |
+| `children?` | `ReactNode` | Truthy-gate form (shown while combined value is truthy). |
+
+```jsx
+<CombinedControlsConsumer
+  controls={[$firstName, $lastName]}
+  combiner={(first, last) => `${first} ${last}`}
+  render={(fullName) => <h1>{fullName}</h1>}
 />
 ```
 
