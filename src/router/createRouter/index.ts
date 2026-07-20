@@ -43,9 +43,9 @@ import {
   clearWrites,
   getRouterPatch,
   paramsHandler,
+  replacing,
   urlFinalizer,
 } from '#router/internal/state';
-import replacing from '#internal/replacing';
 import queueRouterPatch from '#router/internal/queueRouterPatch';
 import removeFromArray from '#internal/removeFromArray';
 import scheduleSet from '#internal/scheduleSet';
