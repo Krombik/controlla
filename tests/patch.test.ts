@@ -118,9 +118,17 @@ watchValue($t.a.b, (v: any, p: any) => {
 });
 setValue($t, { a: { b: 5 } }); // primitive -> object: subtree appears
 await tick();
-assert.deepEqual(tlog.at(-1), [5, undefined], 'nested listener on subtree appear');
+assert.deepEqual(
+  tlog.at(-1),
+  [5, undefined],
+  'nested listener on subtree appear'
+);
 setValue($t, null); // object -> primitive: subtree vanishes
 await tick();
-assert.deepEqual(tlog.at(-1), [undefined, 5], 'nested listener on subtree vanish');
+assert.deepEqual(
+  tlog.at(-1),
+  [undefined, 5],
+  'nested listener on subtree vanish'
+);
 
 console.log('patch-smoke.test.ts: all assertions passed');
