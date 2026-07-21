@@ -121,6 +121,24 @@ setValue($src, 21);
 await tick();
 assert.equal(getValue($doubled), 42, 'async derived');
 
+// $never's status controls are valid derived-control sources (attach-safe)
+const { default: $never } = await import('../build/core/never/index.js');
+const $neverDerived = createDerivedControl(
+  selectLoading($never),
+  $never,
+  (loading: boolean, value: unknown) => [loading, value]
+);
+assert.deepEqual(getValue($neverDerived), [true, undefined], '$never as derived source');
+
+const { default: watchSlowLoading } = await import(
+  '../build/core/watchSlowLoading/index.js'
+);
+const unwatchNever = watchSlowLoading($never, () => {
+  throw new Error('$never slow-loading fired');
+});
+assert.equal(typeof unwatchNever, 'function', 'watchSlowLoading($never) is a no-op');
+unwatchNever();
+
 release();
 rel2();
 console.log('core-smoke.test.ts: all assertions passed');
