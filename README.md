@@ -118,7 +118,7 @@ See the [Router](#router) section for paths, navigation, params, anchors and mor
 - **Controls**: [`createControl`](#createcontrol--usecontrol), [`createPrimitiveControl`](#createprimitivecontrol--useprimitivecontrol), [`createAsyncControl`](#createasynccontrol--useasynccontrol), [`createDerivedControl`](#createderivedcontrol--usederivedcontrol), [`createAsyncDerivedControl`](#createasyncderivedcontrol--useasyncderivedcontrol)
 - **Reading values**: [`getValue`](#getvaluecontrol), [`useValue`](#usevaluecontrol), [`toPromise`](#topromisecontrol), [`useSuspenseValue`](#usesuspensevaluecontrol-safe), [`useSuspenseValues`](#usesuspensevaluescontrols-safe), [`useInfiniteValues`](#useinfinitevaluescontrols)
 - **Writing values**: [`setValue`](#setvaluecontrol-value-scheduler), [`invalidate`](#invalidatecontrol-silentorscheduler)
-- **Subscribing**: [`watchValue`](#watchvaluecontrol-callback-immediate), [`watchValues`](#watchvaluescontrols-callback-immediate), [`load`](#loadcontrol), [`watchSlowLoading`](#watchslowloadingcontrol-callback)
+- **Subscribing**: [`watchValue`](#watchvaluecontrol-callback-immediate), [`watchValues`](#watchvaluescontrols-callback-immediate), [`retain`](#retaincontrol), [`watchSlowLoading`](#watchslowloadingcontrol-callback)
 - **Async status**: [`selectLoading`](#selectloadingcontrol), [`selectReady`](#selectreadycontrol), [`selectError`](#selecterrorcontrol)
 - **Components**: [`ControlConsumer`](#controlconsumer), [`ControlsConsumer`](#controlsconsumer), [`CombinedControlsConsumer`](#combinedcontrolsconsumer), [`InfiniteControlsConsumer`](#infinitecontrolsconsumer), [`Suspense`](#suspense), [`SuspenseControlConsumer`](#suspensecontrolconsumer), [`SuspenseControlsConsumer`](#suspensecontrolsconsumer), [`wrapErrorBoundary`](#wraperrorboundaryboundarycomponent)
 - **Utils**: [`$never`](#never), [`isAggregateControlError`](#isaggregatecontrolerrorerr)
@@ -303,7 +303,7 @@ const name = useValue($name);
 
 ### `toPromise(control)`
 
-A promise that **resolves** with an async control's value once ready, or **rejects** with its error. Doesn't start loading (the control must be in use or loaded via [`load`](#loadcontrol)).
+A promise that **resolves** with an async control's value once ready, or **rejects** with its error. Doesn't start loading (the control must be in use or held via [`retain`](#retaincontrol)).
 
 | Parameter | Type | Description |
 |---|---|---|
@@ -423,16 +423,18 @@ const unwatch = watchValues([$query, $page], ([query, page]) => {
 });
 ```
 
-### `load(control)`
+### `retain(control)`
 
-Marks the control **in use** → starts its loading (and that of its loadable sources) **without subscribing**: e.g. prefetching. Returns a release function; loading stops when no other usage remains. Safe to call more than once.
+Keeps the control **in use without reading its value** → if it hasn't loaded yet, starts its load; if it's already loaded, nothing reloads — but the hold keeps it in use, so an `invalidate` while held loads it again and any polling/revalidation keeps running. Use it to prefetch data before it's shown, or keep it updating in the background. For derived/bound controls it keeps their loadable sources in use. Returns a `release` function; once released and nothing else is using the control, it stops loading (any polling halts). Calling release more than once does nothing.
 
 | Parameter | Type | Description |
 |---|---|---|
-| `control` | `ReadonlyControl` | The control to prefetch. |
+| `control` | `ReadonlyControl` | The control to keep loading. |
 
 ```ts
-const release = load($products);
+const release = retain($products); // prefetch / keep warm
+// ...later
+release();
 ```
 
 ### `watchSlowLoading(control, callback)`
