@@ -26,7 +26,7 @@ import makePrimitiveInternals from '#internal/makePrimitiveInternals';
 import append from '#internal/append';
 
 import NOT_FOUND from '#router/NOT_FOUND';
-import { INTERNALS, EMPTY_ARR } from '#internal/constants';
+import { INTERNALS, EMPTY_ARR, PASSIVE } from '#internal/constants';
 import { getLane, getSchedulerLane, scheduleFlush } from '#internal/flushQueue';
 import addToQueue from '#internal/addToQueue';
 import type { AsyncControlScope, ControlScope } from '#types';
@@ -106,7 +106,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
     if (devPopStateListener) {
       window.removeEventListener('popstate', devPopStateListener);
 
-      window.removeEventListener('pagehide', devPageHideListener!);
+      window.removeEventListener('beforeunload', devPageHideListener!);
     }
 
     clearWrites();
@@ -1020,32 +1020,32 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
     const y = savedScroll[1];
 
-    let appliedX: number;
-
-    let appliedY: number;
-
-    const restore = () => {
+    if (document.documentElement.scrollHeight - window.innerHeight >= y) {
       window.scroll(x, y);
+    } else if (typeof ResizeObserver != 'undefined') {
+      const stop = () => {
+        clearTimeout(timer);
 
-      appliedX = window.scrollX;
+        observer.disconnect();
 
-      appliedY = window.scrollY;
+        window.removeEventListener('wheel', stop);
+        window.removeEventListener('touchmove', stop);
+        window.removeEventListener('keydown', stop);
+      };
 
-      return appliedX == x && appliedY == y;
-    };
+      window.addEventListener('wheel', stop, PASSIVE);
+      window.addEventListener('touchmove', stop, PASSIVE);
+      window.addEventListener('keydown', stop, PASSIVE);
 
-    if (!restore() && typeof ResizeObserver != 'undefined') {
       const observer = new ResizeObserver(() => {
-        if (
-          window.scrollX != appliedX ||
-          window.scrollY != appliedY ||
-          restore()
-        ) {
-          observer.disconnect();
+        if (document.documentElement.scrollHeight - window.innerHeight >= y) {
+          window.scroll(x, y);
         }
       });
 
-      observer.observe(document.documentElement);
+      const timer = setTimeout(stop, 3000);
+
+      observer.observe(document.body);
     }
   }
 
@@ -1055,7 +1055,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
   window.addEventListener('popstate', popStateListener);
 
-  window.addEventListener('pagehide', pageHideListener);
+  window.addEventListener('beforeunload', pageHideListener);
 
   if (process.env.NODE_ENV !== 'production') {
     devPopStateListener = popStateListener;
