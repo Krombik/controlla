@@ -763,7 +763,11 @@ roCallback!();
 assert.equal(windowMock.scrollY, 321, 'refresh: restored after growth');
 assert.equal(roCallback, undefined, 'refresh: observer disconnected');
 
-// ---------- deferred params clear on unmatch ----------
+// ---------- params clearing is deferred to createRouterView ----------
+// The router no longer clears params on unmatch itself — it queues the route
+// and `createRouterView` drains it after the page swap commits (so a leaving
+// page's controls have detached before the value goes). Headless (no view),
+// the router alone therefore keeps the last value; a re-match overwrites it.
 {
   const dRouter = createRouter(paths);
 
@@ -772,35 +776,24 @@ assert.equal(roCallback, undefined, 'refresh: observer disconnected');
   assert.deepEqual(
     getValue(selectParams(dRouter.routes.user)),
     { id: 42 },
-    'deferred: matched params'
+    'unmatch: matched params'
   );
 
-  // leave and stay away: params linger for one macrotask, then clear
   navigate(dRouter.navigation.home());
+  await tick();
   await tick();
   assert.deepEqual(
     getValue(selectParams(dRouter.routes.user)),
     { id: 42 },
-    'deferred: params retained right after unmatch'
-  );
-  await tick();
-  assert.equal(
-    getValue(selectParams(dRouter.routes.user)),
-    undefined,
-    'deferred: params cleared once it stays unmatched'
+    'unmatch: router alone keeps params until the view flushes'
   );
 
-  // re-match before the deferred clear cancels it (no clobber)
-  navigate(dRouter.navigation.user({ id: 7 }).profile());
-  await tick();
-  navigate(dRouter.navigation.home());
-  navigate(dRouter.navigation.user({ id: 9 }).profile()); // re-match same tick
-  await tick();
+  navigate(dRouter.navigation.user({ id: 9 }).profile());
   await tick();
   assert.deepEqual(
     getValue(selectParams(dRouter.routes.user)),
     { id: 9 },
-    'deferred: re-match cancels the pending clear'
+    'unmatch: re-match overwrites'
   );
 }
 

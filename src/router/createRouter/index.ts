@@ -33,18 +33,17 @@ import type { AsyncControlScope, ControlScope } from '#types';
 import type {
   AsyncControlInternals,
   ControlInternals,
-  Lane,
   Mutable,
 } from '#internal/types';
 import type { NavigationTarget } from '#router/types';
 import createManualScheduler from '#scheduler/createManualScheduler';
-import syncScheduler from '#scheduler/syncScheduler';
 import parseSearch from '#router/internal/parseSearch';
 import addToLevel from '#internal/addToLevel';
 import {
   clearWrites,
   getRouterPatch,
   paramsHandler,
+  pendingParamClears,
   replacing,
   urlFinalizer,
 } from '#router/internal/state';
@@ -289,8 +288,6 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
         }
       }
 
-      const paramsToClear: RouteData[] = [];
-
       for (let i = 0; i < count; i++) {
         const nextRoute = nextRoutes[i];
 
@@ -306,7 +303,8 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
               currRoute._isMatched._enqueueSet(false, lane);
 
               if (currRoute._params) {
-                paramsToClear.push(currRoute);
+                // cleared by createRouterView once the page unmounts, not now
+                pendingParamClears.push(currRoute);
               }
             }
           }
@@ -321,30 +319,6 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
             (nextRoute._params as RouterControlRoot)._set!(item._params, lane);
           }
         }
-      }
-
-      if (paramsToClear.length) {
-        // clear params in a macrotask so unmounting subscribers detach first (a
-        // synchronous undefined would recompute their derived controls with a
-        // gone value); one deferred pass, skipping any route that re-matched
-        setTimeout(() => {
-          let clearLane: Lane | undefined;
-
-          for (let i = 0; i < paramsToClear.length; i++) {
-            const route = paramsToClear[i];
-
-            if (!route._isMatched._value) {
-              (route._params as RouterControlRoot)._set!(
-                undefined,
-                (clearLane ||= getSchedulerLane(syncScheduler))
-              );
-            }
-          }
-
-          if (clearLane) {
-            scheduleFlush(clearLane);
-          }
-        });
       }
 
       if (isNewPage) {

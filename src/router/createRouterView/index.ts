@@ -2,8 +2,10 @@ import {
   type ComponentType,
   type PropsWithChildren,
   type ReactElement,
+  useEffect,
   useSyncExternalStore,
 } from 'react';
+import { clearParamsOnUnmount } from '#router/internal/state';
 
 import type { PageRoute } from '#router/internal/types';
 import noop from '#internal/noop';
@@ -89,12 +91,20 @@ const handleRouter = (
     } else {
       const count = components.length;
 
+      const Page = arg2 as ComponentType;
+
+      const PageSlot = () => {
+        useEffect(clearParamsOnUnmount, EMPTY_ARR);
+
+        return jsx(Page, EMPTY_OBJECT);
+      };
+
       (arg1 as PageRoute<true>)._register(() => {
         for (let i = 0; i < count; i++) {
           setSlot(slots[i], components[i]);
         }
 
-        setSlot(slots[count], arg2);
+        setSlot(slots[count], PageSlot);
       });
     }
   }
