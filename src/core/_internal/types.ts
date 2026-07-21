@@ -1,9 +1,7 @@
-import type { PrimitiveOrNested } from 'keyweaver';
 import type { INTERNALS } from '#internal/constants';
 import type { ComponentType, ContextType, JSX, PropsWithChildren } from 'react';
 import type {
   AsyncControlOptions,
-  Control,
   ReadonlyAsyncControl,
   Scheduler,
 } from '#types';
@@ -88,7 +86,7 @@ interface Settable {
   _commitSet(value: any, lane: Lane): void;
 }
 
-export type WithExternalStorage = {
+type WithExternalStorage = {
   _setExternal(value: any): void;
   _unobserve?: (() => void) | undefined;
 };
@@ -173,12 +171,6 @@ export type AsyncControlInternalsChild =
 export type ChildControlNode<T extends ControlInternals> =
   NonNullable<T['_children']> extends Map<string, infer K> ? K : never;
 
-declare const SCOPE_MARKER: unique symbol;
-
-export type ScopeMarker<T = any> = {
-  [SCOPE_MARKER]: T;
-};
-
 type StringToNumber<T> = T extends `${infer K extends number}` ? K : never;
 
 export type ToIndex<T> = [Exclude<T, keyof []>] extends [never]
@@ -200,14 +192,6 @@ export type ExtractErrors<T extends Array<ReadonlyAsyncControl | Falsy>> =
       ? K | undefined
       : undefined;
   }>;
-
-export type StorageItem = Control | ScopeMarker;
-
-declare const CONTROL_STORAGE_IDENTIFIER: unique symbol;
-
-export type StorageMarker<Keys extends PrimitiveOrNested[], Item> = {
-  [CONTROL_STORAGE_IDENTIFIER]: [Keys, Item];
-};
 
 export type PartialTuple<T extends unknown[]> = T extends [
   ...infer Rest,

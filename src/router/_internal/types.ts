@@ -31,8 +31,8 @@ export type HandleUnknown<T, Fallback> = 0 extends 1 & T
 
 type UnionToIntersection<U> = (
   U extends any ? (arg: U) => void : never
-) extends (arg: infer I) => void
-  ? I
+) extends (arg: infer Intersection) => void
+  ? Intersection
   : never;
 
 /**
@@ -60,13 +60,13 @@ export type Route<
     ? {}
     : {
         readonly [key in keyof MergedPaths]: MergedPaths[key] extends Path<
-          infer C,
-          infer P,
+          infer Children,
+          infer Params,
           any,
-          infer A,
-          infer H
+          infer Async,
+          infer Anchor
         >
-          ? Route<C, P, A, H>
+          ? Route<Children, Params, Async, Anchor>
           : never;
       }) &
   ReadonlyControl<boolean>;
@@ -98,13 +98,13 @@ export type Router<
    */
   readonly routes: {
     readonly [key in keyof MergedPaths]: MergedPaths[key] extends Path<
-      infer C,
-      infer P,
+      infer Children,
+      infer Params,
       any,
-      infer A,
-      infer H
+      infer Async,
+      infer Anchor
     >
-      ? Route<C, P, A, H>
+      ? Route<Children, Params, Async, Anchor>
       : never;
   };
   /**
@@ -114,13 +114,13 @@ export type Router<
    */
   readonly navigation: {
     [key in keyof MergedPaths]: MergedPaths[key] extends Path<
-      infer C,
-      infer P,
-      infer O,
-      infer A,
-      infer H
+      infer Children,
+      infer Params,
+      infer Optional,
+      infer Async,
+      infer Anchor
     >
-      ? Navigation<C, P, O, A, H>
+      ? Navigation<Children, Params, Optional, Async, Anchor>
       : never;
   };
   /** The last history action: `push`, `replace` or `pop` (with its delta). */
@@ -167,13 +167,13 @@ export type Navigation<
     ? {}
     : {
         [key in keyof MergedPaths]: MergedPaths[key] extends Path<
-          infer C,
-          infer P,
-          infer O,
-          infer A,
-          infer H
+          infer Children,
+          infer Params,
+          infer Optional,
+          infer Async,
+          infer Anchor
         >
-          ? Navigation<C, P, O, A, H>
+          ? Navigation<Children, Params, Optional, Async, Anchor>
           : never;
       },
 > = ([Paths] extends [never]
@@ -258,7 +258,7 @@ export type RouterWrite = {
 };
 
 /** @internal */
-export type RouterNavigation = {
+type RouterNavigation = {
   readonly _methods: RouteMethods;
   _isNewPage: boolean;
   readonly _isHistoryEvent: boolean;
@@ -370,15 +370,15 @@ export type CreatePath<Source = never> = {
     }
   ): HandlePath<
     {
-      [key in keyof P]: P[key] extends PathParam<infer K, Source>
-        ? K
-        : P[key] extends QueryParam<infer K, Source>
-          ? K
+      [key in keyof P]: P[key] extends PathParam<infer Fields, Source>
+        ? Fields
+        : P[key] extends QueryParam<infer Fields, Source>
+          ? Fields
           : never;
     }[number],
     Source,
     never,
-    P extends [...unknown[], AnchorParam<infer A>] ? A : never
+    P extends [...unknown[], AnchorParam<infer Anchor>] ? Anchor : never
   >;
 
   <P extends [...path: AnyPathSegment<Source>[], anchor: AnchorParam<any>]>(
@@ -387,11 +387,13 @@ export type CreatePath<Source = never> = {
     }
   ): HandlePath<
     {
-      [key in keyof P]: P[key] extends PathParam<infer K, Source> ? K : never;
+      [key in keyof P]: P[key] extends PathParam<infer Fields, Source>
+        ? Fields
+        : never;
     }[number],
     Source,
     never,
-    P extends [...unknown[], AnchorParam<infer A>] ? A : never
+    P extends [...unknown[], AnchorParam<infer Anchor>] ? Anchor : never
   >;
 
   <
@@ -405,10 +407,10 @@ export type CreatePath<Source = never> = {
     }
   ): HandlePath<
     {
-      [key in keyof P]: P[key] extends PathParam<infer K, Source>
-        ? K
-        : P[key] extends QueryParam<infer K, Source>
-          ? K
+      [key in keyof P]: P[key] extends PathParam<infer Fields, Source>
+        ? Fields
+        : P[key] extends QueryParam<infer Fields, Source>
+          ? Fields
           : never;
     }[number],
     Source
@@ -426,10 +428,10 @@ export type CreatePath<Source = never> = {
     }
   ): HandlePath<
     {
-      [key in keyof P]: P[key] extends PathParam<infer K, Source>
-        ? K
-        : P[key] extends QueryParam<infer K, Source>
-          ? K
+      [key in keyof P]: P[key] extends PathParam<infer Fields, Source>
+        ? Fields
+        : P[key] extends QueryParam<infer Fields, Source>
+          ? Fields
           : never;
     }[number],
     Source,
@@ -442,7 +444,9 @@ export type CreatePath<Source = never> = {
     }
   ): HandlePath<
     {
-      [key in keyof P]: P[key] extends PathParam<infer K, Source> ? K : never;
+      [key in keyof P]: P[key] extends PathParam<infer Fields, Source>
+        ? Fields
+        : never;
     }[number],
     Source
   >;
@@ -458,7 +462,9 @@ export type CreatePath<Source = never> = {
     }
   ): HandlePath<
     {
-      [key in keyof P]: P[key] extends PathParam<infer K, Source> ? K : never;
+      [key in keyof P]: P[key] extends PathParam<infer Fields, Source>
+        ? Fields
+        : never;
     }[number],
     Source,
     FindChildren<P>

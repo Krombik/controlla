@@ -5,9 +5,6 @@ import type {
   ControlInternalsChild,
   Nil,
   PartialTuple,
-  ScopeMarker,
-  StorageItem as RegistryItem,
-  StorageMarker as RegistryMarker,
   ToIndex,
   ControlInternals,
   AsyncControlInternals,
@@ -65,12 +62,12 @@ type ProcessScope<
   S extends ReadonlyControl,
   M = Exclude<Value, Nil>,
   N = Extract<Value, Nil>,
-> = (S extends AsyncControl<any, infer E>
-  ? AsyncControl<Value, E>
+> = (S extends AsyncControl<any, infer Error>
+  ? AsyncControl<Value, Error>
   : S extends Control
     ? Control<Value>
-    : S extends ReadonlyAsyncControl<any, infer E>
-      ? ReadonlyAsyncControl<Value, E>
+    : S extends ReadonlyAsyncControl<any, infer Error>
+      ? ReadonlyAsyncControl<Value, Error>
       : ReadonlyControl<Value>) &
   (0 extends 1 & Value
     ? { readonly [key in string | number]: ScopeOf<any, S> }
@@ -82,18 +79,16 @@ type ProcessScope<
           }
         : {
             readonly [key in keyof M]-?: ScopeOf<M[key] | N, S>;
-          }) &
-  ScopeMarker<Value>;
+          });
 
-// nested fields recurse as the public scope alias (not raw ProcessScope) so
-// editors show e.g. `ControlScope<number>` on hover instead of the unfolded form
+// the named alias, so hovers read `ControlScope<…>` not the unfolded form
 type ScopeOf<Value, S extends ReadonlyControl> =
-  S extends AsyncControl<any, infer E>
-    ? AsyncControlScope<Value, E>
+  S extends AsyncControl<any, infer Error>
+    ? AsyncControlScope<Value, Error>
     : S extends Control
       ? ControlScope<Value>
-      : S extends ReadonlyAsyncControl<any, infer E>
-        ? ReadonlyAsyncControlScope<Value, E>
+      : S extends ReadonlyAsyncControl<any, infer Error>
+        ? ReadonlyAsyncControlScope<Value, Error>
         : ReadonlyControlScope<Value>;
 
 /** A readonly {@link AsyncControlScope}. */
@@ -183,31 +178,34 @@ type GetAggregateControlError<Errors, Error = never> = Errors extends any[]
   ? AggregateControlError<[...Errors, target: Error]>
   : never;
 
-type CombineErrors<T extends RegistryItem, Errors> =
-  T extends AsyncControlScope<infer V, infer E>
-    ? AsyncControlScope<V, GetAggregateControlError<Errors, E>>
-    : T extends ControlScope<infer V>
+type CombineErrors<T extends Control, Errors> =
+  T extends AsyncControlScope<infer Value, infer Error>
+    ? AsyncControlScope<Value, GetAggregateControlError<Errors, Error>>
+    : T extends ControlScope<infer Value>
       ? AsyncControlScope<
-          Exclude<V, undefined>,
+          Exclude<Value, undefined>,
           GetAggregateControlError<Errors>
         >
-      : T extends Control<infer V>
-        ? AsyncControl<Exclude<V, undefined>, GetAggregateControlError<Errors>>
+      : T extends Control<infer Value>
+        ? AsyncControl<
+            Exclude<Value, undefined>,
+            GetAggregateControlError<Errors>
+          >
         : never;
 
-type BoundControl<T extends RegistryItem, K extends any[]> = CombineErrors<
+type BoundControl<T extends Control, K extends any[]> = CombineErrors<
   T,
   {
-    [index in keyof K]: K[index] extends ReadonlyAsyncControl<any, infer E>
-      ? E
+    [index in keyof K]: K[index] extends ReadonlyAsyncControl<any, infer Error>
+      ? Error
       : never;
   }
 >;
 
 export type Registry<
-  T extends RegistryItem,
+  T extends Control,
   Keys extends Exclude<PrimitiveOrNested, undefined>[],
-> = RegistryMarker<Keys, T> & {
+> = {
   /** Returns the item for the given keys, creating and caching it on first access. */
   get(...keys: Keys): T;
   /**
@@ -224,13 +222,13 @@ export type Registry<
   ): [Extract<K[number], ReadonlyAsyncControl>] extends [never]
     ? T extends AsyncControl
       ? BoundControl<T, K>
-      : Extract<K[number], ReadonlyControl> extends ReadonlyControl<infer V>
-        ? [Extract<V, undefined>] extends [never]
+      : Extract<K[number], ReadonlyControl> extends ReadonlyControl<infer Value>
+        ? [Extract<Value, undefined>] extends [never]
           ? T
-          : T extends ControlScope<infer V>
-            ? ControlScope<V | undefined>
-            : T extends Control<infer V>
-              ? Control<V | undefined>
+          : T extends ControlScope<infer Value>
+            ? ControlScope<Value | undefined>
+            : T extends Control<infer Value>
+              ? Control<Value | undefined>
               : never
         : never
     : BoundControl<T, K>;
@@ -266,11 +264,11 @@ export type Registry<
   /** @internal */
   readonly _suppressError: boolean;
 } & (T extends AsyncControl
-    ? {
-        /** Resets all items under the given keys or key prefix (every item when called with no keys), triggering reloads for those in use. */
-        invalidate(...keys: Keys | PartialTuple<Keys> | []): void;
-      }
-    : {});
+  ? {
+      /** Resets all items under the given keys or key prefix (every item when called with no keys), triggering reloads for those in use. */
+      invalidate(...keys: Keys | PartialTuple<Keys> | []): void;
+    }
+  : {});
 
 /** A per-control instance of a {@link SyncExternalStorage}. */
 export type ExternalStorageInstance<T = any> = {
