@@ -128,6 +128,7 @@ See the [Router](#router) section for paths, navigation, params, anchors and mor
 - **DOM**: [`mediaQuery`](#mediaqueryquery), [`$online`](#online), [`$pageVisible`](#pagevisible), [`$windowSize`](#windowsize)
 - **Schedulers**: [`batch`](#batchcallback-scheduler), [`createManualScheduler`](#createmanualscheduler), [`createThrottleScheduler`](#createthrottleschedulerms), [`createDebounceScheduler`](#createdebounceschedulerms)
 - **Router**: [`createRouter`](#createrouterpaths), [`createPath`](#createpathpath), [`createAsyncPath`](#createasyncpathsource), [`param`](#paramoptions), [`query`](#queryoptions), [`oneOf`](#oneofoptions), [`arrayParam`](#arrayparamoptions), [`createRouterView`](#createrouterviewroutes), [`Link` / `useLink`](#link--uselink), [`navigate`](#navigateto-replace-ignoreblock-scrolltotop-scrollrestoration), [params as controls](#route-params-are-controls), [`replaceValue`](#replacevaluecontrol-value-scheduler), [anchors](#anchors), [`registerAnchorOffset`](#registeranchoroffsetroute), [`selectRegisteredAnchors`](#selectregisteredanchorsroute), [`trackScroll`](#trackscrollanchor), [`navigationBlocker`](#blocking-navigation)
+- **[Troubleshooting](#troubleshooting)**: [param value type + `stringify`](#paramquery-value-type-breaks-when-stringify-is-present), [named import suggestions in VS Code](#get-named-controlla-import-suggestions-in-vs-code)
 
 ---
 
@@ -1250,3 +1251,52 @@ if (pending) {
 ```
 
 The router also handles what you'd expect from the platform - scroll position is restored on back/forward and across refreshes, and the anchor is scrolled on first load.
+
+## Troubleshooting
+
+### `param`/`query` value type breaks when `stringify` is present
+
+A param's value type is inferred from `parse`'s **return**. If you leave `parse`'s argument implicit *and* also pass a `stringify`, TypeScript has to resolve the value type to type both callbacks' implicit arguments before it has inferred it from the return - it falls back to `string`, which then clashes with the real return type:
+
+```ts
+param({
+  slug: {
+    parse(value) {                       // implicit arg + stringify below = broken
+      return { id: +value, text: value };
+    },
+    stringify(value) {
+      return value.text;                 // Error: 'text' does not exist on 'string'
+    },
+  },
+});
+```
+
+Annotate `parse`'s argument as `string` (it always is). Inference then flows from the return, and `stringify`'s argument is typed automatically - everything stays generic:
+
+```ts
+param({
+  slug: {
+    parse(value: string) {               // <-- the only change
+      return { id: +value, text: value };
+    },
+    stringify(value) {
+      return value.text;                 // value is { id: number; text: string }
+    },
+  },
+});
+```
+
+The same applies to `query` and `arrayParam`.
+
+### Get named `controlla` import suggestions in VS Code
+
+Every export is reachable two ways: the named barrel (`import { selectParams } from 'controlla'`) and a per-entry default (`import selectParams from 'controlla/router/selectParams'`). Both tree-shake (the package is `sideEffects: false`), but the per-entry default form makes VS Code guess an inconsistent local name for each auto-import. To get clean named-import suggestions, add to `.vscode/settings.json`:
+
+```jsonc
+{
+  "typescript.preferences.includePackageJsonAutoImports": "on",
+  "typescript.preferences.autoImportSpecifierExcludeRegexes": ["^controlla$"]
+}
+```
+
+(For JS files use the `javascript.preferences.*` equivalents.)
