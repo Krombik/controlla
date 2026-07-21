@@ -73,38 +73,53 @@ type ProcessScope<
       ? ReadonlyAsyncControl<Value, E>
       : ReadonlyControl<Value>) &
   (0 extends 1 & Value
-    ? { readonly [key in string | number]: ProcessScope<any, S, any, any> }
+    ? { readonly [key in string | number]: ScopeOf<any, S> }
     : M extends Primitive
       ? {}
       : M extends any[]
         ? {
-            readonly [key in ToIndex<keyof M>]-?: ProcessScope<M[key] | N, S>;
+            readonly [key in ToIndex<keyof M>]-?: ScopeOf<M[key] | N, S>;
           }
         : {
-            readonly [key in keyof M]-?: ProcessScope<M[key] | N, S>;
+            readonly [key in keyof M]-?: ScopeOf<M[key] | N, S>;
           }) &
   ScopeMarker<Value>;
 
-declare class Scope {}
+// nested fields recurse as the public scope alias (not raw ProcessScope) so
+// editors show e.g. `ControlScope<number>` on hover instead of the unfolded form
+type ScopeOf<Value, S extends ReadonlyControl> =
+  S extends AsyncControl<any, infer E>
+    ? AsyncControlScope<Value, E>
+    : S extends Control
+      ? ControlScope<Value>
+      : S extends ReadonlyAsyncControl<any, infer E>
+        ? ReadonlyAsyncControlScope<Value, E>
+        : ReadonlyControlScope<Value>;
 
 /** A readonly {@link AsyncControlScope}. */
-export type ReadonlyAsyncControlScope<Value = any, Error = any> = Scope &
-  ProcessScope<Value, ReadonlyAsyncControl<any, Error>>;
+export type ReadonlyAsyncControlScope<Value = any, Error = any> = ProcessScope<
+  Value,
+  ReadonlyAsyncControl<any, Error>
+>;
 
 /** A readonly {@link ControlScope}. */
-export type ReadonlyControlScope<Value = any> = Scope &
-  ProcessScope<Value, ReadonlyControl>;
+export type ReadonlyControlScope<Value = any> = ProcessScope<
+  Value,
+  ReadonlyControl
+>;
 
 /**
  * A control with granular reactivity over its value: nested fields are
  * reachable as controls of their own via property access (`$user.profile.name`),
  * and a change notifies only the touched paths — what `createControl` returns.
  */
-export type ControlScope<Value = any> = Scope & ProcessScope<Value, Control>;
+export type ControlScope<Value = any> = ProcessScope<Value, Control>;
 
 /** An async {@link ControlScope} — what `createAsyncControl` returns. */
-export type AsyncControlScope<Value = any, Error = any> = Scope &
-  ProcessScope<Value, AsyncControl<any, Error>>;
+export type AsyncControlScope<Value = any, Error = any> = ProcessScope<
+  Value,
+  AsyncControl<any, Error>
+>;
 
 /** The handle a {@link AsyncControlOptions.load loader} reports its results through. */
 export type LoadHandle<T = any, E = any> = {
