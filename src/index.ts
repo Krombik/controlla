@@ -19,7 +19,7 @@ export { default as createRegistry } from './core/createRegistry';
 export { default as getValue } from './core/getValue';
 export { default as invalidate } from './core/invalidate';
 export { default as isAggregateControlError } from './core/isAggregateControlError';
-export { default as load } from './core/load';
+export { default as retain } from './core/retain';
 export { default as $never } from './core/never';
 export { default as selectError } from './core/selectError';
 export { default as selectLoading } from './core/selectLoading';

@@ -22,7 +22,7 @@ const { default: selectLoading } =
   await import('../build/core/selectLoading/index.js');
 const { default: watchValue } =
   await import('../build/core/watchValue/index.js');
-import load from '../build/core/load/index.js';
+import retain from '../build/core/retain/index.js';
 
 // derived: recompute + local override semantics (_upToDate rename)
 const $a = createPrimitiveControl(1);
@@ -63,7 +63,7 @@ const $async = createAsyncControl({
     handle.setValue(fetchCount * 100);
   },
 });
-const release = load($async);
+const release = retain($async);
 await tick();
 assert.equal(getValue($async), 100, 'async loaded');
 invalidate($async); // loud: clears value, reloads
@@ -86,7 +86,7 @@ const $async2 = createAsyncControl({
     }).then((v) => handle.setValue(v));
   },
 });
-const rel2 = load($async2);
+const rel2 = retain($async2);
 resolveNext(1);
 await tick();
 assert.equal(getValue($async2), 1);
