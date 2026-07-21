@@ -128,15 +128,22 @@ const $neverDerived = createDerivedControl(
   $never,
   (loading: boolean, value: unknown) => [loading, value]
 );
-assert.deepEqual(getValue($neverDerived), [true, undefined], '$never as derived source');
-
-const { default: watchSlowLoading } = await import(
-  '../build/core/watchSlowLoading/index.js'
+assert.deepEqual(
+  getValue($neverDerived),
+  [true, undefined],
+  '$never as derived source'
 );
+
+const { default: watchSlowLoading } =
+  await import('../build/core/watchSlowLoading/index.js');
 const unwatchNever = watchSlowLoading($never, () => {
   throw new Error('$never slow-loading fired');
 });
-assert.equal(typeof unwatchNever, 'function', 'watchSlowLoading($never) is a no-op');
+assert.equal(
+  typeof unwatchNever,
+  'function',
+  'watchSlowLoading($never) is a no-op'
+);
 unwatchNever();
 
 release();
