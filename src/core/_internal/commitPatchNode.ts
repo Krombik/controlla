@@ -30,9 +30,9 @@ const notifyDescendants = (
   const queue = [children, source];
 
   do {
-    const children: Map<string, ControlInternalsChild> = queue.pop();
-
     const value = queue.pop();
+
+    const children: Map<string, ControlInternalsChild> = queue.pop();
 
     const it = children.keys();
 
