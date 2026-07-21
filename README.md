@@ -518,7 +518,7 @@ Multi-control `ControlConsumer`.
 
 ### `<CombinedControlsConsumer>`
 
-Combines multiple controls through a `combiner` and consumes the result — re-renders only when the **combined value** changes (unlike `ControlsConsumer`, which reruns on every source change). Component form of [`useDerivedControl`](#createderivedcontrol--usederivedcontrol) + `ControlConsumer`. Same three forms as `ControlConsumer`. Sources captured once — control identities must stay stable.
+Combines multiple controls through a `combiner` and consumes the result — re-renders only when the **combined value** changes (unlike `ControlsConsumer`, which reruns on every source change). Component form of [`useDerivedControl`](#createderivedcontrol--usederivedcontrol) + `ControlConsumer`. Same three forms as `ControlConsumer`. The derived control is rebuilt when a `controls` entry changes identity; `combiner` needn't be memoized.
 
 | Prop | Type | Description |
 |---|---|---|

@@ -1,11 +1,9 @@
 import ControlConsumer from '#core/ControlConsumer';
-import { EMPTY_ARR, INTERNALS } from '#internal/constants';
-import type { DerivedControlInternals } from '#internal/derivedControlUtils';
+import { useDerived } from '#internal/makeUseDerivedControl';
 import makeDerivedControl from '#internal/makeDerivedControl';
-import removeFromArray from '#internal/removeFromArray';
 import type { RenderablePrimitives } from '#internal/types';
-import type { Control, ReadonlyAsyncControl, ReadonlyControl } from '#types';
-import { useEffect, useRef, type ReactNode } from 'react';
+import type { ReadonlyAsyncControl, ReadonlyControl } from '#types';
+import type { ReactNode } from 'react';
 
 type CombineProps<Controls extends ReadonlyControl[], T> = {
   controls: Controls;
@@ -50,47 +48,11 @@ const CombinedControlsConsumer = ((
     | RenderProps<ReadonlyControl[], any>
     | TruthyGateProps<ReadonlyControl[]>
     | PrimitiveDisplayProps<ReadonlyControl[]>
-) => {
-  const $derivedControlRef = useRef<Control | null>(null);
-
-  if ($derivedControlRef.current === null) {
-    const controls = props.controls;
-
-    const l = controls.length;
-
-    const params = Array(l + 1);
-
-    for (let i = 0; i < l; i++) {
-      params[i] = controls[i];
-    }
-
-    params[l] = props.combiner;
-
-    $derivedControlRef.current = makeDerivedControl(params);
-  }
-
-  const $derivedControl = $derivedControlRef.current!;
-
-  useEffect(
-    () => () => {
-      const notifiers = ($derivedControl[INTERNALS] as DerivedControlInternals)
-        ._notifiers;
-
-      if (Array.isArray(notifiers)) {
-        for (let i = 0, l = notifiers.length; i < l; i++) {
-          const notifier = notifiers[i];
-
-          removeFromArray(notifier._attachedTo, notifier);
-        }
-      } else {
-        removeFromArray(notifiers._attachedTo, notifiers);
-      }
-    },
-    EMPTY_ARR
-  );
-
-  return <ControlConsumer control={$derivedControl} {...(props as any)} />;
-}) as {
+) =>
+  ControlConsumer({
+    ...(props as any),
+    control: useDerived(makeDerivedControl, props.controls, props.combiner),
+  })) as {
   /**
    * Combines the {@link CombineProps.controls controls}' values through
    * {@link CombineProps.combiner combiner} and renders the result via the
@@ -103,7 +65,8 @@ const CombinedControlsConsumer = ((
    * on that value, not on each source.
    *
    * Values are passed positionally; async controls provide `value | undefined`.
-   * Sources are captured once — control identities must stay stable.
+   * The derived control is rebuilt when a `controls` entry changes identity;
+   * `combiner` may be a fresh closure each render (no memoization needed).
    *
    * @example
    * ```jsx

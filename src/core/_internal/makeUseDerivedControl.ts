@@ -2,36 +2,81 @@ import type { DerivedControlInternals } from '#internal/derivedControlUtils';
 import { EMPTY_ARR, INTERNALS } from '#internal/constants';
 import { useEffect, useRef } from 'react';
 import removeFromArray from '#internal/removeFromArray';
+import type { Control } from '#types';
+import append from '#internal/append';
 
-const makeUseDerivedControl =
-  (makeDerivedControl: (params: any[]) => any) =>
-  (...params: any[]): any => {
-    const itemRef = useRef<null | {
-      [INTERNALS]: DerivedControlInternals;
-    }>(null);
+const detach = (item: Control) => {
+  const notifiers = (item[INTERNALS] as DerivedControlInternals)._notifiers;
 
-    if (itemRef.current === null) {
-      itemRef.current = makeDerivedControl(params);
+  if (Array.isArray(notifiers)) {
+    for (let i = 0, l = notifiers.length; i < l; i++) {
+      removeFromArray(notifiers[i]._attachedTo, notifiers[i]);
+    }
+  } else {
+    removeFromArray(notifiers._attachedTo, notifiers);
+  }
+};
+
+/**
+ * Deps-aware derived control for hooks and `CombinedControlsConsumer`:
+ * rebuilds the control when the {@link controls} set changes (compared by
+ * identity), otherwise keeps it and just points it at the latest
+ * {@link combiner} — so the combiner needn't be memoized. Takes controls and
+ * combiner apart to avoid allocating a combined array on every render (only on
+ * a rebuild).
+ */
+export const useDerived = (
+  make: (params: any[]) => any,
+  controls: any[],
+  combiner?: (...values: any[]) => any
+) => {
+  const ref = useRef<null | { _controls: Control[]; _item: Control }>(null);
+
+  let item = ref.current;
+
+  if (item) {
+    const prevControls = item._controls;
+
+    const withoutCombiner = combiner === undefined;
+
+    let controlsCount = prevControls.length;
+
+    if (withoutCombiner && controlsCount > 1) {
+      controlsCount--;
     }
 
-    useEffect(
-      () => () => {
-        const notifiers = itemRef.current![INTERNALS]._notifiers;
+    for (let i = 0; i < controlsCount; i++) {
+      if (prevControls[i] != controls[i]) {
+        detach(item._item);
 
-        if (Array.isArray(notifiers)) {
-          for (let i = 0, l = notifiers.length; i < l; i++) {
-            const notifier = notifiers[i];
+        item._controls = controls;
 
-            removeFromArray(notifier._attachedTo, notifier);
-          }
-        } else {
-          removeFromArray(notifiers._attachedTo, notifiers);
-        }
-      },
-      EMPTY_ARR
-    );
+        item._item = make(
+          withoutCombiner ? controls : append(controls, combiner)
+        );
 
-    return itemRef.current;
-  };
+        break;
+      }
+    }
+  } else {
+    ref.current = item = {
+      _controls: controls,
+      _item: make(
+        combiner === undefined ? controls : append(controls, combiner)
+      ),
+    };
+  }
+
+  const $control = item._item;
+
+  useEffect(() => () => detach($control), EMPTY_ARR);
+
+  return $control;
+};
+
+const makeUseDerivedControl =
+  (make: (params: any[]) => any) =>
+  (...params: any[]): any =>
+    useDerived(make, params);
 
 export default makeUseDerivedControl;
