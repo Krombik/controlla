@@ -152,10 +152,12 @@ assert.equal(
 );
 assert.equal(getValue(router.routes.home), true, 'replace: home matched');
 assert.equal(getValue(router.routes.user), false, 'replace: user unmatched');
-assert.equal(
+// unmatch clears params in a macrotask, not synchronously — so subscribers on
+// the leaving page unmount and detach before the value goes; still set here
+assert.deepEqual(
   getValue(selectParams(router.routes.user)),
-  undefined,
-  'replace: params cleared'
+  { id: 7 },
+  'replace: params retained until deferred clear'
 );
 
 // 5. popstate back
@@ -760,5 +762,46 @@ maxScrollY = 1000;
 roCallback!();
 assert.equal(windowMock.scrollY, 321, 'refresh: restored after growth');
 assert.equal(roCallback, undefined, 'refresh: observer disconnected');
+
+// ---------- deferred params clear on unmatch ----------
+{
+  const dRouter = createRouter(paths);
+
+  navigate(dRouter.navigation.user({ id: 42 }).profile());
+  await tick();
+  assert.deepEqual(
+    getValue(selectParams(dRouter.routes.user)),
+    { id: 42 },
+    'deferred: matched params'
+  );
+
+  // leave and stay away: params linger for one macrotask, then clear
+  navigate(dRouter.navigation.home());
+  await tick();
+  assert.deepEqual(
+    getValue(selectParams(dRouter.routes.user)),
+    { id: 42 },
+    'deferred: params retained right after unmatch'
+  );
+  await tick();
+  assert.equal(
+    getValue(selectParams(dRouter.routes.user)),
+    undefined,
+    'deferred: params cleared once it stays unmatched'
+  );
+
+  // re-match before the deferred clear cancels it (no clobber)
+  navigate(dRouter.navigation.user({ id: 7 }).profile());
+  await tick();
+  navigate(dRouter.navigation.home());
+  navigate(dRouter.navigation.user({ id: 9 }).profile()); // re-match same tick
+  await tick();
+  await tick();
+  assert.deepEqual(
+    getValue(selectParams(dRouter.routes.user)),
+    { id: 9 },
+    'deferred: re-match cancels the pending clear'
+  );
+}
 
 console.log('router.test.ts: all assertions passed');
