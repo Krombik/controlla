@@ -732,36 +732,42 @@ defineGlobal(
   }
 );
 
-let maxScrollY = 100;
+const docEl = document.documentElement as { scrollHeight: number };
 let scrolled: [number, number] | undefined;
+docEl.scrollHeight = 900; // max scroll = 900 - innerHeight(800) = 100
 windowMock.scroll = (x, y) => {
   scrolled = [x, y];
   windowMock.scrollX = x;
-  windowMock.scrollY = Math.min(y, maxScrollY);
+  windowMock.scrollY = Math.min(y, docEl.scrollHeight - windowMock.innerHeight);
 };
 
-// pagehide stores the position in history.state
+// beforeunload stores the position in history.state
 windowMock.scrollY = 321;
-for (const fn of listeners.pagehide) fn({});
+for (const fn of listeners.beforeunload) fn({});
 assert.deepEqual(
   current().state.scroll,
   [0, 321],
-  'refresh: scroll saved on pagehide'
+  'refresh: scroll saved on beforeunload'
 );
 
-// "refresh" — the page is short at boot, restore clamps and keeps watching
+// "refresh" — page too short to reach 321, so it doesn't scroll (no clamp)
 windowMock.scrollY = 0;
+windowMock.scrollX = 0;
 scrolled = undefined;
 router3 = makeItemsRouter();
-assert.deepEqual(scrolled, [0, 321], 'refresh: restore attempted on boot');
-assert.equal(windowMock.scrollY, 100, 'refresh: clamped by short page');
+assert.equal(scrolled, undefined, 'refresh: not scrolled while page too short');
 assert.ok(roCallback, 'refresh: growth observer active');
 
-// content grew — the observer re-applies and detaches once reached
-maxScrollY = 1000;
+// content grew tall enough — now it lands exactly on the saved position
+docEl.scrollHeight = 1800; // max scroll = 1000
 roCallback!();
-assert.equal(windowMock.scrollY, 321, 'refresh: restored after growth');
-assert.equal(roCallback, undefined, 'refresh: observer disconnected');
+assert.deepEqual(scrolled, [0, 321], 'refresh: restored once reachable');
+assert.equal(windowMock.scrollY, 321, 'refresh: at saved position');
+assert.ok(roCallback, 'refresh: still watching after growth');
+
+// a real user scroll (input event) → stop; browser reflow clamps don't
+for (const fn of listeners.wheel || []) fn({});
+assert.equal(roCallback, undefined, 'refresh: stops on user input');
 
 // ---------- params clearing is deferred to createRouterView ----------
 // The router no longer clears params on unmatch itself — it queues the route
