@@ -110,4 +110,17 @@ setValue($d, { t: new Date(2000) });
 await tick();
 assert.equal(dlog.length, 1, 'changed date notifies');
 
+// subtree appear/vanish notifies listened descendants (notifyDescendants)
+const $t = createControl<any>(null);
+const tlog: any[] = [];
+watchValue($t.a.b, (v: any, p: any) => {
+  tlog.push([v, p]);
+});
+setValue($t, { a: { b: 5 } }); // primitive -> object: subtree appears
+await tick();
+assert.deepEqual(tlog.at(-1), [5, undefined], 'nested listener on subtree appear');
+setValue($t, null); // object -> primitive: subtree vanishes
+await tick();
+assert.deepEqual(tlog.at(-1), [undefined, 5], 'nested listener on subtree vanish');
+
 console.log('patch-smoke.test.ts: all assertions passed');
