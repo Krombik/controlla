@@ -4,14 +4,23 @@ import type {
   Mutable,
   AsyncControlInternals,
   ErrorControlInternals,
+  Notifier,
 } from '#internal/types';
-import { INTERNALS } from '#internal/constants';
+import { INTERNALS, EMPTY_ARR } from '#internal/constants';
 import type { AsyncControlScope } from '#types';
 import alwaysTrue from '#internal/alwaysTrue';
 
 function alwaysThis(this: any) {
   return this;
 }
+
+// $never never emits, so a derived control attaching to it must register
+// nothing: this sink swallows push/pop, leaving $never's _dependents untouched
+const inertDependents = {
+  push: noop,
+  pop: noop,
+  length: 0,
+} as unknown as Notifier[];
 
 const NOOP_PROMISE_DESCRIPTOR: PropertyDescriptor = {
   value: alwaysThis,
@@ -24,6 +33,8 @@ const errorControl = {
   _value: undefined,
   _attach: noop,
   _detach: noop,
+  _listeners: EMPTY_ARR,
+  _dependents: inertDependents,
 } as Partial<
   ErrorControlInternals<AsyncControlInternals>
 > as ErrorControlInternals<AsyncControlInternals>;
@@ -47,6 +58,8 @@ const internals = {
   _get: noop,
   _enqueueSet: noop,
   _root: undefined!,
+  _listeners: EMPTY_ARR,
+  _dependents: inertDependents,
   _errorControl: {
     [INTERNALS]: errorControl,
   },
@@ -63,6 +76,8 @@ const internals = {
     _root: internals,
     _get: alwaysTrue,
     _value: true,
+    _listeners: EMPTY_ARR,
+    _dependents: inertDependents,
   } as Partial<AsyncControlInternals['_loadingControl'][typeof INTERNALS]>,
 } as AsyncControlInternals['_loadingControl'];
 
@@ -71,6 +86,8 @@ const internals = {
     _root: internals,
     _get: noop,
     _value: undefined,
+    _listeners: EMPTY_ARR,
+    _dependents: inertDependents,
   } as Partial<AsyncControlInternals['_readyControl'][typeof INTERNALS]>,
 } as AsyncControlInternals['_readyControl'];
 
