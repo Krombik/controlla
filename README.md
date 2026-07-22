@@ -1158,6 +1158,8 @@ replaceValue(selectParams(router.routes.catalog), { sort: 'price' }); // no new 
 
 `anchor(getOptions?)` gives a route a typed anchor control (`selectAnchor`), stored in the URL as its hash. Writing to it, with [`setValue`](#setvaluecontrol-value-scheduler)/[`replaceValue`](#replacevaluecontrol-value-scheduler) or a navigation's anchor argument, scrolls to the element registered under that id with `registerAnchor(route, id)`. If the element isn't mounted yet (the page is still loading), the scroll retries, instantly, once it mounts, unless the user has scrolled in the meantime. An empty string clears the URL's hash without scrolling; leaving it `undefined` (no argument) leaves it untouched.
 
+`getOptions` sets the scroll options (`behavior`, `topOffset`/`leftOffset`, …): an object, or a resolver `(offsetEl, id) => options` called at scroll time with the offset element (see [`registerAnchorOffset`](#registeranchoroffsetroute)) and the target id — so the offset can vary per section.
+
 ```tsx
 import anchor from 'controlla/router/anchor';
 import registerAnchor from 'controlla/router/registerAnchor';
