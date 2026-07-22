@@ -650,7 +650,7 @@ export type AnchorParam<Ids extends string = string> = {
   /** @internal */
   _activeId: string | undefined;
   /** @internal */
-  _getOptions(el: HTMLElement | null): AnchorScrollOptions;
+  _getOptions(el: HTMLElement | null, id: string): AnchorScrollOptions;
   /** @internal */
   _offsetEl: HTMLElement | null;
   /** @internal */
