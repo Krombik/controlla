@@ -84,8 +84,6 @@ const trackScroll = <Ids extends string>(
 
       const { _entries, _getOptions, _offsetEl } = anchorParam;
 
-      const line = _getOptions(_offsetEl).topOffset || 0;
-
       let nextId: string | undefined;
 
       let bestTop = -Infinity;
@@ -96,6 +94,8 @@ const trackScroll = <Ids extends string>(
 
       for (let i = 0; i < _entries.length; i++) {
         const entry = _entries[i];
+
+        const line = _getOptions(_offsetEl, entry._id).topOffset || 0;
 
         const top = entry._el.getBoundingClientRect().top - line;
 

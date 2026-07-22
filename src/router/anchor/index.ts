@@ -6,7 +6,10 @@ import { INTERNALS } from '#internal/constants';
 import { EMPTY_OBJECT, ONCE_PASSIVE } from '#router/internal/constants';
 import type { AnchorParam, AnchorScrollOptions } from '#router/internal/types';
 
-type GetOptions = (offsetEl: HTMLElement | null) => AnchorScrollOptions;
+type GetAnchorScrollOptions<Ids extends string = string> = (
+  offsetEl: HTMLElement | null,
+  id: Ids
+) => AnchorScrollOptions;
 
 const returnDefaultOptions = () => EMPTY_OBJECT as AnchorScrollOptions;
 
@@ -19,7 +22,7 @@ function anchorScrollTo(this: AnchorParam, id: string, instant?: boolean) {
     if (item._id == id) {
       const el = item._el;
 
-      let options = this._getOptions(this._offsetEl);
+      let options = this._getOptions(this._offsetEl, id);
 
       if (instant) {
         options = { ...options, behavior: 'instant' };
@@ -76,8 +79,8 @@ function activate(this: AnchorParam) {
  * it don't bundle the scroll-spy code.
  *
  * {@link options} sets the anchor's scroll options: an object, or a
- * resolver receiving the offset element (see `registerAnchorOffset`) called
- * at scroll time.
+ * resolver receiving the offset element (see `registerAnchorOffset`) and the
+ * target id, called at scroll time.
  *
  * @example
  * ```ts
@@ -96,7 +99,7 @@ function activate(this: AnchorParam) {
  * ```
  */
 export const anchor = <Ids extends string = string>(
-  options?: AnchorScrollOptions | GetOptions
+  options?: AnchorScrollOptions | GetAnchorScrollOptions<Ids>
 ): AnchorParam<Ids> => {
   const hash = makePrimitiveInternals('');
 
