@@ -192,6 +192,49 @@ assert.deepEqual(lengthSeen, [4, 1], 'length notifies only when count changes');
 assert.equal(getValue($list.length), 1, 'length current');
 unLength();
 
+// a derived over a BOUND control's child must recompute: the derived has to
+// activate the source child on the bound target, not just retain its load
+const boundReg = createRegistry(createAsyncControl, {
+  load(handle: any, keys: any) {
+    handle.setValue({ n: (keys[0] as number) * 10 });
+  },
+});
+const $boundId = createPrimitiveControl(1);
+const $boundItem = boundReg.bind($boundId) as any;
+const $overBoundChild = createDerivedControl(
+  $boundItem.n,
+  (n: number | undefined) => n
+);
+const relBoundChild = retain($overBoundChild);
+await tick();
+assert.equal(
+  getValue($overBoundChild),
+  10,
+  'derived over bound child: initial'
+);
+setValue($boundId, 2);
+await tick();
+assert.equal(
+  getValue($overBoundChild),
+  20,
+  'derived over bound child: recomputes on retarget'
+);
+relBoundChild();
+
+// a derived whose source is itself a loadable derived: the creation-time
+// source activation must not try to add a listener (no crash)
+const $srcA = createAsyncControl<number>();
+const $innerDerived = createAsyncDerivedControl($srcA, (v: number) => v + 1);
+const $outerDerived = createDerivedControl(
+  $innerDerived,
+  (v: number | undefined) => v
+);
+const relOuter = retain($outerDerived);
+setValue($srcA, 5);
+await tick();
+assert.equal(getValue($outerDerived), 6, 'derived over loadable derived');
+relOuter();
+
 release();
 rel2();
 console.log('core-smoke.test.ts: all assertions passed');

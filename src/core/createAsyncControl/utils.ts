@@ -192,12 +192,12 @@ const detachLoad = (control: AsyncControlInternals) => {
 
 export function attachAsync(
   this: AsyncControlInternals,
-  control: Listeners<ChangeListener>,
-  listener: ChangeListener,
+  control: Listeners<ChangeListener> | undefined,
+  listener: ChangeListener | undefined,
   isLoad: boolean
 ) {
-  if (control) {
-    addListener(control, listener!);
+  if (listener) {
+    addListener(control!, listener);
   }
 
   if (isLoad) {
@@ -207,12 +207,12 @@ export function attachAsync(
 
 export function detachAsync(
   this: AsyncControlInternals,
-  control: Listeners<ChangeListener>,
-  listener: ChangeListener,
+  control: Listeners<ChangeListener> | undefined,
+  listener: ChangeListener | undefined,
   isLoad: boolean
 ) {
-  if (control) {
-    removeListener(control, listener!);
+  if (listener) {
+    removeListener(control!, listener);
   }
 
   if (isLoad) {
@@ -222,12 +222,12 @@ export function detachAsync(
 
 export function errorAttachAsync(
   this: ErrorControlInternals<AsyncControlInternals>,
-  control: Listeners<ChangeListener>,
-  listener: ChangeListener,
+  control: Listeners<ChangeListener> | undefined,
+  listener: ChangeListener | undefined,
   isLoad: boolean
 ) {
-  if (control) {
-    addListener(control, listener!);
+  if (listener) {
+    addListener(control!, listener);
   }
 
   if (isLoad) {
@@ -237,12 +237,12 @@ export function errorAttachAsync(
 
 export function errorDetachAsync(
   this: ErrorControlInternals<AsyncControlInternals>,
-  control: Listeners<ChangeListener>,
-  listener: ChangeListener,
+  control: Listeners<ChangeListener> | undefined,
+  listener: ChangeListener | undefined,
   isLoad: boolean
 ) {
-  if (control) {
-    removeListener(control, listener!);
+  if (listener) {
+    removeListener(control!, listener);
   }
 
   if (isLoad) {

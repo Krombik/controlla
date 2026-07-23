@@ -26,8 +26,8 @@ export function attachSingleLoad(
   listener: ChangeListener | undefined,
   isLoad: boolean
 ) {
-  if (control) {
-    addListener(control, listener!);
+  if (listener) {
+    addListener(control!, listener);
   }
 
   (this._load as ControlInternals)._attach(undefined, undefined, isLoad);
@@ -39,8 +39,8 @@ export function detachSingleLoad(
   listener: ChangeListener | undefined,
   isLoad: boolean
 ) {
-  if (control) {
-    removeListener(control, listener!);
+  if (listener) {
+    removeListener(control!, listener);
   }
 
   (this._load as ControlInternals)._detach(undefined, undefined, isLoad);
@@ -54,8 +54,8 @@ function attachMultipleLoads(
 ) {
   const loadableDependencies = this._load as ReadonlyArray<ControlInternals>;
 
-  if (control) {
-    addListener(control, listener!);
+  if (listener) {
+    addListener(control!, listener);
   }
 
   for (let i = 0; i < loadableDependencies.length; i++) {
@@ -71,8 +71,8 @@ function detachMultipleLoads(
 ) {
   const loadableDependencies = this._load as ReadonlyArray<ControlInternals>;
 
-  if (control) {
-    removeListener(control, listener!);
+  if (listener) {
+    removeListener(control!, listener);
   }
 
   for (let i = 0; i < loadableDependencies.length; i++) {
