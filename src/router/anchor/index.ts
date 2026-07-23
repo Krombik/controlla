@@ -14,7 +14,9 @@ type GetAnchorScrollOptions<Ids extends string = string> = (
 const returnDefaultOptions = () => EMPTY_OBJECT as AnchorScrollOptions;
 
 function anchorScrollTo(this: AnchorParam, id: string, instant?: boolean) {
-  const entries = this._entries;
+  const self = this;
+
+  const entries = self._entries;
 
   for (let i = 0; i < entries.length; i++) {
     const item = entries[i];
@@ -22,13 +24,13 @@ function anchorScrollTo(this: AnchorParam, id: string, instant?: boolean) {
     if (item._id == id) {
       const el = item._el;
 
-      let options = this._getOptions(this._offsetEl, id);
+      let options = self._getOptions(self._offsetEl, id);
 
       if (instant) {
         options = { ...options, behavior: 'instant' };
       }
 
-      this._onScrollStart(id, options);
+      self._onScrollStart(id, options);
 
       if (options.topOffset != null || options.leftOffset != null) {
         const rect = el.getBoundingClientRect();

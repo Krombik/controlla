@@ -208,28 +208,24 @@ function groupPause(this: PollActions<any[], number>, ...keys: any[]) {
 }
 
 function groupResume(this: PollActions<any[], number>, ...keys: any[]) {
-  const self = this;
-
-  const group = self._storage.get(getKey(keys, self._groupSize, false)) as
+  const group = this._storage.get(getKey(keys, this._groupSize, false)) as
     Group | undefined;
 
   if (group && !group._isRunning) {
     group._isRunning = true;
 
-    tickGroup(group, self._interval as number);
+    tickGroup(group, this._interval as number);
   }
 }
 
 function groupReset(this: PollActions<any[], number>, ...keys: any[]) {
-  const self = this;
-
-  const group = self._storage.get(getKey(keys, self._groupSize, false)) as
+  const group = this._storage.get(getKey(keys, this._groupSize, false)) as
     Group | undefined;
 
   if (group && group._timerId != null) {
     clearTimeout(group._timerId);
 
-    tickGroup(group, self._interval as number);
+    tickGroup(group, this._interval as number);
   }
 }
 
