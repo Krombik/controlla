@@ -249,11 +249,11 @@ const makeAsyncDerivedControl = (params: any[]) => {
 
   const notifiers: Notifier[] = [];
 
-  const loadableRoots: ControlInternals[] = [];
+  const loadableSources: ControlInternals[] = [];
 
   const mapper = params[sourceCount] || identity;
 
-  const seenLoadableRoots = new Set<ControlInternals>();
+  const seenLoadableSources = new Set<ControlInternals>();
 
   const derivedRoot: AsyncDerivedControlInternals = {
     _root: undefined!,
@@ -313,10 +313,10 @@ const makeAsyncDerivedControl = (params: any[]) => {
       maxLevel = root._level;
     }
 
-    if (root._load && !seenLoadableRoots.has(root)) {
-      seenLoadableRoots.add(root);
+    if (root._load && !seenLoadableSources.has(root)) {
+      seenLoadableSources.add(root);
 
-      loadableRoots.push(root);
+      loadableSources.push(root);
     }
 
     if (errorControl) {
@@ -352,6 +352,9 @@ const makeAsyncDerivedControl = (params: any[]) => {
     attachNotifier(internals, notifier);
 
     notifiers.push(notifier);
+
+    // activate the source (no-op unless it's a bound child) so its value
+    internals._root._attach(internals, undefined, false);
   }
 
   derivedRoot._values = isSingle ? values[0] : values;
@@ -374,7 +377,7 @@ const makeAsyncDerivedControl = (params: any[]) => {
     }
   }
 
-  applyLoadWiring(derivedRoot, loadableRoots);
+  applyLoadWiring(derivedRoot, loadableSources);
 
   (derivedRoot as Mutable<typeof derivedRoot>)._root = derivedRoot;
 

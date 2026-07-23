@@ -97,9 +97,9 @@ const makeDerivedControl = (params: any[]) => {
   const weakRef = new WeakRef(derivedRoot);
 
   if (controlCount > 1) {
-    const seenLoadableRoots = new Set<ControlInternals>();
+    const seenLoadableSources = new Set<ControlInternals>();
 
-    const loadableRoots: Array<ControlInternals> = [];
+    const loadableSources: Array<ControlInternals> = [];
 
     const values = Array(controlCount);
 
@@ -116,10 +116,10 @@ const makeDerivedControl = (params: any[]) => {
         maxLevel = root._level;
       }
 
-      if (root._load && !seenLoadableRoots.has(root)) {
-        seenLoadableRoots.add(root);
+      if (root._load && !seenLoadableSources.has(root)) {
+        seenLoadableSources.add(root);
 
-        loadableRoots.push(root);
+        loadableSources.push(root);
       }
 
       attachNotifier(
@@ -131,6 +131,9 @@ const makeDerivedControl = (params: any[]) => {
           _attachedTo: EMPTY_ARR,
         })
       );
+
+      // activate the source (no-op unless it's a bound child) so its value
+      internals._root._attach(internals, undefined, false);
 
       values[i] = internals._get();
     }
@@ -145,7 +148,7 @@ const makeDerivedControl = (params: any[]) => {
 
     derivedRoot._values = values;
 
-    applyLoadWiring(derivedRoot, loadableRoots);
+    applyLoadWiring(derivedRoot, loadableSources);
   } else {
     const internals: ChildControlNode<
       ControlInternals | AsyncControlInternals
@@ -182,6 +185,8 @@ const makeDerivedControl = (params: any[]) => {
         _attachedTo: EMPTY_ARR,
       })
     );
+
+    internals._root._attach(internals, undefined, false);
   }
 
   (derivedRoot as Mutable<typeof derivedRoot>)._level = maxLevel + 1;

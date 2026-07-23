@@ -595,37 +595,33 @@ function attach(
 ) {
   const self = this;
 
-  if (control) {
-    if (control._path !== undefined && !control._listeners.length) {
-      const target = self._target;
+  if (
+    control &&
+    control._path !== undefined &&
+    control._boundData === undefined
+  ) {
+    const notifier: Notifier = {
+      _ref: new WeakRef(control),
+      _notify: childNodeNotify,
+      _index: 0,
+      _attachedTo: EMPTY_ARR,
+    };
 
-      const data = control._boundData;
+    (control as Mutable<typeof control>)._boundData = {
+      _selfNotifier: notifier,
+      _prevValue: undefined,
+      _value: undefined,
+    };
 
-      let notifier: Notifier;
+    self._activeNodes.push(control);
 
-      if (data === undefined) {
-        (control as Mutable<typeof control>)._boundData = {
-          _selfNotifier: (notifier = {
-            _ref: new WeakRef(control),
-            _notify: childNodeNotify,
-            _index: 0,
-            _attachedTo: EMPTY_ARR,
-          }),
-          _prevValue: undefined,
-          _value: undefined,
-        };
-      } else {
-        notifier = data._selfNotifier;
-      }
-
-      self._activeNodes.push(control);
-
-      if (target) {
-        attachNotifierToTargetNode(target, control._path, notifier);
-      }
+    if (self._target) {
+      attachNotifierToTargetNode(self._target, control._path, notifier);
     }
+  }
 
-    addListener(control, listener!);
+  if (listener) {
+    addListener(control!, listener);
   }
 
   if (isLoad) {
@@ -641,22 +637,8 @@ function detach(
 ) {
   const self = this;
 
-  if (control) {
-    removeListener(control, listener!);
-
-    if (control._path !== undefined && !control._listeners.length) {
-      const target = self._target;
-
-      removeFromArray(self._activeNodes, control);
-
-      if (target) {
-        const notifier = control._boundData!._selfNotifier;
-
-        removeFromArray(notifier._attachedTo!, notifier);
-
-        notifier._attachedTo = EMPTY_ARR;
-      }
-    }
+  if (listener) {
+    removeListener(control!, listener);
   }
 
   if (isLoad) {
@@ -670,8 +652,8 @@ function errorAttach(
   listener: ChangeListener | undefined,
   isLoad: boolean
 ) {
-  if (control) {
-    addListener(control, listener!);
+  if (listener) {
+    addListener(control!, listener);
   }
 
   if (isLoad) {
@@ -685,8 +667,8 @@ function errorDetach(
   listener: ChangeListener | undefined,
   isLoad: boolean
 ) {
-  if (control) {
-    removeListener(control, listener!);
+  if (listener) {
+    removeListener(control!, listener);
   }
 
   if (isLoad) {
