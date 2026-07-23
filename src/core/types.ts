@@ -3,7 +3,6 @@ import type { Primitive, PrimitiveOrNested } from 'keyweaver';
 import type { INTERNALS } from '#internal/constants';
 import type {
   ControlInternalsChild,
-  Nil,
   PartialTuple,
   ToIndex,
   ControlInternals,
@@ -57,64 +56,139 @@ type AsyncControlBase<Error> = {
 export type AsyncControl<Value = any, Error = any> = Control<Value> &
   AsyncControlBase<Error>;
 
-type ProcessScope<
+type _ReadonlyControlScope<
   Value,
-  S extends ReadonlyControl,
-  M = Exclude<Value, Nil>,
-  N = Extract<Value, Nil>,
-> = (S extends AsyncControl<any, infer Error>
-  ? AsyncControl<Value, Error>
-  : S extends Control
-    ? Control<Value>
-    : S extends ReadonlyAsyncControl<any, infer Error>
-      ? ReadonlyAsyncControl<Value, Error>
-      : ReadonlyControl<Value>) &
+  Nested = Exclude<Value, Primitive>,
+  Absent = [Value] extends [Nested] ? never : undefined,
+> = ReadonlyControl<Value> &
   (0 extends 1 & Value
-    ? { readonly [key in string | number]: ScopeOf<any, S> }
-    : M extends Primitive
+    ? { readonly [key in string | number]: ReadonlyControlScope<any> }
+    : [Nested] extends [never]
       ? {}
-      : M extends any[]
+      : Nested extends any[]
         ? {
-            readonly [key in ToIndex<keyof M>]-?: ScopeOf<M[key] | N, S>;
+            readonly length: ReadonlyControl<Nested['length'] | Absent>;
+          } & {
+            readonly [key in ToIndex<keyof Nested>]-?: ReadonlyControlScope<
+              Nested[key] | Absent
+            >;
           }
         : {
-            readonly [key in keyof M]-?: ScopeOf<M[key] | N, S>;
+            readonly [key in keyof Nested]-?: ReadonlyControlScope<
+              Nested[key] | Absent
+            >;
           });
 
-// the named alias, so hovers read `ControlScope<…>` not the unfolded form
-type ScopeOf<Value, S extends ReadonlyControl> =
-  S extends AsyncControl<any, infer Error>
-    ? AsyncControlScope<Value, Error>
-    : S extends Control
-      ? ControlScope<Value>
-      : S extends ReadonlyAsyncControl<any, infer Error>
-        ? ReadonlyAsyncControlScope<Value, Error>
-        : ReadonlyControlScope<Value>;
-
-/** A readonly {@link AsyncControlScope}. */
-export type ReadonlyAsyncControlScope<Value = any, Error = any> = ProcessScope<
+type _ReadonlyAsyncControlScope<
   Value,
-  ReadonlyAsyncControl<any, Error>
->;
+  Error,
+  Nested = Exclude<Value, Primitive>,
+  Absent = [Value] extends [Nested] ? never : undefined,
+> = ReadonlyAsyncControl<Value, Error> &
+  (0 extends 1 & Value
+    ? {
+        readonly [key in string | number]: ReadonlyAsyncControlScope<
+          any,
+          Error
+        >;
+      }
+    : [Nested] extends [never]
+      ? {}
+      : Nested extends any[]
+        ? {
+            readonly length: ReadonlyAsyncControl<
+              Nested['length'] | Absent,
+              Error
+            >;
+          } & {
+            readonly [
+              key in ToIndex<keyof Nested>
+            ]-?: ReadonlyAsyncControlScope<Nested[key] | Absent, Error>;
+          }
+        : {
+            readonly [key in keyof Nested]-?: ReadonlyAsyncControlScope<
+              Nested[key] | Absent,
+              Error
+            >;
+          });
+
+type _ControlScope<
+  Value,
+  Nested = Exclude<Value, Primitive>,
+  Absent = [Value] extends [Nested] ? never : undefined,
+> = Control<Value> &
+  (0 extends 1 & Value
+    ? {
+        readonly [key in string | number]: ControlScope<any>;
+      }
+    : [Nested] extends [never]
+      ? {}
+      : Nested extends any[]
+        ? {
+            readonly length: ReadonlyControl<Nested['length'] | Absent>;
+          } & {
+            readonly [key in ToIndex<keyof Nested>]-?: ControlScope<
+              Nested[key] | Absent
+            >;
+          }
+        : {
+            readonly [key in keyof Nested]-?: ControlScope<
+              Nested[key] | Absent
+            >;
+          });
+
+type _AsyncControlScope<
+  Value,
+  Error,
+  Nested = Exclude<Value, Primitive>,
+  Absent = [Value] extends [Nested] ? never : undefined,
+> = AsyncControl<Value, Error> &
+  (0 extends 1 & Value
+    ? {
+        readonly [key in string | number]: AsyncControlScope<any, Error>;
+      }
+    : [Nested] extends [never]
+      ? {}
+      : Nested extends any[]
+        ? {
+            readonly length: ReadonlyAsyncControl<
+              Nested['length'] | Absent,
+              Error
+            >;
+          } & {
+            readonly [key in ToIndex<keyof Nested>]-?: AsyncControlScope<
+              Nested[key] | Absent,
+              Error
+            >;
+          }
+        : {
+            readonly [key in keyof Nested]-?: AsyncControlScope<
+              Nested[key] | Absent,
+              Error
+            >;
+          });
 
 /** A readonly {@link ControlScope}. */
-export type ReadonlyControlScope<Value = any> = ProcessScope<
-  Value,
-  ReadonlyControl
->;
+export type ReadonlyControlScope<Value = any> = _ReadonlyControlScope<Value>;
 
 /**
  * A control with granular reactivity over its value: nested fields are
  * reachable as controls of their own via property access (`$user.profile.name`),
  * and a change notifies only the touched paths — what `createControl` returns.
  */
-export type ControlScope<Value = any> = ProcessScope<Value, Control>;
+export type ControlScope<Value = any> = _ControlScope<Value>;
 
 /** An async {@link ControlScope} — what `createAsyncControl` returns. */
-export type AsyncControlScope<Value = any, Error = any> = ProcessScope<
+export type AsyncControlScope<Value = any, Error = any> = _AsyncControlScope<
   Value,
-  AsyncControl<any, Error>
+  Error
 >;
+
+/** A readonly {@link AsyncControlScope}. */
+export type ReadonlyAsyncControlScope<
+  Value = any,
+  Error = any,
+> = _ReadonlyAsyncControlScope<Value, Error>;
 
 /** The handle a {@link AsyncControlOptions.load loader} reports its results through. */
 export type LoadHandle<T = any, E = any> = {

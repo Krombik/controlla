@@ -175,6 +175,23 @@ await tick();
 assert.equal(getValue($multi), 5, 'retained multi-source async derived loads');
 relMulti();
 
+// array `.length` is a readonly child control that fires only on count change
+const $list = createControl([1, 2, 3]);
+assert.equal(getValue($list.length), 3, 'length initial');
+const lengthSeen: number[] = [];
+const unLength = watchValue($list.length, (v: number) => {
+  lengthSeen.push(v);
+});
+setValue($list, [1, 2, 3, 4]); // 3 -> 4
+await tick();
+setValue($list, [9, 8, 7, 6]); // still 4: same length, different items
+await tick();
+setValue($list, [1]); // 4 -> 1
+await tick();
+assert.deepEqual(lengthSeen, [4, 1], 'length notifies only when count changes');
+assert.equal(getValue($list.length), 1, 'length current');
+unLength();
+
 release();
 rel2();
 console.log('core-smoke.test.ts: all assertions passed');

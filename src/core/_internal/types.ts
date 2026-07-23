@@ -26,9 +26,7 @@ export type Mutable<T> = {
   -readonly [P in keyof T]: T[P];
 };
 
-export type Nil = null | undefined;
-
-export type Falsy = Nil | false | 0 | '';
+export type Falsy = null | undefined | false | 0 | '';
 
 export type ChangeListener<T = any> = (newValue: T, prevValue: T) => void;
 

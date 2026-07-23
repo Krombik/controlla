@@ -239,12 +239,26 @@ const compareAndNotify = (
 
     result = lPrev != lNext;
 
-    if (scanUntilMismatch && result) {
-      if (!children) {
+    if (result) {
+      // length differs: the diff is proven, so scanning can stop
+      if (children) {
+        scanUntilMismatch = false;
+
+        // `.length` is a readonly child control that changes only with the count
+        const lengthChild = children.get('length');
+
+        if (lengthChild) {
+          notify(
+            lengthChild._listeners,
+            lengthChild._dependents,
+            lane,
+            lNext,
+            lPrev
+          );
+        }
+      } else if (scanUntilMismatch) {
         return true;
       }
-
-      scanUntilMismatch = false;
     }
 
     for (let i = 0; i < lNext; i++) {
