@@ -22,35 +22,41 @@ export type DerivedControlInternals = ControlInternals & {
 
 export function attachSingleLoad(
   this: DerivedControlInternals,
-  control: Listeners<ChangeListener>,
-  listener: ChangeListener,
+  control: Listeners<ChangeListener> | undefined,
+  listener: ChangeListener | undefined,
   isLoad: boolean
 ) {
-  addListener(control, listener);
+  if (control) {
+    addListener(control, listener!);
+  }
 
   (this._load as ControlInternals)._attach(undefined, undefined, isLoad);
 }
 
 export function detachSingleLoad(
   this: DerivedControlInternals,
-  control: Listeners<ChangeListener>,
-  listener: ChangeListener,
+  control: Listeners<ChangeListener> | undefined,
+  listener: ChangeListener | undefined,
   isLoad: boolean
 ) {
-  removeListener(control, listener);
+  if (control) {
+    removeListener(control, listener!);
+  }
 
   (this._load as ControlInternals)._detach(undefined, undefined, isLoad);
 }
 
 function attachMultipleLoads(
   this: DerivedControlInternals,
-  control: Listeners<ChangeListener>,
-  listener: ChangeListener,
+  control: Listeners<ChangeListener> | undefined,
+  listener: ChangeListener | undefined,
   isLoad: boolean
 ) {
   const loadableDependencies = this._load as ReadonlyArray<ControlInternals>;
 
-  addListener(control, listener);
+  if (control) {
+    addListener(control, listener!);
+  }
 
   for (let i = 0; i < loadableDependencies.length; i++) {
     loadableDependencies[i]._attach(undefined, undefined, isLoad);
@@ -59,13 +65,15 @@ function attachMultipleLoads(
 
 function detachMultipleLoads(
   this: DerivedControlInternals,
-  control: Listeners<ChangeListener>,
-  listener: ChangeListener,
+  control: Listeners<ChangeListener> | undefined,
+  listener: ChangeListener | undefined,
   isLoad: boolean
 ) {
   const loadableDependencies = this._load as ReadonlyArray<ControlInternals>;
 
-  removeListener(control, listener);
+  if (control) {
+    removeListener(control, listener!);
+  }
 
   for (let i = 0; i < loadableDependencies.length; i++) {
     loadableDependencies[i]._detach(undefined, undefined, isLoad);

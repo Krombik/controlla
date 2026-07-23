@@ -146,6 +146,35 @@ assert.equal(
 );
 unwatchNever();
 
+// retain (and bound controls holding a derived key) attach a derived control
+// via `_attach(undefined, undefined, true)` — the retain-only path must not
+// try to add a listener. Covers single- and multi-source derived.
+const $k1 = createAsyncControl<number>();
+const $single = createAsyncDerivedControl($k1, (v: number) => v * 2);
+const relSingle = retain($single);
+setValue($k1, 4);
+await tick();
+assert.equal(
+  getValue($single),
+  8,
+  'retained single-source async derived loads'
+);
+relSingle();
+
+const $k2 = createAsyncControl<number>();
+const $k3 = createAsyncControl<number>();
+const $multi = createAsyncDerivedControl(
+  $k2,
+  $k3,
+  (a: number, b: number) => a + b
+);
+const relMulti = retain($multi);
+setValue($k2, 2);
+setValue($k3, 3);
+await tick();
+assert.equal(getValue($multi), 5, 'retained multi-source async derived loads');
+relMulti();
+
 release();
 rel2();
 console.log('core-smoke.test.ts: all assertions passed');
