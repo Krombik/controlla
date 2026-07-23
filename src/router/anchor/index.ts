@@ -4,7 +4,8 @@ import createControl from '#core/createControl';
 import noop from '#internal/noop';
 import { INTERNALS } from '#internal/constants';
 import { EMPTY_OBJECT, ONCE_PASSIVE } from '#router/internal/constants';
-import type { AnchorParam, AnchorScrollOptions } from '#router/internal/types';
+import type { AnchorScrollOptions } from '#router/types';
+import type { AnchorParam } from '#router/internal/types';
 
 type GetAnchorScrollOptions<Ids extends string = string> = (
   offsetEl: HTMLElement | null,
@@ -100,7 +101,7 @@ function activate(this: AnchorParam) {
  * )
  * ```
  */
-export const anchor = <Ids extends string = string>(
+const anchor = <Ids extends string = string>(
   options?: AnchorScrollOptions | GetAnchorScrollOptions<Ids>
 ): AnchorParam<Ids> => {
   const hash = makePrimitiveInternals('');
@@ -130,5 +131,3 @@ export const anchor = <Ids extends string = string>(
 };
 
 export default anchor;
-
-export type { AnchorParam, AnchorScrollOptions } from '#router/internal/types';

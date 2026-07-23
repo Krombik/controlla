@@ -3,10 +3,10 @@ import handleStringify from '#router/internal/handleStringify';
 import type {
   HandleUnknown,
   IsUnion,
-  ParamOptions,
   PathParam,
   ValidateParams,
 } from '#router/internal/types';
+import type { ParamOptions } from '#router/types';
 
 /**
  * Declares a dynamic path segment for `createPath`. Takes exactly one
