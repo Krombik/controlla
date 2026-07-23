@@ -379,7 +379,7 @@ export type Scheduler = {
   /** @internal */
   _debounce?(): void;
   /** @internal */
-  _sync?: boolean;
+  _sync?: true;
 };
 
 export type RegistryOptions<T = any, Keys extends any[] = any[]> = {
@@ -404,3 +404,6 @@ export type RegistryOptions<T = any, Keys extends any[] = any[]> = {
    */
   suppressError?: boolean;
 };
+
+export type SelectValue<C extends ReadonlyControl> =
+  C extends ReadonlyControl<infer K> ? K : never;

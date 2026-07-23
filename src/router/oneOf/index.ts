@@ -1,11 +1,7 @@
 import identity from '#internal/identity';
 import handleStringify from '#router/internal/handleStringify';
-import type {
-  HandleUnknown,
-  IsUnion,
-  OneOfOptions,
-  PathParam,
-} from '#router/internal/types';
+import type { HandleUnknown, IsUnion, PathParam } from '#router/internal/types';
+import type { OneOfOptions } from '#router/types';
 
 /**
  * Declares a dynamic path segment restricted to the given string variants:

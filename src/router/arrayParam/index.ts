@@ -1,9 +1,5 @@
-import type {
-  ArrayOptions,
-  HandleUnknown,
-  IsUnion,
-  PathParam,
-} from '#router/internal/types';
+import type { HandleUnknown, IsUnion, PathParam } from '#router/internal/types';
+import type { ArrayParamOptions } from '#router/types';
 
 const parseArray = (value: string) => value.split('/');
 
@@ -30,7 +26,7 @@ const stringifyArray = (value: string[], key: string) => {
  * createPath('search', arrayParam({ tags: false }));   // /search/red/blue/green
  * ```
  */
-const arrayParam = ((param: Record<string, ArrayOptions<any> | false>) =>
+const arrayParam = ((param: Record<string, ArrayParamOptions<any> | false>) =>
   (parsers, stringifies, pathParams, path) => {
     const name = Object.keys(param)[0];
 
@@ -60,14 +56,16 @@ const arrayParam = ((param: Record<string, ArrayOptions<any> | false>) =>
     Source,
   >(
     param: {
-      [key in keyof Values]: ArrayOptions<HandleUnknown<Values[key], string[]>>;
+      [key in keyof Values]: ArrayParamOptions<
+        HandleUnknown<Values[key], string[]>
+      >;
     } & P
   ): (IsUnion<keyof P> extends false ? unknown : never) &
     PathParam<
       {
         [key in keyof P]: P[key] extends boolean
           ? [string[], false]
-          : P[key] extends ArrayOptions<infer V>
+          : P[key] extends ArrayParamOptions<infer V>
             ? [HandleUnknown<V, string[]>, false]
             : never;
       },

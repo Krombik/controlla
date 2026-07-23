@@ -12,7 +12,11 @@ import type {
   PendingItem,
   PrimitiveControlInternals,
 } from '#internal/types';
-import type { NavigationTarget } from '#router/types';
+import type {
+  AnchorScrollOptions,
+  NavigationTarget,
+  ParamOptions,
+} from '#router/types';
 import type { DerivedControlInternals } from '#internal/derivedControlUtils';
 
 export type IsUnion<T, U = T> = T extends any
@@ -347,6 +351,46 @@ export type PathParam<
   [SOURCE]: Source;
 };
 
+declare const ANCHOR_IDS: unique symbol;
+
+export type AnchorParam<Ids extends string = string> = {
+  /** @internal */
+  _anchor: true;
+  /** @internal */
+  _onScrollStart(id: string, options: AnchorScrollOptions): void;
+  /** @internal */
+  _hash: PrimitiveControlInternals & {
+    _set?: PrimitiveControlInternals['_enqueueSet'];
+  };
+  /** @internal */
+  _hashControl: Control<string>;
+  /** @internal */
+  _registered: ControlScope<Record<string, 'active' | true | undefined>>;
+  /** @internal */
+  _activeId: string | undefined;
+  /** @internal */
+  _getOptions(el: HTMLElement | null, id: string): AnchorScrollOptions;
+  /** @internal */
+  _offsetEl: HTMLElement | null;
+  /** @internal */
+  _offsetRef: ((el: HTMLElement | null) => void) | undefined;
+  /** @internal */
+  _entries: AnchorEntry[];
+  /** @internal */
+  _handles: Map<string, AnchorHandle>;
+  /** @internal */
+  _isPending: boolean;
+  /** @internal */
+  _activate(): void;
+  /** @internal */
+  _startTrack(): void;
+  /** @internal */
+  _clear(): void;
+  /** @internal */
+  _scrollTo(id: string, instant?: boolean): void;
+  [ANCHOR_IDS]: Ids;
+};
+
 type FindChildren<P extends any[]> = P extends [...infer Head, infer Tail]
   ? Tail extends AnyPaths
     ? Tail
@@ -543,68 +587,6 @@ export interface Path<
 
 export type AnyPaths = Record<string, Path<any, {}, any, boolean, string>>;
 
-export type OneOfOptions<V extends string[], O> = {
-  /** The allowed values of the segment. */
-  variants: V;
-  /** Marks the segment as optional: the URL may omit it. */
-  optional?: O;
-} & (O extends true
-  ? {
-      /** Stands in for a missing segment, on parse and when writing the URL too. */
-      defaultValue?: V[number];
-    }
-  : {});
-
-export type ArrayOptions<V> = {
-  parse?(value: string[]): V;
-  stringify?(value: NoInfer<V>): string[];
-};
-
-export type ParamOptions<Value, O = false, Source = never> = {
-  /** Parses the raw URL string into the typed value (identity by default). */
-  parse?(value: string, source: Source): Value;
-  /** Turns the value back into its URL string (identity by default). */
-  stringify?(value: NoInfer<Value>): string;
-  /** Marks the param as optional: the URL may omit it. */
-  optional?: O;
-  /**
-   * Replaces a value that failed to parse or didn't pass {@link isValid};
-   * without it such a value makes the route not match.
-   */
-  fallbackValue?:
-    | ((
-        incorrectValue: string | (O extends true ? never : undefined),
-        source: Source
-      ) => Value)
-    | Value;
-  /**
-   * Validates the parsed value: a failing one falls back or unmatches. Only
-   * guards the URL-to-value direction - building a navigation target skips
-   * it, trusting whatever value TypeScript's types let through.
-   */
-  isValid?(value: NoInfer<Value>, source: Source): boolean;
-} & (O extends true
-  ? | {
-        /**
-         * Stands in for a missing param, on parse and when writing the
-         * URL too - the param can't actually be cleared while this is
-         * set. Mutually exclusive with {@link initialValue}.
-         */
-        defaultValue?: Value | ((source: Source) => Value);
-        initialValue?: never;
-      }
-    | {
-        /**
-         * Applied to an absent param only on the very first load of the
-         * session, then written into the URL like a real value - unlike
-         * {@link defaultValue}, it can be cleared normally afterward.
-         * Mutually exclusive with `defaultValue`.
-         */
-        initialValue?: Value | ((source: Source) => Value);
-        defaultValue?: never;
-      }
-  : {});
-
 export type ValidateParams<P> = keyof P extends {
   [key in keyof P]: P[key] extends boolean | ParamOptions<any, any, any>
     ? key
@@ -612,8 +594,6 @@ export type ValidateParams<P> = keyof P extends {
 }[keyof P]
   ? unknown
   : never;
-
-declare const ANCHOR_IDS: unique symbol;
 
 /** @internal */
 export type AnchorEntry = {
@@ -625,49 +605,4 @@ export type AnchorEntry = {
 export type AnchorHandle = {
   id: string;
   ref(el: HTMLElement | null): void;
-};
-
-export type AnchorScrollOptions = ScrollIntoViewOptions & {
-  /** Distance in px to keep above the element (e.g. a sticky header height). */
-  topOffset?: number;
-  /** Distance in px to keep left of the element. */
-  leftOffset?: number;
-};
-
-export type AnchorParam<Ids extends string = string> = {
-  /** @internal */
-  _anchor: true;
-  /** @internal */
-  _onScrollStart(id: string, options: AnchorScrollOptions): void;
-  /** @internal */
-  _hash: PrimitiveControlInternals & {
-    _set?: PrimitiveControlInternals['_enqueueSet'];
-  };
-  /** @internal */
-  _hashControl: Control<string>;
-  /** @internal */
-  _registered: ControlScope<Record<string, 'active' | true | undefined>>;
-  /** @internal */
-  _activeId: string | undefined;
-  /** @internal */
-  _getOptions(el: HTMLElement | null, id: string): AnchorScrollOptions;
-  /** @internal */
-  _offsetEl: HTMLElement | null;
-  /** @internal */
-  _offsetRef: ((el: HTMLElement | null) => void) | undefined;
-  /** @internal */
-  _entries: AnchorEntry[];
-  /** @internal */
-  _handles: Map<string, AnchorHandle>;
-  /** @internal */
-  _isPending: boolean;
-  /** @internal */
-  _activate(): void;
-  /** @internal */
-  _startTrack(): void;
-  /** @internal */
-  _clear(): void;
-  /** @internal */
-  _scrollTo(id: string, instant?: boolean): void;
-  [ANCHOR_IDS]: Ids;
 };

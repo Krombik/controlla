@@ -2,10 +2,10 @@ import handleParse from '#router/internal/handleParse';
 import handleStringify from '#router/internal/handleStringify';
 import type {
   HandleUnknown,
-  ParamOptions,
   QueryParam,
   ValidateParams,
 } from '#router/internal/types';
+import type { ParamOptions } from '#router/types';
 
 /**
  * Declares the path's query params for `createPath`; place it after the
