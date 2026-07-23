@@ -635,14 +635,12 @@ function detach(
   listener: ChangeListener | undefined,
   isLoad: boolean
 ) {
-  const self = this;
-
   if (listener) {
     removeListener(control!, listener);
   }
 
   if (isLoad) {
-    loadDetach(self);
+    loadDetach(this);
   }
 }
 
@@ -677,9 +675,7 @@ function errorDetach(
 }
 
 function registryDelete(this: Registry<any, any>, ...keys: any[]) {
-  const self = this;
-
-  const registryDepth = self._depth;
+  const registryDepth = this._depth;
 
   if (registryDepth == 0) {
     return false;
@@ -689,13 +685,13 @@ function registryDelete(this: Registry<any, any>, ...keys: any[]) {
 
   const endIndex = depth - 1;
 
-  let storage = self._storage;
+  let storage = this._storage;
 
   for (let i = 0; true; i++) {
     const keyValue = keys[i];
 
     if (keyValue && keyValue[INTERNALS]) {
-      let bound = self._bound;
+      let bound = this._bound;
 
       for (let j = 0; j < endIndex && bound; j++) {
         bound = bound.get(keyToBoundKey(keys[j]));

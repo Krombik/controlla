@@ -39,15 +39,17 @@ function plainNotify(this: Notifier, lane: Lane, sub: Subscription) {
 }
 
 function commitSet(this: Subscription) {
-  const prevValues = this._prevValues;
+  const self = this;
+
+  const prevValues = self._prevValues;
 
   if (prevValues !== false) {
-    this._prevValues = undefined;
+    self._prevValues = undefined;
   }
 
-  this._cleanup();
+  self._cleanup();
 
-  this._cleanup = this._callback(this._values, prevValues || undefined) || noop;
+  self._cleanup = self._callback(self._values, prevValues || undefined) || noop;
 }
 
 const watchValues = ((
