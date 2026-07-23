@@ -192,6 +192,22 @@ assert.deepEqual(lengthSeen, [4, 1], 'length notifies only when count changes');
 assert.equal(getValue($list.length), 1, 'length current');
 unLength();
 
+// `.length` under an async parent: the readonly length child reads through an
+// unloaded root as Nil, then the count once the array resolves
+const $asyncList = createAsyncControl<number[]>();
+assert.equal(
+  getValue($asyncList.length),
+  undefined,
+  'length under async parent: Nil while unloaded'
+);
+setValue($asyncList, [1, 2, 3, 4, 5]);
+await tick();
+assert.equal(
+  getValue($asyncList.length),
+  5,
+  'length under async parent: count once resolved'
+);
+
 // a derived over a BOUND control's child must recompute: the derived has to
 // activate the source child on the bound target, not just retain its load
 const boundReg = createRegistry(createAsyncControl, {
