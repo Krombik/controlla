@@ -340,11 +340,16 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
       }
     }
 
-    if (!lane._patchByControl.has(urlFinalizer)) {
-      addToLevel(lane, urlFinalizer);
-    }
+    const queuedFinalizer = lane._patchByControl.get(urlFinalizer) as
+      RouterPatch | undefined;
 
-    lane._patchByControl.set(urlFinalizer, patch);
+    if (queuedFinalizer === undefined) {
+      addToLevel(lane, urlFinalizer);
+
+      lane._patchByControl.set(urlFinalizer, patch);
+    } else if (!queuedFinalizer._navigation) {
+      lane._patchByControl.set(urlFinalizer, patch);
+    }
   };
 
   urlFinalizer._commitSet = (patch: RouterPatch, lane) => {
