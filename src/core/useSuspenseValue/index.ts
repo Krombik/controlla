@@ -85,9 +85,7 @@ const useSuspenseValue: {
 
   useNoopLayoutEffect();
 
-  if (safeReturn) {
-    return [undefined, undefined];
-  }
+  return safeReturn ? [undefined, undefined] : undefined;
 };
 
 export default useSuspenseValue;
