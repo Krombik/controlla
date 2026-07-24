@@ -370,11 +370,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
       const currentSearch = route._currentSearch;
 
       if (currentSearch) {
-        if (search) {
-          search += '&' + currentSearch;
-        } else {
-          search = '?' + currentSearch;
-        }
+        search = search ? search + '&' + currentSearch : '?' + currentSearch;
       }
     }
 

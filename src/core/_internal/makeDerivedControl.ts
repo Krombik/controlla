@@ -133,7 +133,7 @@ const makeDerivedControl = (params: any[]) => {
       );
 
       // activate the source (no-op unless it's a bound child) so its value
-      internals._root._attach(internals, undefined, false);
+      root._attach(internals, undefined, false);
 
       values[i] = internals._get();
     }
@@ -186,7 +186,7 @@ const makeDerivedControl = (params: any[]) => {
       })
     );
 
-    internals._root._attach(internals, undefined, false);
+    root._attach(internals, undefined, false);
   }
 
   (derivedRoot as Mutable<typeof derivedRoot>)._level = maxLevel + 1;

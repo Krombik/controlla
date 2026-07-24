@@ -154,11 +154,7 @@ const useLink = ({
     }
 
     if (searchChunk) {
-      if (search) {
-        search += '&' + searchChunk;
-      } else {
-        search = '?' + searchChunk;
-      }
+      search = search ? search + '&' + searchChunk : '?' + searchChunk;
     }
   }
 

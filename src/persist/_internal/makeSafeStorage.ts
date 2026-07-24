@@ -24,11 +24,7 @@ const makeSafeStorage = (storage: Storage) => {
         const listeners = subscriptions.get(key);
 
         if (listeners) {
-          let storageValue: string | undefined | null = e.newValue;
-
-          if (storageValue === null) {
-            storageValue = undefined;
-          }
+          const storageValue = e.newValue ?? undefined;
 
           for (let i = 0; i < listeners.length; i++) {
             listeners[i](storageValue);
