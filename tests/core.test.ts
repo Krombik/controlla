@@ -251,6 +251,31 @@ await tick();
 assert.equal(getValue($outerDerived), 6, 'derived over loadable derived');
 relOuter();
 
+// a bound control with an OBJECT key must resolve to the same stored control
+// as `.get` with a structurally-equal object — the bound target keys by the
+// same storage key as `.get`/the loader, not by object identity. Otherwise a
+// value written via `.get(obj)` never reaches a control bound to a control
+// that yields an equal object (e.g. a registry keyed by a derived params obj).
+const objReg = createRegistry(
+  createControl,
+  (key: { dest: string }, page: number) => ({ n: key.dest, page })
+);
+const $objKey = createPrimitiveControl({ dest: 'x' });
+const $objBound = objReg.bind($objKey, 0) as any;
+assert.deepEqual(
+  getValue($objBound),
+  { n: 'x', page: 0 },
+  'object-key bound initial'
+);
+// write through `.get` with a DIFFERENT object reference of equal content
+setValue(objReg.get({ dest: 'x' }, 0), { n: 'CHANGED', page: 0 });
+await tick();
+assert.deepEqual(
+  getValue($objBound),
+  { n: 'CHANGED', page: 0 },
+  'object-key bound and .get share one control for structurally-equal keys'
+);
+
 release();
 rel2();
 console.log('core-smoke.test.ts: all assertions passed');

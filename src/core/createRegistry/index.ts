@@ -230,24 +230,28 @@ const getNextTarget = (registry: Registry<any, any>, keys: any[]) => {
       return;
     }
 
-    nextStorage = nextStorage && storage.get(key);
+    const storageKey = getStorageKey(key);
+
+    nextStorage = nextStorage && storage.get(storageKey);
 
     if (nextStorage) {
       storage = nextStorage;
     } else {
-      storage.set(key, (storage = new Map()));
+      storage.set(storageKey, (storage = new Map()));
     }
   }
 
   const key = keys[endIndex];
 
   if (key !== undefined) {
+    const storageKey = getStorageKey(key);
+
     let control: ControlScope | Control | AsyncControlScope =
-      nextStorage && storage.get(key);
+      nextStorage && storage.get(storageKey);
 
     if (control === undefined) {
       storage.set(
-        key,
+        storageKey,
         (control = registry._createControl(
           registry._initArg,
           registry._externalStorage,
