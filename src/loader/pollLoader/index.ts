@@ -138,12 +138,16 @@ function groupLoad(
 
     fetch(...keys).then(
       (value) => {
-        if (handle.stillLoading() && handle.setValue(value, group._scheduler)) {
+        if (
+          handle.stillLoading() && group._isRunning
+            ? handle.setValue(value, group._scheduler)
+            : true
+        ) {
           tickGroup(group, interval);
         }
       },
       (error) => {
-        if (handle.stillLoading()) {
+        if (group._isRunning && handle.stillLoading()) {
           handle.setError(error, group._scheduler);
         }
       }
@@ -267,9 +271,9 @@ function load(
         item._isIdle = true;
 
         if (
+          item._isRunning &&
           handle.stillLoading() &&
           handle.setValue(value, scheduler) &&
-          item._isRunning &&
           item._timerId == null
         ) {
           schedule();
@@ -278,7 +282,7 @@ function load(
       (error) => {
         item._isIdle = true;
 
-        if (handle.stillLoading()) {
+        if (item._isRunning && handle.stillLoading()) {
           handle.setError(error, scheduler);
         }
       }
