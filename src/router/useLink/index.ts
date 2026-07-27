@@ -12,6 +12,7 @@ import useForceRerender from '#internal/useForceRerender';
 import useNoopLayoutEffect from '#internal/useNoopLayoutEffect';
 import useInternalsValue from '#internal/useInternalsValue';
 import throwNotMatched from '#router/internal/throwNotMatched';
+import fillDefaults from '#router/internal/fillDefaults';
 
 export type LinkOptions = {
   /** The navigation target. */
@@ -111,13 +112,15 @@ const useLink = ({
     if (targetIndex < targetParamsCount && targetParam!._route == route) {
       const { _params } = targetParam!;
 
-      const params =
+      const params = fillDefaults(
+        route,
         typeof _params == 'function'
           ? _params(useInternalsValue(route._params!, forceRerender))
           : (exact
               ? useInternalsValue(route._params!, forceRerender)
               : useNoopLayoutEffect(),
-            _params);
+            _params)
+      );
 
       pathChunk = route._buildPath(params, true, true);
 

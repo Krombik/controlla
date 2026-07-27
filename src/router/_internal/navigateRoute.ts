@@ -8,6 +8,7 @@ import { getSchedulerLane, scheduleFlush } from '#internal/flushQueue';
 import queueRouterPatch from '#router/internal/queueRouterPatch';
 import { clearWrites, paramsHandler } from '#router/internal/state';
 import throwNotMatched from '#router/internal/throwNotMatched';
+import fillDefaults from '#router/internal/fillDefaults';
 
 const navigateRoute = (
   methods: RouteMethods,
@@ -47,8 +48,10 @@ const navigateRoute = (
 
         updates.push({
           _root: paramsRoot,
-          _params:
-            typeof _params == 'function' ? _params(paramsRoot._value) : _params,
+          _params: fillDefaults(
+            route,
+            typeof _params == 'function' ? _params(paramsRoot._value) : _params
+          ),
           _path: undefined,
         });
       } else if (!route._isMatched._value) {

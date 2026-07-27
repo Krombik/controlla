@@ -27,7 +27,7 @@ const stringifyArray = (value: string[], key: string) => {
  * ```
  */
 const arrayParam = ((param: Record<string, ArrayParamOptions<any> | false>) =>
-  (parsers, stringifies, pathParams, path) => {
+  (parsers, stringifies, pathParams, path, _) => {
     const name = Object.keys(param)[0];
 
     const options = param[name];
@@ -41,14 +41,14 @@ const arrayParam = ((param: Record<string, ArrayParamOptions<any> | false>) =>
       : (parseArray as never);
 
     stringifies[name] = stringify
-      ? (value, name) => stringifyArray(stringify(value), name)
-      : stringifyArray;
+      ? (value) => stringifyArray(stringify(value), name)
+      : (value) => stringifyArray(value, name);
 
     path.push(name);
 
     pathParams.push(name);
 
-    return `(?:/(?<${name}>(?:[^/]+(?:/[^/]+)*)))?`;
+    return `/(?<${name}>[^/]+(?:/[^/]+)*)`;
   }) as {
   <
     Values extends Record<string, unknown>,

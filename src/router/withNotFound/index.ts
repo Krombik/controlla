@@ -5,7 +5,15 @@ import NOT_FOUND from '#router/NOT_FOUND';
 
 const NAME = 'notFoundPath';
 
-const notFoundPath = createPath(((parsers, stringifies, pathParams, path) => {
+// the trailing `defaults` is unused, but `handlePath` tells a path declarator
+// from a query one by arity
+const notFoundPath = createPath(((
+  parsers,
+  stringifies,
+  pathParams,
+  path,
+  _
+) => {
   parsers[NAME] = (value) => value || '';
 
   stringifies[NAME] = identity;

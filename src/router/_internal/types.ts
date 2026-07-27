@@ -11,6 +11,7 @@ import type {
   Lane,
   PendingItem,
   PrimitiveControlInternals,
+  ControlInternalsChild,
 } from '#internal/types';
 import type {
   AnchorScrollOptions,
@@ -216,11 +217,20 @@ export type NavigationState = {
   readonly delta: number;
 };
 
+/**
+ * Flat `[name, getDefaultValue, ...]` pairs of the params declaring a
+ * `defaultValue`.
+ *
+ * @internal
+ */
+export type ParamDefaults = Array<string | ((source: any) => any)>;
+
 /** @internal */
 export type RouteData = {
   readonly _params: ControlInternals | DerivedControlInternals | null;
   readonly _isMatched: PrimitiveControlInternals;
   readonly _anchor: AnchorParam | undefined;
+  readonly _source: ControlInternalsChild | undefined;
   _buildPath<T extends boolean>(
     params: Record<string, any>,
     typed: boolean,
@@ -243,6 +253,7 @@ export type RouteData = {
     source: any,
     initial: boolean
   ): void;
+  readonly _defaults: ParamDefaults;
   _initial?: boolean;
   _currentPath: string;
   _currentSearch: string;
@@ -318,7 +329,7 @@ export type ParamParser = (
 ) => any;
 
 /** @internal */
-export type ParamStringifier = (value: any, key: string) => string;
+export type ParamStringifier = (value: any) => string;
 
 type ParamData<V, O extends boolean> = [V, O];
 
@@ -330,7 +341,8 @@ export type QueryParam<
   (
     parsers: Record<string, ParamParser>,
     stringifies: Record<string, ParamStringifier>,
-    queryParams: string[]
+    queryParams: string[],
+    defaults: ParamDefaults
   ): void;
   [QUERY_PARAM_MARKER]: P;
   [SOURCE]: Source;
@@ -345,7 +357,8 @@ export type PathParam<
     parsers: Record<string, ParamParser>,
     stringifies: Record<string, ParamStringifier>,
     pathParams: string[],
-    path: string[]
+    path: string[],
+    defaults: ParamDefaults
   ): string;
   [PATH_PARAM_MARKER]: P;
   [SOURCE]: Source;
@@ -583,6 +596,8 @@ export interface Path<
   readonly _parsers: Record<string, ParamParser>;
   /** @internal */
   readonly _stringifies: Record<string, ParamStringifier>;
+  /** @internal */
+  readonly _defaults: ParamDefaults;
 }
 
 export type AnyPaths = Record<string, Path<any, {}, any, boolean, string>>;

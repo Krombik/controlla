@@ -31,7 +31,7 @@ import type { ParamOptions } from '#router/types';
 const param = ((
     param: Record<string, ParamOptions<unknown, unknown, boolean> | boolean>
   ) =>
-  (parsers, stringifies, pathParams, path) => {
+  (parsers, stringifies, pathParams, path, defaults) => {
     type Options = ParamOptions<unknown, true, any>;
 
     const name = Object.keys(param)[0];
@@ -70,7 +70,13 @@ const param = ((
       initialValue
     );
 
-    stringifies[name] = handleStringify(stringify, optional, defaultValue);
+    stringifies[name] = handleStringify(
+      name,
+      stringify,
+      optional,
+      defaultValue,
+      defaults
+    );
 
     pathParams.push(name);
 

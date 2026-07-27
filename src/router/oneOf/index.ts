@@ -14,7 +14,7 @@ import type { OneOfOptions } from '#router/types';
  * ```
  */
 const oneOf = ((param: Record<string, OneOfOptions<string[], true>>) =>
-  (parsers, stringifies, pathParams, path) => {
+  (parsers, stringifies, pathParams, path, defaults) => {
     const name = Object.keys(param)[0];
 
     const { optional, variants, defaultValue } = param[name];
@@ -27,7 +27,13 @@ const oneOf = ((param: Record<string, OneOfOptions<string[], true>>) =>
       optional && defaultValue ? (value) => value || defaultValue : identity;
 
     // no variant check on write: the union type is the validation
-    stringifies[name] = handleStringify(undefined, optional, defaultValue);
+    stringifies[name] = handleStringify(
+      name,
+      undefined,
+      optional,
+      defaultValue,
+      defaults
+    );
 
     path.push(name);
 

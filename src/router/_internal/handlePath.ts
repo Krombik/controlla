@@ -1,4 +1,5 @@
 import type {
+  ParamDefaults,
   ParamParser,
   ParamStringifier,
   Path,
@@ -44,6 +45,8 @@ const handlePath = (
 
   const stringifies: Record<string, ParamStringifier> = {};
 
+  const defaults: ParamDefaults = [];
+
   const _path: string[] = [];
 
   const pathParams: string[] = [];
@@ -71,9 +74,9 @@ const handlePath = (
       last = path[--end - 1];
     }
 
-    // query declarators take 3 args, path param declarators 4
-    if (end && typeof last == 'function' && last.length == 3) {
-      (last as QueryParam<{}>)(parsers, stringifies, queryParams);
+    // query declarators take 4 args, path param declarators 5
+    if (end && typeof last == 'function' && last.length == 4) {
+      (last as QueryParam<{}>)(parsers, stringifies, queryParams, defaults);
 
       end--;
     }
@@ -85,7 +88,7 @@ const handlePath = (
     regexStr +=
       typeof segment == 'string'
         ? handleSegment(segment, _path)
-        : segment(parsers, stringifies, pathParams, _path);
+        : segment(parsers, stringifies, pathParams, _path, defaults);
   }
 
   return {
@@ -99,6 +102,7 @@ const handlePath = (
     _anchor: anchorParam,
     _source: source,
     _createControlScope: createControlScope,
+    _defaults: defaults,
   } as Path;
 };
 

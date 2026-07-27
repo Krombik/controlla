@@ -50,7 +50,10 @@ export type ArrayParamOptions<V> = {
 export type ParamOptions<Value, O = false, Source = never> = {
   /** Parses the raw URL string into the typed value (identity by default). */
   parse?(value: string, source: Source): Value;
-  /** Turns the value back into its URL string (identity by default). */
+  /**
+   * Turns the value back into its URL string (identity by default).
+   * Returning `''` drops the param from the URL.
+   */
   stringify?(value: NoInfer<Value>): string;
   /** Marks the param as optional: the URL may omit it. */
   optional?: O;

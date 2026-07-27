@@ -1,29 +1,22 @@
 import identity from '#internal/identity';
-import type { ParamStringifier } from '#router/internal/types';
-import nonUndefinedIdentity from '#router/internal/nonUndefinedIdentity';
+import type { ParamDefaults, ParamStringifier } from '#router/internal/types';
 
 const handleStringify = (
+  name: string,
   stringify: ((value: any) => string) | undefined,
   optional: boolean | undefined,
-  defaultValue: undefined | unknown | (() => unknown)
+  defaultValue: any,
+  defaults: ParamDefaults
 ): ParamStringifier => {
-  if (optional) {
-    const getDefaultValue =
-      defaultValue !== undefined &&
-      (typeof defaultValue != 'function' ? () => defaultValue : defaultValue);
-
-    return stringify
-      ? getDefaultValue
-        ? (value) => stringify(value !== undefined ? value : getDefaultValue())
-        : (value) => (value !== undefined ? stringify(value) : value)
-      : getDefaultValue
-        ? (value) => (value !== undefined ? value : getDefaultValue())
-        : identity;
+  if (optional && defaultValue !== undefined) {
+    defaults.push(
+      name,
+      typeof defaultValue != 'function' ? () => defaultValue : defaultValue
+    );
   }
 
-  return stringify
-    ? (value, key) => stringify(nonUndefinedIdentity(value, key))
-    : nonUndefinedIdentity;
+  // an absent param never reaches here - the URL builders skip it
+  return stringify || identity;
 };
 
 export default handleStringify;

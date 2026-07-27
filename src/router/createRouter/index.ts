@@ -473,6 +473,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
         _anchor,
         _source,
         _createControlScope,
+        _defaults,
       } = paths[key];
 
       const pathParamsCount = _pathParams.length;
@@ -507,15 +508,21 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
                 } else {
                   const param = params[item];
 
-                  const value = typed
-                    ? _stringifies[item](param !== '' ? param : undefined, item)
-                    : param || undefined;
+                  let value: string | undefined;
+
+                  // an absent param skips its stringifier, and a stringifier
+                  // dropping the param by returning `''` reads as absent too
+                  if (param !== undefined && param !== '') {
+                    value = typed
+                      ? _stringifies[item](param)
+                      : (param as string);
+
+                    if (value !== '') {
+                      str += '/' + value;
+                    }
+                  }
 
                   store(item, value);
-
-                  if (value !== undefined) {
-                    str += '/' + value;
-                  }
                 }
               }
 
@@ -537,19 +544,19 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
                 const param = params[name];
 
-                const value = typed
-                  ? _stringifies[name](param !== '' ? param : undefined, name)
-                  : param || undefined;
+                let value: string | undefined;
 
-                store(name, value);
+                if (param !== undefined && param !== '') {
+                  value = typed ? _stringifies[name](param) : (param as string);
 
-                if (value !== undefined) {
-                  if (search) {
-                    search += `&${name}=${encodeURIComponent(value)}`;
-                  } else {
-                    search = `${name}=${encodeURIComponent(value)}`;
+                  if (value !== '') {
+                    search = search
+                      ? `${search}&${name}=${encodeURIComponent(value)}`
+                      : `${name}=${encodeURIComponent(value)}`;
                   }
                 }
+
+                store(name, value);
               }
 
               if (peek) {
@@ -566,6 +573,8 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
         _isMatched: isMatchedRoot,
         _anchor: _anchor,
         _params: null,
+        _defaults,
+        _source: _source && _source[INTERNALS],
       };
 
       withPathParams ||= !!pathParamsCount;

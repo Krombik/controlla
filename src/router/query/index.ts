@@ -27,7 +27,7 @@ import type { ParamOptions } from '#router/types';
 const query = ((
     params: Record<string, ParamOptions<unknown, unknown, boolean> | boolean>
   ) =>
-  (parsers, stringifies, queryParams) => {
+  (parsers, stringifies, queryParams, defaults) => {
     type Options = ParamOptions<unknown, true, any>;
 
     const keys = Object.keys(params);
@@ -67,7 +67,13 @@ const query = ((
         initialValue
       );
 
-      stringifies[name] = handleStringify(stringify, optional, defaultValue);
+      stringifies[name] = handleStringify(
+        name,
+        stringify,
+        optional,
+        defaultValue,
+        defaults
+      );
 
       queryParams.push(name);
     }
