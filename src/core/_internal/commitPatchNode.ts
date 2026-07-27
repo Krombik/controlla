@@ -4,6 +4,7 @@ import type {
   ControlInternalsChild,
 } from '#internal/types';
 import { notify } from '#internal/flushQueue';
+import reportError from '#internal/reportError';
 
 export const UNCHANGED = Symbol();
 
@@ -377,9 +378,15 @@ export const commitPatchNode = (
   }
 
   if (prevValue == null || typeof prevValue != 'object') {
-    throw new Error(
-      `Cannot set properties of ${prevValue !== null ? typeof prevValue : 'null'}`
+    // the patch targets a subtree that is not there - drop it, a sibling key
+    // still commits
+    reportError(
+      new Error(
+        `Cannot set properties of ${prevValue !== null ? typeof prevValue : 'null'}`
+      )
     );
+
+    return UNCHANGED;
   }
 
   const keys = patchNode._patchedKeys;

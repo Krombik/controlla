@@ -51,6 +51,7 @@ import queueRouterPatch from '#router/internal/queueRouterPatch';
 import removeFromArray from '#internal/removeFromArray';
 import scheduleSet from '#internal/scheduleSet';
 import throwNotMatched from '#router/internal/throwNotMatched';
+import reportError from '#internal/reportError';
 
 type HistoryState = {
   idx?: number;
@@ -69,13 +70,18 @@ const beforeUnloadListener = (e: BeforeUnloadEvent) => {
 };
 
 const saveScroll = (state: HistoryState | null) => {
-  history.replaceState(
-    {
-      ...state,
-      scroll: [window.scrollX, window.scrollY],
-    } satisfies HistoryState,
-    ''
-  );
+  try {
+    history.replaceState(
+      {
+        ...state,
+        scroll: [window.scrollX, window.scrollY],
+      } satisfies HistoryState,
+      ''
+    );
+  } catch (err) {
+    // best effort: a refused write only costs the restored scroll position
+    reportError(err);
+  }
 };
 
 /**
@@ -400,35 +406,44 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
     if (path != location.pathname + location.search + location.hash) {
       const state = history.state;
 
-      if (patch._replace) {
-        history.replaceState(state, '', path);
+      try {
+        if (patch._replace) {
+          history.replaceState(state, '', path);
 
-        if (!nav || !nav._isHistoryEvent) {
-          navigationStateRoot._enqueueSet(
-            { action: 'replace', delta: 0 },
-            lane
+          if (!nav || !nav._isHistoryEvent) {
+            navigationStateRoot._enqueueSet(
+              { action: 'replace', delta: 0 },
+              lane
+            );
+          }
+        } else {
+          if (
+            nav &&
+            (nav._scrollRestoration == null
+              ? nav._isNewPage
+              : nav._scrollRestoration)
+          ) {
+            saveScroll(state);
+          }
+
+          history.pushState(
+            {
+              ...state,
+              idx: currentHistoryIndex + 1,
+            } satisfies HistoryState,
+            '',
+            path
           );
-        }
-      } else {
-        if (
-          nav &&
-          (nav._scrollRestoration == null
-            ? nav._isNewPage
-            : nav._scrollRestoration)
-        ) {
-          saveScroll(state);
-        }
 
-        history.pushState(
-          {
-            ...state,
-            idx: ++currentHistoryIndex,
-          } satisfies HistoryState,
-          '',
-          path
-        );
+          // only once the entry exists, or the index outruns the real history
+          currentHistoryIndex++;
 
-        navigationStateRoot._enqueueSet({ action: 'push', delta: 1 }, lane);
+          navigationStateRoot._enqueueSet({ action: 'push', delta: 1 }, lane);
+        }
+      } catch (err) {
+        // the browser refused the write - safari throttles history to 100 calls
+        // per 30s - so the url stays behind while the params are committed
+        reportError(err);
       }
     }
 
