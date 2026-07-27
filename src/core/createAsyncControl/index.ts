@@ -30,6 +30,7 @@ import {
 } from '#internal/commitPatchNode';
 import {
   attachAsync,
+  checkLoading,
   cleanupLoad,
   detachAsync,
   errorAttachAsync,
@@ -168,11 +169,7 @@ function commitAsyncSet(
     internals._setExternal(nextValue);
 
     if (nextValue !== undefined) {
-      nextLoadingValue = !internals._isLoaded(
-        nextValue,
-        prevValue,
-        internals._attempt
-      );
+      nextLoadingValue = checkLoading(internals, nextValue, prevValue);
 
       nextReadyValue = true;
 

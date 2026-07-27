@@ -27,6 +27,7 @@ import {
   type DerivedControlInternals,
 } from '#internal/derivedControlUtils';
 import { notify } from '#internal/flushQueue';
+import reportError from '#internal/reportError';
 
 function commitSet(
   this: DerivedControlInternals,
@@ -46,13 +47,19 @@ function commitSet(
 
     root._upToDate = true;
 
-    // single-dependency mode keeps the latest source value itself in _values
-    if (root._isSingleDependency) {
-      next = root._mapper(root._values);
+    try {
+      // single-dependency mode keeps the latest source value itself in _values
+      if (root._isSingleDependency) {
+        next = root._mapper(root._values);
 
-      root._values = undefined;
-    } else {
-      next = root._mapper(...root._values);
+        root._values = undefined;
+      } else {
+        next = root._mapper(...root._values);
+      }
+    } catch (err) {
+      reportError(err);
+
+      return;
     }
 
     nextValue = commitNextValue(next, prevValue, root, lane);

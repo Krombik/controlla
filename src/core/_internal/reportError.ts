@@ -1,5 +1,5 @@
 /** `reportError` is a Web API - off-platform an async throw surfaces the same. */
-const report: (error: any) => void =
+const reportError: (error: any) => void =
   globalThis.reportError ||
   ((error) => {
     setTimeout(() => {
@@ -7,4 +7,4 @@ const report: (error: any) => void =
     });
   });
 
-export default report;
+export default reportError;

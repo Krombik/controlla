@@ -601,9 +601,13 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
         paramsRoot._setExternal = (value) => {
           if (value !== undefined) {
-            routeData._buildPath(value, true, false);
+            try {
+              routeData._buildPath(value, true, false);
 
-            routeData._buildSearch(value, true, false);
+              routeData._buildSearch(value, true, false);
+            } catch (err) {
+              reportError(err);
+            }
           }
         };
 

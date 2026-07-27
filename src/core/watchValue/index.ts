@@ -2,6 +2,7 @@ import type { ChangeListener } from '#internal/types';
 import { INTERNALS } from '#internal/constants';
 import type { ReadonlyAsyncControl, ReadonlyControl } from '#types';
 import noop from '#internal/noop';
+import reportError from '#internal/reportError';
 
 const watchValue: {
   /**
@@ -58,20 +59,41 @@ const watchValue: {
   const root = internals._root;
 
   const effect: ChangeListener = (value, prevValue) => {
-    cleanup();
+    try {
+      cleanup();
+    } catch (err) {
+      reportError(err);
+    }
 
-    cleanup = callback(value, prevValue) || noop;
+    try {
+      cleanup = callback(value, prevValue) || noop;
+    } catch (err) {
+      reportError(err);
+
+      cleanup = noop;
+    }
   };
 
-  let cleanup: () => void =
-    (immediate && callback(internals._get(), undefined)) || noop;
+  let cleanup: () => void = noop;
+
+  if (immediate) {
+    try {
+      cleanup = callback(internals._get(), undefined) || noop;
+    } catch (err) {
+      reportError(err);
+    }
+  }
 
   root._attach(internals, effect, false);
 
   return () => {
     root._detach(internals, effect, false);
 
-    cleanup();
+    try {
+      cleanup();
+    } catch (err) {
+      reportError(err);
+    }
 
     cleanup = callback = noop;
   };

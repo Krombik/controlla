@@ -5,6 +5,7 @@ import { EMPTY_ARR, INTERNALS } from '#internal/constants';
 import attachNotifier from '#internal/attachNotifier';
 import addToQueue from '#internal/addToQueue';
 import removeFromArray from '#internal/removeFromArray';
+import reportError from '#internal/reportError';
 
 type Subscription = {
   _level: number;
@@ -55,9 +56,20 @@ function commitSet(this: Subscription) {
     self._prevValues = undefined;
   }
 
-  self._cleanup();
+  try {
+    self._cleanup();
+  } catch (err) {
+    reportError(err);
+  }
 
-  self._cleanup = self._callback(self._values, prevValues || undefined) || noop;
+  try {
+    self._cleanup =
+      self._callback(self._values, prevValues || undefined) || noop;
+  } catch (err) {
+    reportError(err);
+
+    self._cleanup = noop;
+  }
 }
 
 const watchValues = ((
@@ -119,8 +131,12 @@ const watchValues = ((
   sub._level = maxLevel + 1;
 
   if (immediate) {
-    sub._cleanup =
-      callback(values, callbackArity > 1 ? Array(count) : undefined) || noop;
+    try {
+      sub._cleanup =
+        callback(values, callbackArity > 1 ? Array(count) : undefined) || noop;
+    } catch (err) {
+      reportError(err);
+    }
   }
 
   return () => {
@@ -134,7 +150,11 @@ const watchValues = ((
       notifier._source = undefined;
     }
 
-    sub._cleanup();
+    try {
+      sub._cleanup();
+    } catch (err) {
+      reportError(err);
+    }
 
     sub._cleanup = noop;
   };

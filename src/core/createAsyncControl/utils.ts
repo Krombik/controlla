@@ -8,6 +8,7 @@ import scheduleMicrotask from '#internal/scheduleMicrotask';
 import { addListener, notify, removeListener } from '#internal/flushQueue';
 import { EMPTY_ARR, SILENT_RELOAD, INTERNALS } from '#internal/constants';
 import scheduleSet from '#internal/scheduleSet';
+import reportError from '#internal/reportError';
 
 const visibilityChangeQueue: AsyncControlInternals[] = [];
 
@@ -41,40 +42,61 @@ const endLoad = (internals: AsyncControlInternals) => {
   cleanupLoad(load);
 };
 
+export const checkLoading = (
+  internals: AsyncControlInternals,
+  nextValue: any,
+  prevValue: any
+) => {
+  const isLoaded = internals._isLoaded;
+
+  try {
+    return !isLoaded(nextValue, prevValue, internals._attempt);
+  } catch (err) {
+    reportError(err);
+
+    // a thrower must not read as still loading, or a poll retries forever
+    return false;
+  }
+};
+
 export const triggerLoad = (internals: AsyncControlInternals) => {
   const data = internals._load!;
 
   const { _slowLoadMonitor } = data;
 
+  const handle: Parameters<NonNullable<typeof data._options.load>>[0] = {
+    setValue(value, scheduler) {
+      const isLoading = checkLoading(internals, value, internals._value);
+
+      if (!isLoading) {
+        endLoad(internals);
+      }
+
+      scheduleSet(internals, value, scheduler);
+
+      return isLoading;
+    },
+    setError(value, scheduler) {
+      endLoad(internals);
+
+      scheduleSet(internals._errorControl[INTERNALS], value, scheduler);
+    },
+    stillLoading: () => !data._loadedAt,
+    getValue: () => internals._value,
+  };
+
   data._loadedAt = 0;
 
-  data._cleanup = data._options.load!(
-    {
-      setValue(value, scheduler) {
-        const isLoaded = internals._isLoaded(
-          value,
-          internals._value,
-          internals._attempt
-        );
+  try {
+    data._cleanup = data._options.load!(handle, data._keys!);
+  } catch (err) {
+    data._cleanup = undefined;
 
-        if (isLoaded) {
-          endLoad(internals);
-        }
+    // the control has an error control - surface it there instead of hanging
+    handle.setError(err);
 
-        scheduleSet(internals, value, scheduler);
-
-        return !isLoaded;
-      },
-      setError(value, scheduler) {
-        endLoad(internals);
-
-        scheduleSet(internals._errorControl[INTERNALS], value, scheduler);
-      },
-      stillLoading: () => !data._loadedAt,
-      getValue: () => internals._get(),
-    },
-    data._keys!
-  );
+    return;
+  }
 
   if (_slowLoadMonitor) {
     _slowLoadMonitor._timerId = setTimeout(() => {
@@ -99,7 +121,13 @@ export const cleanupLoad = (
   const { _slowLoadMonitor } = load;
 
   if (load._cleanup) {
-    load._cleanup = load._cleanup();
+    try {
+      load._cleanup = load._cleanup();
+    } catch (err) {
+      load._cleanup = undefined;
+
+      reportError(err);
+    }
   }
 
   if (_slowLoadMonitor && _slowLoadMonitor._timerId != null) {

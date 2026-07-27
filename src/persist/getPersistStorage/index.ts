@@ -52,15 +52,13 @@ const getPersistStorage = <T>({
           const str = storage.getItem(key);
 
           if (str != null) {
-            let value: T;
-
             try {
-              value = converter.parse(str);
-            } catch {
-              return;
-            }
+              const value = converter.parse(str);
 
-            return isValid(value) ? value : undefined;
+              if (isValid(value)) {
+                return value;
+              }
+            } catch {}
           }
         },
         set(value) {
@@ -79,17 +77,13 @@ const getPersistStorage = <T>({
             ? (onChange) =>
                 storage.listen!(key, (value) => {
                   if (value !== undefined) {
-                    let parsedValue: T;
-
                     try {
-                      parsedValue = converter.parse(value);
-                    } catch {
-                      return;
-                    }
+                      const parsedValue = converter.parse(value);
 
-                    if (isValid(parsedValue)) {
-                      onChange(parsedValue);
-                    }
+                      if (isValid(parsedValue)) {
+                        onChange(parsedValue);
+                      }
+                    } catch {}
                   } else {
                     onChange(undefined);
                   }

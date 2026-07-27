@@ -9,6 +9,8 @@ const makeSafeStorage = (storage: Storage) => {
 
     storage.setItem(testKey, '');
 
+    storage.getItem(testKey);
+
     storage.removeItem(testKey);
   } catch {
     return;
