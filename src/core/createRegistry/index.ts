@@ -172,6 +172,8 @@ const cleanupPrevTarget = (root: BoundInternals) => {
       removeFromArray(notifier._attachedTo!, notifier);
 
       notifier._attachedTo = EMPTY_ARR;
+
+      notifier._source = undefined;
     }
 
     if (root._changedNodes.length) {
@@ -534,15 +536,16 @@ const attachNotifierToTargetNode = (
         key = path[++i];
       }
 
-      children.set(
-        key,
-        makeChildNode(
-          root,
-          path,
-          undefined,
-          (notifier._attachedTo = [notifier])
-        )
+      const node = makeChildNode(
+        root,
+        path,
+        undefined,
+        (notifier._attachedTo = [notifier])
       );
+
+      notifier._source = node;
+
+      children.set(key, node);
 
       return;
     }
@@ -609,6 +612,7 @@ function attach(
       _notify: childNodeNotify,
       _index: 0,
       _attachedTo: EMPTY_ARR,
+      _source: undefined,
     };
 
     (control as Mutable<typeof control>)._boundData = {
@@ -724,6 +728,8 @@ function registryDelete(this: Registry<any, any>, ...keys: any[]) {
           const notifier = notifiers[i];
 
           removeFromArray(notifier._attachedTo!, notifier);
+
+          notifier._source = undefined;
         }
       }
 
@@ -961,6 +967,7 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
         _notify: addToQueue,
         _index: 0,
         _attachedTo: EMPTY_ARR,
+        _source: undefined,
       };
 
       (boundInternals as Mutable<BoundInternals>)._selfNotifier = rootNotifier;
@@ -1000,6 +1007,7 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
               _notify: keyErrorChangeNotify,
               _index: j,
               _attachedTo: EMPTY_ARR,
+              _source: undefined,
             };
 
             if (errors === undefined) {
@@ -1023,6 +1031,7 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
             _notify: keyChangeNotify,
             _index: j,
             _attachedTo: EMPTY_ARR,
+            _source: undefined,
           };
 
           attachNotifier(internals, notifier);

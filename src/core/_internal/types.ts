@@ -49,6 +49,8 @@ export type Notifier = {
   readonly _ref: WeakRef<any>;
   readonly _index: number;
   _attachedTo: Notifier[];
+  /** Holds the source while attached - `_ref` is weak in the other direction. */
+  _source: ControlInternalsBase | undefined;
 };
 
 export interface ControlInternalsBase extends Listeners<ChangeListener> {

@@ -7,6 +7,7 @@ import type {
 } from '#internal/types';
 import type { Scheduler } from '#types';
 import scheduleMicrotask from '#internal/scheduleMicrotask';
+import reportError from '#internal/reportError';
 
 let currentLane: Lane | null = null;
 

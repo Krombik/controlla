@@ -335,6 +335,7 @@ const makeAsyncDerivedControl = (params: any[]) => {
         _notify: sourceErrorNotify,
         _index: i,
         _attachedTo: EMPTY_ARR,
+        _source: undefined,
       };
 
       attachNotifier(errorInternals, errorNotifier);
@@ -347,6 +348,7 @@ const makeAsyncDerivedControl = (params: any[]) => {
       _notify: sourceChangeNotify,
       _index: i,
       _attachedTo: EMPTY_ARR,
+      _source: undefined,
     };
 
     attachNotifier(internals, notifier);

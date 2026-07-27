@@ -11,9 +11,13 @@ const detach = (item: Control) => {
   if (Array.isArray(notifiers)) {
     for (let i = 0, l = notifiers.length; i < l; i++) {
       removeFromArray(notifiers[i]._attachedTo, notifiers[i]);
+
+      notifiers[i]._source = undefined;
     }
   } else {
     removeFromArray(notifiers._attachedTo, notifiers);
+
+    notifiers._source = undefined;
   }
 };
 

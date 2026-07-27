@@ -129,6 +129,7 @@ const makeDerivedControl = (params: any[]) => {
           _notify: sourceChangeNotify,
           _index: i,
           _attachedTo: EMPTY_ARR,
+          _source: undefined,
         })
       );
 
@@ -183,6 +184,7 @@ const makeDerivedControl = (params: any[]) => {
         _notify: sourceChangeNotify,
         _index: 0,
         _attachedTo: EMPTY_ARR,
+        _source: undefined,
       })
     );
 

@@ -100,6 +100,7 @@ const watchValues = ((
         _notify: notify,
         _index: i,
         _attachedTo: EMPTY_ARR,
+        _source: undefined,
       })
     );
   }
@@ -118,6 +119,8 @@ const watchValues = ((
       const notifier = notifiers[i];
 
       removeFromArray(notifier._attachedTo!, notifier);
+
+      notifier._source = undefined;
     }
 
     sub._cleanup();
