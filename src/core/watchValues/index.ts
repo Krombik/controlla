@@ -74,7 +74,7 @@ const watchValues = ((
     _commitSet: commitSet,
   };
 
-  const weakRef = new WeakRef(sub);
+  const strongRef = { deref: () => sub } as WeakRef<any>;
 
   const notify = callbackArity ? valuesNotify : plainNotify;
 
@@ -96,7 +96,7 @@ const watchValues = ((
     attachNotifier(
       internals,
       (notifiers[i] = {
-        _ref: weakRef,
+        _ref: strongRef,
         _notify: notify,
         _index: i,
         _attachedTo: EMPTY_ARR,
