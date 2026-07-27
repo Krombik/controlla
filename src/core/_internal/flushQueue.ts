@@ -29,25 +29,27 @@ export const notify = (
   if (listenersCount) {
     iteratedListeners = listeners;
 
-    try {
-      for (let i = 0; i < listenersCount; i++) {
+    for (let i = 0; i < listenersCount; i++) {
+      try {
         listeners[i](value, prevValue);
+      } catch (err) {
+        reportError(err);
       }
-    } finally {
-      iteratedListeners = NOT_ITERATED;
+    }
 
-      const l = deferredListenerChanges.length;
+    iteratedListeners = NOT_ITERATED;
 
-      if (l) {
-        for (let i = 0; i < l; i += 3) {
-          deferredListenerChanges[i](
-            deferredListenerChanges[i + 1],
-            deferredListenerChanges[i + 2]
-          );
-        }
+    const l = deferredListenerChanges.length;
 
-        deferredListenerChanges.length = 0;
+    if (l) {
+      for (let i = 0; i < l; i += 3) {
+        deferredListenerChanges[i](
+          deferredListenerChanges[i + 1],
+          deferredListenerChanges[i + 2]
+        );
       }
+
+      deferredListenerChanges.length = 0;
     }
   }
 
@@ -124,29 +126,25 @@ export const scheduleFlush = (lane: Lane) => {
 
       currentLane = lane;
 
-      try {
-        for (let i = 0; i < beforeFlushHooks.length; i++) {
+      for (let i = 0; i < beforeFlushHooks.length; i++) {
+        try {
           beforeFlushHooks[i]();
+        } catch (err) {
+          reportError(err);
         }
-
-        flushQueue(lane, lane._pendingControlLevels, lane._patchByControl);
-      } catch (err) {
-        lane._patchByControl.clear();
-
-        lane._pendingControlLevels.length = 0;
-
-        throw err;
-      } finally {
-        currentLane = null;
-
-        beforeFlushHooks.length = 0;
-
-        lane._minPendingLevel = Infinity;
-
-        lane._maxPendingLevel = 0;
-
-        lane._canScheduleFlush = true;
       }
+
+      flushQueue(lane, lane._pendingControlLevels, lane._patchByControl);
+
+      currentLane = null;
+
+      beforeFlushHooks.length = 0;
+
+      lane._minPendingLevel = Infinity;
+
+      lane._maxPendingLevel = 0;
+
+      lane._canScheduleFlush = true;
     });
   }
 
