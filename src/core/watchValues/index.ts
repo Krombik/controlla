@@ -17,6 +17,10 @@ type Subscription = {
   _commitSet(data: null, lane: Lane): void;
 };
 
+type StrongRef<T extends WeakKey> = WeakRef<T> & {
+  readonly _value: T;
+};
+
 function valuesNotify(
   this: Notifier,
   lane: Lane,
@@ -36,6 +40,10 @@ function valuesNotify(
 
 function plainNotify(this: Notifier, lane: Lane, sub: Subscription) {
   addToQueue(lane, sub as any);
+}
+
+function derefSelf(this: StrongRef<any>) {
+  return this._value;
 }
 
 function commitSet(this: Subscription) {
@@ -74,7 +82,10 @@ const watchValues = ((
     _commitSet: commitSet,
   };
 
-  const strongRef = { deref: () => sub } as WeakRef<any>;
+  const strongRef = {
+    _value: sub,
+    deref: derefSelf,
+  } as StrongRef<any>;
 
   const notify = callbackArity ? valuesNotify : plainNotify;
 
