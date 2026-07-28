@@ -104,7 +104,7 @@ function activate(this: AnchorParam) {
 const anchor = <Ids extends string = string>(
   options?: AnchorScrollOptions | GetAnchorScrollOptions<Ids>
 ): AnchorParam<Ids> => {
-  const hash = makePrimitiveInternals('');
+  const hash = makePrimitiveInternals(undefined);
 
   return {
     _onScrollStart: noop,

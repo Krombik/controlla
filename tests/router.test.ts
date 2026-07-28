@@ -67,6 +67,11 @@ assert.equal(
 );
 assert.equal(getValue(router.routes.home), false, 'init: home unmatched');
 assert.equal(getValue(router.routes.docs), false, 'init: docs unmatched');
+assert.equal(
+  getValue(selectAnchor(router.routes.docs)),
+  undefined,
+  'init: an unmatched anchor reads as undefined, like params'
+);
 assert.deepEqual(
   getValue(selectParams(router.routes.user)),
   { id: 5 },
@@ -281,6 +286,11 @@ assert.equal(location.pathname + location.hash, '/docs#intro', 'anchor: set');
 navigate(router.navigation.home());
 await tick();
 assert.equal(location.pathname, '/', 'anchor: left the route');
+assert.equal(
+  getValue(selectAnchor(router.routes.docs)),
+  undefined,
+  'leaving the route resets the anchor to undefined'
+);
 
 navigate(router.navigation.docs());
 await tick();
