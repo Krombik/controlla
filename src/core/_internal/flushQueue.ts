@@ -70,11 +70,13 @@ export const notify = (
 
         item = dependents[i];
       } else {
-        item = dependents.pop()!;
+        const last = dependents.pop()!;
 
         if (i == --l) {
           return;
         }
+
+        dependents[i] = item = last;
       }
     }
   }

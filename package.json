@@ -21,7 +21,7 @@
     "build": "tsdown",
     "watch": "tsdown --watch",
     "release": "tsdown && npm publish ./build",
-    "test": "tsdown && node --test --experimental-transform-types --no-warnings \"tests/*.test.ts\""
+    "test": "tsdown && node --test --expose-gc --experimental-transform-types --no-warnings \"tests/*.test.ts\""
   },
   "peerDependencies": {
     "@types/react": ">=17.0.0",
