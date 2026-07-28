@@ -139,10 +139,28 @@ function commitAsyncSet(
 
   if (patchType < PatchType.ERROR) {
     nextValue = commitPatchNode(patchNode, prevValue, internals, lane);
+
+    const value = nextValue !== UNCHANGED ? nextValue : prevValue;
+
+    if (value !== undefined) {
+      nextLoadingValue = checkLoading(internals, value, prevValue);
+
+      nextReadyValue = true;
+
+      internals._attempt = nextLoadingValue ? internals._attempt + 1 : 0;
+
+      settlePromise(internals, true, value);
+    }
   } else if (patchType == PatchType.ERROR) {
     nextValue = commitNextValue(undefined, prevValue, internals, lane);
 
     nextErrorValue = patchNode._value;
+
+    nextLoadingValue = false;
+
+    nextReadyValue = undefined;
+
+    internals._attempt = 0;
   } else if (patchType == PatchType.RELOAD) {
     nextValue = commitNextValue(undefined, prevValue, internals, lane);
 
@@ -167,24 +185,6 @@ function commitAsyncSet(
     );
 
     internals._setExternal(nextValue);
-
-    if (nextValue !== undefined) {
-      nextLoadingValue = checkLoading(internals, nextValue, prevValue);
-
-      nextReadyValue = true;
-
-      internals._attempt = nextLoadingValue ? internals._attempt + 1 : 0;
-
-      settlePromise(internals, true, nextValue);
-    }
-  }
-
-  if (nextErrorValue !== undefined) {
-    nextLoadingValue = false;
-
-    nextReadyValue = undefined;
-
-    internals._attempt = 0;
   }
 
   commitErrorValue(internals, errorInternals, nextErrorValue, lane);

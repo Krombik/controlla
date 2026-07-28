@@ -100,6 +100,25 @@ resolveNext(2);
 await tick();
 assert.equal(getValue($async2), 2, 'silent: new value committed');
 
+// a reload answering with the value already held commits as UNCHANGED, but the
+// load did end - loading/ready must follow the patch, not the value
+const $same = createAsyncControl({
+  load(handle: any) {
+    handle.setValue({ n: 1 });
+  },
+});
+const relSame = retain($same);
+await tick();
+assert.equal(getValue(selectLoading($same)), false, 'unchanged: initial load');
+invalidate($same, true);
+await tick();
+assert.equal(
+  getValue(selectLoading($same)),
+  false,
+  'unchanged reload still clears loading'
+);
+relSame();
+
 // registry get/bind/delete (_bound/_initArg/_holdingPrev renames)
 const reg = createRegistry(createControl, (id: number) => `item-${id}`);
 assert.equal(getValue(reg.get(1)), 'item-1');
