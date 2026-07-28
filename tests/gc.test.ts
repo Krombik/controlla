@@ -1,11 +1,16 @@
 // the env module must come first: it installs the browser mocks
 import { tick } from './_env/dom.ts';
 import assert from 'node:assert';
+import { setFlagsFromString } from 'node:v8';
+import { runInNewContext } from 'node:vm';
 
-// every assertion here depends on being able to force a collection
-if (typeof globalThis.gc != 'function') {
-  throw new Error('gc.test.ts needs --expose-gc');
-}
+// every assertion here forces a collection, without asking the runner for
+// `--expose-gc` - the flag would have to be repeated in every ci workflow
+setFlagsFromString('--expose-gc');
+
+const gc = runInNewContext('gc') as () => void;
+
+setFlagsFromString('--no-expose-gc');
 
 const { default: createControl } =
   await import('../build/core/createControl/index.js');
@@ -22,7 +27,7 @@ import getValue from '../build/core/getValue/index.js';
 
 const collect = async () => {
   for (let i = 0; i < 20; i++) {
-    globalThis.gc!();
+    gc();
 
     await tick();
   }
