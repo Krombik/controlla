@@ -112,6 +112,8 @@ const watchValues = ((
       maxLevel = root._level;
     }
 
+    root._attach(internals, undefined, false);
+
     if (callbackArity) {
       values![i] = internals._get();
     }

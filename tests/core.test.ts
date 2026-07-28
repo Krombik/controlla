@@ -22,6 +22,8 @@ const { default: selectLoading } =
   await import('../build/core/selectLoading/index.js');
 const { default: watchValue } =
   await import('../build/core/watchValue/index.js');
+const { default: watchValues } =
+  await import('../build/core/watchValues/index.js');
 import retain from '../build/core/retain/index.js';
 
 // derived: recompute + local override semantics (_upToDate rename)
@@ -264,6 +266,19 @@ assert.equal(
   'bound key over bound child: retargets'
 );
 relChained();
+
+// `watchValues` subscribes through `_dependents` rather than a listener, so it
+// needs the activation too - `watchValue` gets it from passing its listener
+const $watchedItem = outerReg.bind(createPrimitiveControl(4)) as any;
+const watchedSeen: number[] = [];
+const unwatchBoundChild = watchValues([$watchedItem.n], ([n]) => {
+  watchedSeen.push(n as number);
+});
+const relWatched = retain($watchedItem);
+await tick();
+assert.deepEqual(watchedSeen, [40], 'watchValues fired for a bound child');
+unwatchBoundChild();
+relWatched();
 
 // a derived whose source is itself a loadable derived: the creation-time
 // source activation must not try to add a listener (no crash)
