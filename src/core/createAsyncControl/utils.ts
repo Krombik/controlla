@@ -25,7 +25,7 @@ const visibilityChangeListener = () => {
         source._loadedAt &&
         source._options.reloadOnFocus! + source._loadedAt < Date.now()
       ) {
-        scheduleSet(internals, SILENT_RELOAD);
+        scheduleSet(internals._errorControl[INTERNALS], SILENT_RELOAD);
       }
     }
   }
@@ -186,7 +186,7 @@ const attachLoad = (control: AsyncControlInternals) => {
       data._options.reloadIfStale &&
       data._loadedAt + data._options.reloadIfStale < Date.now()
     ) {
-      scheduleSet(control, SILENT_RELOAD);
+      scheduleSet(control._errorControl[INTERNALS], SILENT_RELOAD);
     }
 
     if (data._options.reloadOnFocus) {

@@ -1,4 +1,4 @@
-import { tick } from './_env/dom.ts';
+import { dispatchDocument, tick } from './_env/dom.ts';
 import assert from 'node:assert';
 
 const { default: createRegistry } =
@@ -9,6 +9,8 @@ const { default: createPrimitiveControl } =
   await import('../build/core/createPrimitiveControl/index.js');
 const { default: pollLoader } =
   await import('../build/loader/pollLoader/index.js');
+const { default: requestLoader } =
+  await import('../build/loader/requestLoader/index.js');
 import setValue from '../build/core/setValue/index.js';
 import getValue from '../build/core/getValue/index.js';
 import retain from '../build/core/retain/index.js';
@@ -98,6 +100,42 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     { hotels: ['FRESH'], isFinished: true },
     'solo: resume commits fresh polls again'
   );
+  rel();
+}
+
+// ---- reloadOnFocus ----
+// coming back to the tab reloads without clearing the value, so a consumer
+// never sees a gap; the reload marker has to reach the error control, or it
+// lands on the value itself
+{
+  let calls = 0;
+
+  const $favorites = createAsyncControl(
+    requestLoader(() => Promise.resolve({ items: [++calls] }), {
+      reloadOnFocus: 1,
+    })
+  );
+  const rel = retain($favorites);
+  await sleep(5);
+
+  assert.deepEqual(
+    getValue($favorites),
+    { items: [1] },
+    'reloadOnFocus: initial load'
+  );
+
+  assert.ok(
+    dispatchDocument('visibilitychange'),
+    'reloadOnFocus: nothing listened for visibilitychange'
+  );
+  await sleep(5);
+
+  assert.deepEqual(
+    getValue($favorites),
+    { items: [2] },
+    'reloadOnFocus: value kept its shape and reloaded'
+  );
+  assert.equal(calls, 2, 'reloadOnFocus: reload started');
   rel();
 }
 
