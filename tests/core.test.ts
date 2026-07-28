@@ -237,6 +237,34 @@ assert.equal(
 );
 relBoundChild();
 
+// `bind` needs that same activation: a registry keyed by another bound
+// control's child never gets a target unless the child is activated too, so
+// nothing else here may touch `$outerItem.n` first
+const outerReg = createRegistry(createAsyncControl, {
+  load(handle: any, keys: any) {
+    handle.setValue({ n: (keys[0] as number) * 10 });
+  },
+});
+const chainedReg = createRegistry(createAsyncControl, {
+  load(handle: any, keys: any) {
+    handle.setValue(`hotel-${keys[0]}`);
+  },
+});
+const $outerId = createPrimitiveControl(1);
+const $outerItem = outerReg.bind($outerId) as any;
+const $chained = chainedReg.bind($outerItem.n) as any;
+const relChained = retain($chained);
+await tick();
+assert.equal(getValue($chained), 'hotel-10', 'bound key over bound child');
+setValue($outerId, 3);
+await tick();
+assert.equal(
+  getValue($chained),
+  'hotel-30',
+  'bound key over bound child: retargets'
+);
+relChained();
+
 // a derived whose source is itself a loadable derived: the creation-time
 // source activation must not try to add a listener (no crash)
 const $srcA = createAsyncControl<number>();

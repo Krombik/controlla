@@ -1036,6 +1036,8 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
 
           attachNotifier(internals, notifier);
 
+          root._attach(internals, undefined, false);
+
           notifiers.push(notifier);
 
           if (root._load && !seenLoadableRoots.has(root)) {
