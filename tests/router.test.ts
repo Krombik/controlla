@@ -272,6 +272,24 @@ assert.equal(
   'anchor clear: value also reset'
 );
 
+// 8a2. leaving an anchored route clears its hash control to `undefined`, which
+// must not end up concatenated into the next url
+navigate(router.navigation.docs('intro'));
+await tick();
+assert.equal(location.pathname + location.hash, '/docs#intro', 'anchor: set');
+
+navigate(router.navigation.home());
+await tick();
+assert.equal(location.pathname, '/', 'anchor: left the route');
+
+navigate(router.navigation.docs());
+await tick();
+assert.equal(
+  location.pathname + location.hash,
+  '/docs',
+  'a cleared hash must not stringify into the url'
+);
+
 // 8b. without trackScroll, selectRegisteredAnchors only ever reflects
 // mounted state: `true`/`undefined`, never 'active'
 

@@ -394,11 +394,16 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
     }
 
     if (patch._hashChanged || (nav && nav._isNewPage)) {
-      anchorValue = anchorParam ? anchorParam._hash._value : '';
+      if (anchorParam) {
+        // unmatched reads as `undefined`, like a route's params do
+        anchorValue = anchorParam._hash._value || '';
+      }
 
-      scrollToAnchor = patch._hashChanged && !!anchorValue;
+      if (anchorValue) {
+        scrollToAnchor = patch._hashChanged;
 
-      path += anchorValue && '#' + anchorValue;
+        path += '#' + anchorValue;
+      }
     } else {
       path += location.hash;
     }

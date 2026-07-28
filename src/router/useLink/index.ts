@@ -195,7 +195,7 @@ const useLink = ({
   }
 
   return {
-    href: (path || '/') + search + (anchorValue && '#' + anchorValue),
+    href: (path || '/') + search + (anchorValue ? '#' + anchorValue : ''),
     onClick(event) {
       if (onClick) {
         onClick(event);
