@@ -288,8 +288,8 @@ await tick();
 assert.equal(location.pathname, '/', 'anchor: left the route');
 assert.equal(
   getValue(selectAnchor(router.routes.docs)),
-  undefined,
-  'leaving the route resets the anchor to undefined'
+  'intro',
+  'leaving the route keeps the anchor until the page unmounts, like params'
 );
 
 navigate(router.navigation.docs());

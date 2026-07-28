@@ -1,8 +1,12 @@
 import noop from '#internal/noop';
 
-import type { Lane, Mutable, PendingItem } from '#internal/types';
 import type {
-  RouteData,
+  Lane,
+  Mutable,
+  PendingItem,
+  PrimitiveControlInternals,
+} from '#internal/types';
+import type {
   RouterControlRoot,
   RouterPatch,
   RouterHandler,
@@ -60,13 +64,16 @@ export const urlFinalizer: Mutable<PendingItem> = {
  */
 export const replacing = { _value: false };
 
-/** Unmatched routes whose params `createRouterView` clears once their page unmounts. */
-export const pendingParamClears: RouteData[] = [];
+/**
+ * Flat `[isMatched, control, ...]` pairs of an unmatched route's params and
+ * anchor, cleared by `createRouterView` once their page unmounts.
+ */
+export const pendingParamClears: PrimitiveControlInternals[] = [];
 
 /**
- * `useEffect` setup whose unmount cleanup clears the queued unmatched routes'
- * params (skipping any that re-matched) — run per page so it fires only once
- * the page's controls have detached.
+ * `useEffect` setup whose unmount cleanup clears the queued controls (skipping
+ * any whose route re-matched) — run per page so it fires only once the page's
+ * controls have detached.
  */
 export const clearParamsOnUnmount = () => () => {
   const l = pendingParamClears.length;
@@ -74,11 +81,9 @@ export const clearParamsOnUnmount = () => () => {
   if (l) {
     let clearLane: Lane | undefined;
 
-    for (let i = 0; i < l; i++) {
-      const route = pendingParamClears[i];
-
-      if (!route._isMatched._value) {
-        (route._params as RouterControlRoot)._set!(
+    for (let i = 0; i < l; i += 2) {
+      if (!pendingParamClears[i]._value) {
+        (pendingParamClears[i + 1] as RouterControlRoot)._set!(
           undefined,
           (clearLane ||= getLane(scheduleMicrotask))
         );

@@ -6,6 +6,7 @@ import { INTERNALS } from '#internal/constants';
 import { EMPTY_OBJECT, ONCE_PASSIVE } from '#router/internal/constants';
 import type { AnchorScrollOptions } from '#router/types';
 import type { AnchorParam } from '#router/internal/types';
+import type { Lane } from '#internal/types';
 
 type GetAnchorScrollOptions<Ids extends string = string> = (
   offsetEl: HTMLElement | null,
@@ -50,18 +51,22 @@ function anchorScrollTo(this: AnchorParam, id: string, instant?: boolean) {
   }
 }
 
-function activate(this: AnchorParam) {
-  this._isPending = true;
+function activate(this: AnchorParam, lane: Lane) {
+  const self = this;
+
+  self._hash._set!('', lane);
+
+  self._isPending = true;
 
   window.addEventListener(
     'scroll',
     () => {
-      this._isPending = false;
+      self._isPending = false;
     },
     ONCE_PASSIVE
   );
 
-  this._startTrack();
+  self._startTrack();
 }
 
 /**

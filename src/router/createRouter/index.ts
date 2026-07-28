@@ -258,8 +258,6 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
       const nextRoutesCount = nextRoutes.length;
 
-      const nextAnchor = nextRoutes[nextRoutesCount - 1]._anchor;
-
       const currentRoutes =
         currentChainIndex < 0
           ? (EMPTY_ARR as RouteData[])
@@ -276,21 +274,26 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
         const prevRoutesCount = currentRoutes.length;
 
+        const nextAnchor = nextRoutes[nextRoutesCount - 1]._anchor;
+
         if (prevRoutesCount > count) {
           count = prevRoutesCount;
         }
 
-        const prevAnchor =
-          prevRoutesCount && currentRoutes[prevRoutesCount - 1]._anchor;
+        if (prevRoutesCount) {
+          const prevLastRoute = currentRoutes[prevRoutesCount - 1];
 
-        if (prevAnchor) {
-          prevAnchor._hash._set!(undefined, lane);
+          const prevAnchor = prevLastRoute._anchor;
 
-          prevAnchor._clear();
+          if (prevAnchor) {
+            pendingParamClears.push(prevLastRoute._isMatched, prevAnchor._hash);
+
+            prevAnchor._clear();
+          }
         }
 
         if (nextAnchor) {
-          nextAnchor._activate();
+          nextAnchor._activate(lane);
         }
       }
 
@@ -310,7 +313,10 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
               if (currRoute._params) {
                 // cleared by createRouterView once the page unmounts, not now
-                pendingParamClears.push(currRoute);
+                pendingParamClears.push(
+                  currRoute._isMatched,
+                  currRoute._params
+                );
               }
             }
           }

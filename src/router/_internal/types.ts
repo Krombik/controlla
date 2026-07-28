@@ -394,7 +394,7 @@ export type AnchorParam<Ids extends string = string> = {
   /** @internal */
   _isPending: boolean;
   /** @internal */
-  _activate(): void;
+  _activate(lane: Lane): void;
   /** @internal */
   _startTrack(): void;
   /** @internal */
