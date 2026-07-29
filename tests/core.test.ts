@@ -1,5 +1,5 @@
 // the env module must come first: it installs the browser mocks
-import { tick } from './_env/dom.ts';
+import { tick, reportedErrors } from './_env/dom.ts';
 import assert from 'node:assert';
 
 const { default: createControl } =
@@ -425,6 +425,43 @@ rel2();
     'a path set after a reload in the same lane must commit'
   );
   rel();
+}
+
+// `isLoaded` runs once at construction against the initial value - a stale
+// persisted value from an older release is enough to make it throw there, and
+// that construction can happen inside a flush via a registry target
+{
+  const opts: any = {
+    initialValue: { stale: true },
+    isLoaded: (v: any) => v.items.length > 0,
+  };
+
+  const $a = createAsyncControl(opts);
+
+  assert.deepEqual(
+    getValue($a),
+    { stale: true },
+    'a throwing isLoaded at construction must not stop the control existing'
+  );
+  assert.equal(
+    getValue(selectLoading($a)),
+    false,
+    'a thrower reads as loaded, matching checkLoading'
+  );
+  assert.equal(
+    (reportedErrors.at(-1) as Error).message,
+    "Cannot read properties of undefined (reading 'length')",
+    'the throw is surfaced through reportError, not swallowed'
+  );
+
+  // the registry builds a throwaway probe control to learn its control type
+  assert.ok(
+    createRegistry(createAsyncControl, opts).bind(
+      createPrimitiveControl<string | undefined>(undefined),
+      0
+    ),
+    'binding must survive the type-probe construction'
+  );
 }
 
 console.log('core-smoke.test.ts: all assertions passed');

@@ -5,7 +5,13 @@ import removeFromArray from '../../src/core/_internal/removeFromArray.ts';
 
 const documentListeners = new Map<string, Array<() => void>>();
 
+/** Errors the lib reported - without this mock its fallback kills the process. */
+export const reportedErrors: unknown[] = [];
+
 Object.assign(globalThis, {
+  reportError(error: unknown) {
+    reportedErrors.push(error);
+  },
   window: {
     queueMicrotask,
     addEventListener() {},

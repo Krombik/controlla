@@ -342,7 +342,7 @@ const createAsyncControl: {
 
     if (
       (!isLoadable || !options.revalidate) &&
-      (!isLoaded || isLoaded(value, undefined, 0))
+      !checkLoading(internals, value, undefined)
     ) {
       loadingInternals._value = false;
 
