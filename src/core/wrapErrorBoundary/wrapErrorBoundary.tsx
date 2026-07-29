@@ -1,11 +1,6 @@
 import type { Component, ContextType } from 'react';
 import ErrorBoundaryContext from '#internal/ErrorBoundaryContext';
-import noop from '#internal/noop';
 import type SuspenseContext from '#internal/SuspenseContext';
-
-const ORIGINAL_RENDER = Symbol();
-
-const ORIGINAL_DID_CATCH = Symbol();
 
 const CTX = Symbol();
 
@@ -25,17 +20,11 @@ const CTX = Symbol();
  * export default wrapErrorBoundary(ErrorBoundary);
  * ```
  */
-const wrapErrorBoundary = <T extends typeof Component>(Component: T): T => {
-  const { render, componentDidCatch } = Component.prototype;
-
+const wrapErrorBoundary = <T extends typeof Component>(Component: T): T =>
   //@ts-expect-error
-  return class extends Component {
+  class extends Component {
     readonly [CTX]: NonNullable<ContextType<typeof ErrorBoundaryContext>> =
       new Set();
-
-    readonly [ORIGINAL_RENDER] = render;
-
-    readonly [ORIGINAL_DID_CATCH] = componentDidCatch || noop;
 
     componentDidCatch(error: any, errorInfo: any) {
       const ctx = this[CTX];
@@ -55,17 +44,16 @@ const wrapErrorBoundary = <T extends typeof Component>(Component: T): T => {
 
       ctx.clear();
 
-      this[ORIGINAL_DID_CATCH](error, errorInfo);
+      super.componentDidCatch?.(error, errorInfo);
     }
 
     render() {
       return (
         <ErrorBoundaryContext.Provider value={this[CTX]}>
-          {this[ORIGINAL_RENDER]()}
+          {super.render()}
         </ErrorBoundaryContext.Provider>
       );
     }
   };
-};
 
 export default wrapErrorBoundary;
