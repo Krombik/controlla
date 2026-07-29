@@ -18,13 +18,16 @@ const mediaQuery = (query: string): ReadonlyControl<boolean> => {
   let $control = cache.get(query);
 
   if ($control === undefined) {
-    const mql = matchMedia(query);
+    // off-platform (ssr) nothing matches, and nothing can change
+    const mql = typeof matchMedia != 'undefined' ? matchMedia(query) : null;
 
-    cache.set(query, ($control = createPrimitiveControl(mql.matches)));
+    cache.set(query, ($control = createPrimitiveControl(!!mql && mql.matches)));
 
-    mql.onchange = (e) => {
-      setValue($control!, e.matches);
-    };
+    if (mql) {
+      mql.onchange = (e) => {
+        setValue($control!, e.matches);
+      };
+    }
   }
 
   return $control;
