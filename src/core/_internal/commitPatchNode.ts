@@ -304,28 +304,28 @@ const compareAndNotify = (
   );
 };
 
-const buildPatchedValue = (patchNode: PatchTreeNode) => {
+const buildPatchedValue = (patchNode: PatchTreeNode, base: any) => {
   const keys = patchNode._patchedKeys;
 
   const keysCount = keys.length;
 
+  const value = patchNode._type ? patchNode._value : base;
+
   if (keysCount) {
     const children = patchNode._children;
-
-    const value = patchNode._value;
 
     const copy = isArray(value) ? value.slice() : { ...value };
 
     for (let i = 0; i < keysCount; i++) {
       const key = keys[i];
 
-      copy[key] = buildPatchedValue(children.get(key)!);
+      copy[key] = buildPatchedValue(children.get(key)!, copy[key]);
     }
 
     return copy;
   }
 
-  return patchNode._value;
+  return value;
 };
 
 export const commitNextValue = (
@@ -370,7 +370,7 @@ export const commitPatchNode = (
 ): any => {
   if (patchNode._type) {
     return commitNextValue(
-      buildPatchedValue(patchNode),
+      buildPatchedValue(patchNode, prevValue),
       prevValue,
       internals,
       lane

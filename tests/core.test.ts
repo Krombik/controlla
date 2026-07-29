@@ -390,6 +390,22 @@ rel2();
   );
 }
 
+// the path is routed through a node holding no value of its own, so the merge
+// base for it has to come from the full set above, not from that empty node
+{
+  const $o = createControl({ a: 0, x: { y: 0, z: 0 } });
+
+  setValue($o, { a: 1, x: { y: 1, z: 1 } });
+  setValue($o.x.y, 9);
+  await tick();
+
+  assert.deepEqual(
+    getValue($o),
+    { a: 1, x: { y: 9, z: 1 } },
+    'a nested path set must merge into the full set, keeping its siblings'
+  );
+}
+
 {
   const $a = createAsyncControl<{ a: number; b: number }>({
     load: (handle: any) => {
