@@ -246,13 +246,15 @@ useDerivedControl(...controls, mapper?)
 | Parameter | Type | Description |
 |---|---|---|
 | `...controls` | `ReadonlyControl[]` | One or more source controls. |
-| `mapper?` | `(...values) => result` | Combines the sources' current values. Runs on every change; async sources provide `value` or `undefined`. |
+| `mapper?` | `(...values) => result` | Combines the sources' current values. Runs on every change; async sources provide `value` or `undefined`. A throw is reported to `reportError` and the control keeps its previous value. |
 
 ```ts
 const $copy = createDerivedControl($source);                                  // mirror one source
 const $count = createDerivedControl($items, (items) => items?.length ?? 0);   // map one source
 const $fullName = createDerivedControl($first, $last, (f, l) => `${f} ${l}`); // combine many
 ```
+
+`useDerivedControl` rebuilds the control only when a source changes identity, and captures `mapper` at that point - so the hook's mapper must derive its result from its arguments alone, not from props or state it closes over.
 
 ### `createAsyncDerivedControl` / `useAsyncDerivedControl`
 
@@ -520,7 +522,7 @@ Multi-control `ControlConsumer`.
 
 ### `<CombinedControlsConsumer>`
 
-Combines multiple controls through a `combiner` and consumes the result — re-renders only when the **combined value** changes (unlike `ControlsConsumer`, which reruns on every source change). Component form of [`useDerivedControl`](#createderivedcontrol--usederivedcontrol) + `ControlConsumer`. Same three forms as `ControlConsumer`. The derived control is rebuilt when a `controls` entry changes identity; `combiner` needn't be memoized.
+Combines multiple controls through a `combiner` and consumes the result — re-renders only when the **combined value** changes (unlike `ControlsConsumer`, which reruns on every source change). Component form of [`useDerivedControl`](#createderivedcontrol--usederivedcontrol) + `ControlConsumer`. Same three forms as `ControlConsumer`. The derived control is rebuilt when a `controls` entry changes identity, and `combiner` is captured then - so it must derive its result only from the values passed in, not from props or state it closes over.
 
 | Prop | Type | Description |
 |---|---|---|
@@ -757,7 +759,7 @@ Re-fetches on an interval until the result is loaded. Returns `AsyncControlOptio
 |---|---|
 | `pause(...keys)` | Pause polling under the keys (leading group keys when `syncedKeysCount` is set, full keys otherwise). |
 | `resume(...keys)` | Resume polling under the keys. |
-| `reset(...keys)` | Refetch now and restart the interval. |
+| `reset(...keys)` | Drop the pending interval and refetch - immediately when nothing is in flight, otherwise once the outstanding polls settle. A no-op if no interval is pending. |
 
 ```ts
 const poll = pollLoader(
@@ -1015,7 +1017,7 @@ Declares a dynamic path segment. Takes exactly one `{ name: options }` pair - th
 | `ParamOptions` field | Type | Description |
 |---|---|---|
 | `parse?` | `(raw) => T` | Converts the URL string to the typed value. |
-| `stringify?` | `(value) => string` | Converts the typed value back to a URL string. |
+| `stringify?` | `(value) => string` | Converts the typed value back to a URL string. Return `''` to leave the param out of the URL entirely; `undefined` and `''` values skip it without calling it at all. |
 | `isValid?` | `(raw) => boolean` | Rejects garbage input - without a `fallbackValue`, the route just doesn't match. |
 | `fallbackValue?` | `T` | Used in place of invalid raw input, instead of failing the match. |
 | `optional?` | `boolean` | Lets the URL omit the segment. |
@@ -1238,7 +1240,7 @@ const state = useValue(selectRegisteredAnchors(router.routes.docs).intro); // 'a
 
 ### Blocking navigation
 
-Guard unsaved changes - while `navigationBlocker` is enabled, an attempted navigation is parked instead of applied. `isPendingNavigation` is just a control plus `allow()`/`deny()` - it doesn't render anything itself, so build whatever UI you want around it (dialog, toast, inline banner). Tab close is guarded via `beforeunload`.
+Guard unsaved changes - while `navigationBlocker` is enabled, an attempted navigation is parked instead of applied. `isPendingNavigation` is just a control plus `allow()`/`deny()` - it doesn't render anything itself, so build whatever UI you want around it (dialog, toast, inline banner). Tab close is guarded via `beforeunload`. Only the latest attempt is parked - if another navigation is attempted while one is pending, `allow()` resolves that later one and the earlier is dropped.
 
 ```tsx
 const { navigationBlocker } = router;
