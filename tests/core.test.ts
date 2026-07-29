@@ -119,6 +119,25 @@ assert.equal(
 );
 relSame();
 
+// unsubscribing twice must be a no-op, not remove somebody else: the swap-pop
+// helper used to drop the last entry whether or not it found the item
+const $shared = createPrimitiveControl('a');
+const firstSeen: string[] = [];
+const otherSeen: string[] = [];
+const stopFirst = watchValues([$shared], ([v]) => {
+  firstSeen.push(v as string);
+});
+const stopOther = watchValues([$shared], ([v]) => {
+  otherSeen.push(v as string);
+});
+stopFirst();
+stopFirst();
+setValue($shared, 'z');
+await tick();
+assert.deepEqual(firstSeen, [], 'unsubscribed watcher stayed quiet');
+assert.deepEqual(otherSeen, ['z'], 'a double unwatch kept the other watcher');
+stopOther();
+
 // registry get/bind/delete (_bound/_initArg/_holdingPrev renames)
 const reg = createRegistry(createControl, (id: number) => `item-${id}`);
 assert.equal(getValue(reg.get(1)), 'item-1');

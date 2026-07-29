@@ -79,22 +79,27 @@ const Fallback: FC<PropsWithChildren<{ _ctx: Ctx }>> = (props) => {
     const currTimeoutId = timeoutId;
 
     effectRef.current = () => {
-      if (currQueue.length != 1) {
-        const last = currQueue.pop()!;
+      // strict mode and `Activity` re-run this for the same instance, by which
+      // point the entry is gone - popping again would drop a sibling's
+      if (currIndexMap.has(cleanup)) {
+        if (currQueue.length != 1) {
+          const last = currQueue.pop()!;
 
-        if (last != cleanup) {
-          const index = currIndexMap.get(cleanup)!;
+          if (last != cleanup) {
+            const index = currIndexMap.get(cleanup)!;
 
-          currQueue[index] = last;
+            currQueue[index] = last;
 
-          currIndexMap.set(last, index);
+            currIndexMap.set(last, index);
+          }
+
+          currIndexMap.delete(cleanup);
+        } else {
+          clearTimeout(currTimeoutId);
         }
-
-        currIndexMap.delete(cleanup);
-      } else {
-        clearTimeout(currTimeoutId);
       }
 
+      // still needed: `ctx` keeps collecting loads from later suspensions
       return cleanup;
     };
   }

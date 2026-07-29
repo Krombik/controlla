@@ -71,11 +71,9 @@ export const useDerived = (
     };
   }
 
-  const $control = item._item;
+  useEffect(() => () => detach(ref.current!._item), EMPTY_ARR);
 
-  useEffect(() => () => detach($control), EMPTY_ARR);
-
-  return $control;
+  return item._item;
 };
 
 const makeUseDerivedControl =

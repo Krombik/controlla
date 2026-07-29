@@ -1,10 +1,14 @@
 const removeFromArray = <T>(array: T[], item: T) => {
-  const last = array.pop()!;
+  const lastIndex = array.length - 1;
 
-  if (item != last) {
-    for (let i = 0, l = array.length; i < l; i++) {
+  if (array[lastIndex] == item) {
+    array.length = lastIndex;
+  } else {
+    for (let i = 0; i < lastIndex; i++) {
       if (array[i] == item) {
-        array[i] = last;
+        array[i] = array[lastIndex];
+
+        array.length = lastIndex;
 
         return;
       }
