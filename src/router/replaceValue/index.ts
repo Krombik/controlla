@@ -27,14 +27,13 @@ const replaceValue = <C extends Control>(
 
   const lane = getSchedulerLane(scheduler);
 
+  const nextValue =
+    typeof value != 'function' ? value : value(internals._get());
+
   replacing._value = true;
 
   try {
-    internals._root._enqueueSet(
-      typeof value != 'function' ? value : value(internals._get()),
-      lane,
-      internals._path
-    );
+    internals._root._enqueueSet(nextValue, lane, internals._path);
   } finally {
     replacing._value = false;
   }
