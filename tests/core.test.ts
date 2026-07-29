@@ -359,4 +359,56 @@ assert.deepEqual(
 
 release();
 rel2();
+// Patch types share one node per control per lane: a queued full set has to
+// survive a later path set (`buildPatchedValue` merges them), while a reload -
+// which lands on the value control's node too - has to give way to one.
+{
+  const $o = createControl({ a: 0, b: 0 });
+
+  setValue($o, { a: 1, b: 0 });
+  setValue($o.b, 2);
+  await tick();
+
+  assert.deepEqual(
+    getValue($o),
+    { a: 1, b: 2 },
+    'a path set must merge onto the full set queued in the same lane'
+  );
+}
+
+{
+  const $o = createControl({ a: 0, b: 0 });
+
+  setValue($o.b, 2);
+  setValue($o, { a: 1, b: 0 });
+  await tick();
+
+  assert.deepEqual(
+    getValue($o),
+    { a: 1, b: 0 },
+    'a full set must drop path sets queued before it'
+  );
+}
+
+{
+  const $a = createAsyncControl<{ a: number; b: number }>({
+    load: (handle: any) => {
+      handle.setValue({ a: 0, b: 0 });
+    },
+  });
+  const rel = retain($a);
+  await tick();
+
+  invalidate($a);
+  setValue($a.b, 2);
+  await tick();
+
+  assert.deepEqual(
+    getValue($a),
+    { a: 0, b: 2 },
+    'a path set after a reload in the same lane must commit'
+  );
+  rel();
+}
+
 console.log('core-smoke.test.ts: all assertions passed');

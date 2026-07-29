@@ -15,7 +15,9 @@ const queuePatch = (
   if (patchNode) {
     children = patchNode._children;
 
-    patchNode._type = PatchType.UNSET;
+    if (patchNode._type != PatchType.SET) {
+      patchNode._type = PatchType.UNSET;
+    }
   } else {
     lane._patchByControl.set(
       internals,
