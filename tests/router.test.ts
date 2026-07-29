@@ -416,6 +416,44 @@ assert.equal(
   'trackScroll: scroll-driven updates never touch the url'
 );
 
+// 8c2. leaving the page with a scroll frame still queued must not leave the
+// handle behind, or `??=` never schedules the spy again on the next visit
+for (const fn of listeners.scroll || []) fn({}); // queues a frame
+
+navigate(router.navigation.docs());
+
+// microtasks only: the navigation commits, and so `_clear` runs, while the
+// queued frame (a timer here) is still outstanding
+for (let i = 0; i < 5; i++) await Promise.resolve();
+
+await tick();
+
+navigate(router.navigation.docsTrack());
+await tick();
+
+// `bottom` is still the active id, so re-registering marks it active again -
+// only the spy can promote `top`, which makes this assertion load-bearing
+topRect = { top: 0 };
+bottomRect = { top: 500 };
+
+registerAnchor(router.routes.docsTrack, 'top').ref(
+  fakeElement({ rect: () => topRect })
+);
+registerAnchor(router.routes.docsTrack, 'bottom').ref(
+  fakeElement({ rect: () => bottomRect })
+);
+await tick();
+
+for (const fn of listeners.scroll || []) fn({});
+await tick();
+await tick();
+
+assert.equal(
+  getValue(selectRegisteredAnchors(router.routes.docsTrack).top),
+  'active',
+  'trackScroll: the spy still runs after revisiting the page'
+);
+
 registerAnchor(router.routes.docsTrack, 'top').ref(null);
 registerAnchor(router.routes.docsTrack, 'bottom').ref(null);
 

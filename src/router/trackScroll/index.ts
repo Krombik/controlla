@@ -140,6 +140,8 @@ const trackScroll = <Ids extends string>(
 
     cancelAnimationFrame(rafId!);
 
+    rafId = undefined;
+
     for (let i = 0; i < SPY_EVENTS.length; i++) {
       window.removeEventListener(SPY_EVENTS[i], onScroll);
     }
