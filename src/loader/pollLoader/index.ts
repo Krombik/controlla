@@ -229,6 +229,10 @@ function groupReset(this: PollActions<any[], number>, ...keys: any[]) {
   if (group && group._timerId != null) {
     clearTimeout(group._timerId);
 
+    // the handle stands for the clock in `_pendingCount` - a stale one would
+    // let the next reset decrement for a timer that is already gone
+    group._timerId = undefined;
+
     tickGroup(group, this._interval as number);
   }
 }

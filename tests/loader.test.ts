@@ -139,4 +139,29 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
   rel();
 }
 
+// A grouped reset stands in for the group's clock in `_pendingCount`, so it
+// must drop the timer handle too - otherwise the next reset decrements for a
+// timer that is already gone, ticking a round early and overlapping requests.
+{
+  let resolvers: Array<(v: any) => void> = [];
+  const poll = pollLoader(
+    (_q: string, _p: number) => new Promise((r) => resolvers.push(r)),
+    { interval: 1000, isLoaded: (v: any) => v.isFinished, syncedKeysCount: 1 }
+  );
+  const reg = createRegistry(createAsyncControl, poll);
+  const rel = retain(reg.bind(createPrimitiveControl('Q'), 0));
+  await tick();
+
+  poll.actions.reset('Q');
+  poll.actions.reset('Q');
+  await tick();
+
+  assert.equal(
+    resolvers.length,
+    1,
+    'grouped: reset while in flight must not spawn a duplicate request'
+  );
+  rel();
+}
+
 console.log('loader.test.ts: all assertions passed');
