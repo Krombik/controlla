@@ -69,19 +69,26 @@ const beforeUnloadListener = (e: BeforeUnloadEvent) => {
   e.returnValue = true;
 };
 
-const saveScroll = (state: HistoryState | null) => {
+const writeState = (state: HistoryState) => {
   try {
-    history.replaceState(
-      {
-        ...state,
-        scroll: [window.scrollX, window.scrollY],
-      } satisfies HistoryState,
-      ''
-    );
+    history.replaceState(state, '');
   } catch (err) {
     // best effort: a refused write only costs the restored scroll position
     reportError(err);
   }
+};
+
+/**
+ * `scroll` is a marker meaning "restore this on the way back", so it belongs
+ * only on entries that have been left. It's dropped again once consumed, and
+ * never carried onto the entry being opened.
+ */
+const saveScroll = (state: HistoryState | null) => {
+  writeState({ ...state, scroll: [window.scrollX, window.scrollY] });
+};
+
+const clearScroll = () => {
+  writeState({ ...(history.state as HistoryState), scroll: undefined });
 };
 
 /**
@@ -441,6 +448,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
             {
               ...state,
               idx: currentHistoryIndex + 1,
+              scroll: undefined,
             } satisfies HistoryState,
             '',
             path
@@ -973,10 +981,6 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
           resumeNavigation = () => {
             canBlockPop = false;
 
-            if (scroll) {
-              saveScroll(state);
-            }
-
             history.go(delta);
           };
 
@@ -1000,7 +1004,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
           window.scroll(scroll[0], scroll[1]);
 
-          history.replaceState({ ...state, scroll: undefined }, '');
+          clearScroll();
         }
 
         currentHistoryIndex = nextHistoryIndex;
@@ -1056,6 +1060,8 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
   matchLocation(pathname, searchParams, applyInitial);
 
   if (savedScroll) {
+    clearScroll();
+
     const x = savedScroll[0];
 
     const y = savedScroll[1];
