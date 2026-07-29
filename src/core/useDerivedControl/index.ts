@@ -1,8 +1,9 @@
 import type createDerivedControl from '#core/createDerivedControl';
 import makeDerivedControl from '#internal/makeDerivedControl';
-import makeUseDerivedControl from '#internal/makeUseDerivedControl';
+import useDerived from '#internal/useDerived';
 
-const useDerivedControl: typeof createDerivedControl =
-  makeUseDerivedControl(makeDerivedControl);
+const useDerivedControl: typeof createDerivedControl = (
+  ...params: any[]
+): any => useDerived(makeDerivedControl, params);
 
 export default useDerivedControl;

@@ -1,8 +1,9 @@
 import type createAsyncDerivedControl from '#core/createAsyncDerivedControl';
 import makeAsyncDerivedControl from '#internal/makeAsyncDerivedControl';
-import makeUseDerivedControl from '#internal/makeUseDerivedControl';
+import useDerived from '#internal/useDerived';
 
-const useAsyncDerivedControl: typeof createAsyncDerivedControl =
-  makeUseDerivedControl(makeAsyncDerivedControl);
+const useAsyncDerivedControl: typeof createAsyncDerivedControl = (
+  ...params: any[]
+): any => useDerived(makeAsyncDerivedControl, params);
 
 export default useAsyncDerivedControl;

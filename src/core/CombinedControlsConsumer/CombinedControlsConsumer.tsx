@@ -1,5 +1,5 @@
 import ControlConsumer from '#core/ControlConsumer';
-import { useDerived } from '#internal/makeUseDerivedControl';
+import useDerived from '#internal/useDerived';
 import makeDerivedControl from '#internal/makeDerivedControl';
 import type { RenderablePrimitives } from '#internal/types';
 import type { ReadonlyAsyncControl, ReadonlyControl } from '#types';
@@ -65,8 +65,10 @@ const CombinedControlsConsumer = ((
    * on that value, not on each source.
    *
    * Values are passed positionally; async controls provide `value | undefined`.
-   * The derived control is rebuilt when a `controls` entry changes identity;
-   * `combiner` may be a fresh closure each render (no memoization needed).
+   * `combiner` must derive its result only from those values: it's captured
+   * when the derived control is built — on mount, and again whenever a
+   * `controls` entry changes identity — so anything else it closes over stays
+   * frozen at that point.
    *
    * @example
    * ```jsx

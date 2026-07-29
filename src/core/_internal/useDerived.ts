@@ -22,14 +22,11 @@ const detach = (item: Control) => {
 };
 
 /**
- * Deps-aware derived control for hooks and `CombinedControlsConsumer`:
- * rebuilds the control when the {@link controls} set changes (compared by
- * identity), otherwise keeps it and just points it at the latest
- * {@link combiner} — so the combiner needn't be memoized. Takes controls and
- * combiner apart to avoid allocating a combined array on every render (only on
- * a rebuild).
+ * Rebuilds the control when a {@link controls} entry changes identity.
+ * {@link combiner} is left out of that check and captured on build — a rebuild
+ * per fresh closure would defeat reusing the control.
  */
-export const useDerived = (
+const useDerived = (
   make: (params: any[]) => any,
   controls: any[],
   combiner?: (...values: any[]) => any
@@ -76,9 +73,4 @@ export const useDerived = (
   return item._item;
 };
 
-const makeUseDerivedControl =
-  (make: (params: any[]) => any) =>
-  (...params: any[]): any =>
-    useDerived(make, params);
-
-export default makeUseDerivedControl;
+export default useDerived;
