@@ -90,10 +90,41 @@ export const windowMock = {
 
 defineGlobal('window', windowMock);
 
-defineGlobal('document', {
-  readyState: 'complete',
-  documentElement: { scrollHeight: 2000 },
-});
+const documentElement = { scrollHeight: 2000 };
+
+defineGlobal('document', { readyState: 'complete', documentElement });
+
+const resizeCallbacks = new Set<() => void>();
+
+/** The page changed size: notifies every live observer, as the browser would. */
+export const triggerResize = () => {
+  for (const cb of [...resizeCallbacks]) cb();
+};
+
+defineGlobal(
+  'ResizeObserver',
+  class {
+    _cb: () => void;
+    constructor(cb: () => void) {
+      this._cb = cb;
+    }
+    observe() {
+      resizeCallbacks.add(this._cb);
+      // the real one delivers an initial observation for every observed element
+      queueMicrotask(this._cb);
+    }
+    disconnect() {
+      resizeCallbacks.delete(this._cb);
+    }
+  }
+);
+
+/** Lets a test make the page taller than the viewport, or shorter than it. */
+export const setScrollHeight = (px: number) => {
+  documentElement.scrollHeight = px;
+
+  triggerResize();
+};
 
 defineGlobal('requestAnimationFrame', (cb: () => void) => setTimeout(cb, 0));
 

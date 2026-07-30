@@ -1,14 +1,15 @@
 import type { ControlInternals } from '#internal/types';
 import { INTERNALS, PASSIVE } from '#internal/constants';
-import { getSchedulerLane, scheduleFlush } from '#internal/flushQueue';
-import syncScheduler from '#scheduler/syncScheduler';
+import { getLane, scheduleFlush } from '#internal/flushQueue';
 import type { AnchorParam } from '#router/internal/types';
 import { ONCE_PASSIVE } from '#router/internal/constants';
 
-const SPY_EVENTS = ['scroll', 'resize', 'orientationchange'] as const;
+const ACTIVATION_DEPTH = 0.25;
 
 const IS_SCROLLEND_AVAILABLE =
   typeof window != 'undefined' && 'onscrollend' in window;
+
+const IS_RESIZE_OBSERVER_ENABLED = typeof ResizeObserver != 'undefined';
 
 const setActiveId = (anchorParam: AnchorParam, id: string | undefined) => {
   const prevId = anchorParam._activeId;
@@ -16,10 +17,18 @@ const setActiveId = (anchorParam: AnchorParam, id: string | undefined) => {
   if (prevId !== id) {
     const root = anchorParam._registered[INTERNALS] as ControlInternals;
 
-    const lane = getSchedulerLane(syncScheduler);
+    const lane = getLane(requestAnimationFrame);
 
     if (prevId !== undefined) {
-      root._enqueueSet(true, lane, [prevId]);
+      const entries = anchorParam._entries;
+
+      for (let i = 0; i < entries.length; i++) {
+        if (entries[i]._id == prevId) {
+          root._enqueueSet(true, lane, [prevId]);
+
+          break;
+        }
+      }
     }
 
     if (id !== undefined) {
@@ -68,6 +77,8 @@ const trackScroll = <Ids extends string>(
 
   let rafId: number | undefined;
 
+  let observer: ResizeObserver | undefined;
+
   let onScroll: (() => void) | undefined;
 
   anchorParam._startTrack = () => {
@@ -84,6 +95,8 @@ const trackScroll = <Ids extends string>(
 
       const { _entries, _getOptions, _offsetEl } = anchorParam;
 
+      const viewportHeight = window.innerHeight;
+
       let nextId: string | undefined;
 
       let bestTop = -Infinity;
@@ -92,12 +105,20 @@ const trackScroll = <Ids extends string>(
 
       let lowestId: string | undefined;
 
+      let firstVisibleTop = Infinity;
+
+      let firstVisibleId: string | undefined;
+
       for (let i = 0; i < _entries.length; i++) {
         const entry = _entries[i];
 
-        const line = _getOptions(_offsetEl, entry._id).topOffset || 0;
+        const offset = _getOptions(_offsetEl, entry._id).topOffset || 0;
 
-        const top = entry._el.getBoundingClientRect().top - line;
+        const elementTop = entry._el.getBoundingClientRect().top;
+
+        const depth = (viewportHeight - offset) * ACTIVATION_DEPTH;
+
+        const top = elementTop - offset - depth;
 
         if (top > maxTop) {
           maxTop = top;
@@ -105,7 +126,16 @@ const trackScroll = <Ids extends string>(
           lowestId = entry._id;
         }
 
-        // active = the lowest section whose top is at or above the offset line
+        if (
+          elementTop < viewportHeight - depth &&
+          elementTop < firstVisibleTop
+        ) {
+          firstVisibleTop = elementTop;
+
+          firstVisibleId = entry._id;
+        }
+
+        // active = the lowest section whose top has reached the probe
         if (top <= 1 && top > bestTop) {
           bestTop = top;
 
@@ -113,12 +143,15 @@ const trackScroll = <Ids extends string>(
         }
       }
 
+      const scrollHeight = document.documentElement.scrollHeight;
+
       if (
-        window.innerHeight + window.scrollY >=
-        document.documentElement.scrollHeight - 1
+        scrollHeight > viewportHeight &&
+        viewportHeight + window.scrollY >= scrollHeight - 1
       ) {
-        // page bottom: force the last section active
         nextId = lowestId;
+      } else if (nextId === undefined) {
+        nextId = firstVisibleId;
       }
 
       setActiveId(anchorParam, nextId);
@@ -128,8 +161,16 @@ const trackScroll = <Ids extends string>(
       rafId ??= requestAnimationFrame(compute);
     };
 
-    for (let i = 0; i < SPY_EVENTS.length; i++) {
-      window.addEventListener(SPY_EVENTS[i], onScroll, PASSIVE);
+    window.addEventListener('scroll', onScroll, PASSIVE);
+
+    window.addEventListener('resize', onScroll, PASSIVE);
+
+    if (IS_RESIZE_OBSERVER_ENABLED) {
+      (observer = new ResizeObserver(onScroll)).observe(
+        document.documentElement
+      );
+    } else {
+      window.addEventListener('orientationchange', onScroll, PASSIVE);
     }
   };
 
@@ -142,8 +183,16 @@ const trackScroll = <Ids extends string>(
 
     rafId = undefined;
 
-    for (let i = 0; i < SPY_EVENTS.length; i++) {
-      window.removeEventListener(SPY_EVENTS[i], onScroll);
+    window.removeEventListener('scroll', onScroll);
+
+    window.removeEventListener('resize', onScroll);
+
+    if (IS_RESIZE_OBSERVER_ENABLED) {
+      observer!.disconnect();
+
+      observer = undefined;
+    } else {
+      window.removeEventListener('orientationchange', onScroll);
     }
 
     onScroll = undefined;

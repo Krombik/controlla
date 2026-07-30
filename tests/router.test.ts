@@ -11,6 +11,8 @@ import {
   windowMock,
   fakeElement,
   defineGlobal,
+  setScrollHeight,
+  triggerResize,
 } from './_env/browser.ts';
 import assert from 'node:assert';
 
@@ -415,6 +417,172 @@ assert.equal(
   '#top',
   'trackScroll: scroll-driven updates never touch the url'
 );
+
+// The probe sits a quarter into the reading area (200 of this env's 800), not at
+// its very top - otherwise a short section's tail holds the highlight while the
+// next section already fills the screen.
+topRect = { top: -100 };
+bottomRect = { top: 250 };
+
+for (const fn of listeners.scroll || []) fn({});
+await tick();
+await tick();
+
+assert.equal(
+  getValue(selectRegisteredAnchors(router.routes.docsTrack).top),
+  'active',
+  'trackScroll: a section past the probe does not activate yet'
+);
+
+// 150 is below the top of the screen but above the probe
+bottomRect = { top: 150 };
+
+for (const fn of listeners.scroll || []) fn({});
+await tick();
+await tick();
+
+assert.equal(
+  getValue(selectRegisteredAnchors(router.routes.docsTrack).bottom),
+  'active',
+  'trackScroll: reaching the probe activates, without waiting for the screen top'
+);
+
+// A page that opens with something else above the sections: at the very top none
+// of them is on screen yet, so none is being read and none may be marked.
+topRect = { top: 900 };
+bottomRect = { top: 1400 };
+
+for (const fn of listeners.scroll || []) fn({});
+await tick();
+await tick();
+
+assert.equal(
+  getValue(selectRegisteredAnchors(router.routes.docsTrack).top),
+  true,
+  'trackScroll: sections still below the fold leave nothing active'
+);
+
+// A sliver poking over the bottom of the screen is not being read: the in-view
+// fallback keeps the same quarter of clearance the probe uses, measured from the
+// bottom edge (600 of this env's 800).
+topRect = { top: 700 };
+bottomRect = { top: 1200 };
+
+for (const fn of listeners.scroll || []) fn({});
+await tick();
+await tick();
+
+assert.equal(
+  getValue(selectRegisteredAnchors(router.routes.docsTrack).top),
+  true,
+  'trackScroll: a section barely over the bottom edge is not active yet'
+);
+
+// scrolled far enough that the first section has come into view, but not far
+// enough for it to reach the probe - it is what's being read
+topRect = { top: 400 };
+bottomRect = { top: 900 };
+
+for (const fn of listeners.scroll || []) fn({});
+await tick();
+await tick();
+
+assert.equal(
+  getValue(selectRegisteredAnchors(router.routes.docsTrack).top),
+  'active',
+  'trackScroll: a section in view but short of the probe is the active one'
+);
+
+// And a page that fits on one screen is permanently "at the bottom", so the
+// bottom override has to be guarded or the last section wins from the start.
+setScrollHeight(700);
+
+for (const fn of listeners.scroll || []) fn({});
+await tick();
+await tick();
+
+assert.equal(
+  getValue(selectRegisteredAnchors(router.routes.docsTrack).bottom),
+  true,
+  'trackScroll: an unscrollable page does not force the last section active'
+);
+assert.equal(
+  getValue(selectRegisteredAnchors(router.routes.docsTrack).top),
+  'active',
+  'trackScroll: an unscrollable page reads as its first section'
+);
+
+setScrollHeight(2000);
+
+// 8c1. A page that opens at the top never fires a scroll event, so mounting the
+// sections has to be enough to mark one - and what mounting produces is a change
+// in the page's size, which is what the spy actually watches.
+
+// first get to a state where nothing is active, so re-registering cannot smuggle
+// the answer in through the `_activeId == id` shortcut
+topRect = { top: 900 };
+bottomRect = { top: 1400 };
+
+for (const fn of listeners.scroll || []) fn({});
+await tick();
+await tick();
+
+assert.equal(
+  getValue(selectRegisteredAnchors(router.routes.docsTrack).top),
+  true,
+  'trackScroll: nothing active before the mount check'
+);
+
+registerAnchor(router.routes.docsTrack, 'top').ref(null);
+registerAnchor(router.routes.docsTrack, 'bottom').ref(null);
+await tick();
+
+topRect = { top: 0 };
+bottomRect = { top: 500 };
+
+registerAnchor(router.routes.docsTrack, 'top').ref(
+  fakeElement({ rect: () => topRect })
+);
+registerAnchor(router.routes.docsTrack, 'bottom').ref(
+  fakeElement({ rect: () => bottomRect })
+);
+await tick();
+// the sections just took up space - and the browser delivers this after the
+// frame's callbacks, so it lands on top of the value the refs queued
+triggerResize();
+await tick();
+await tick();
+
+assert.equal(
+  getValue(selectRegisteredAnchors(router.routes.docsTrack).top),
+  'active',
+  'trackScroll: the page growing runs the spy, with no scroll event to trigger it'
+);
+
+// unmounting the active section: it leaves the registered set entirely, and the
+// spy handing the highlight on must not write it back in as merely inactive
+registerAnchor(router.routes.docsTrack, 'top').ref(null);
+bottomRect = { top: 0 };
+await tick();
+triggerResize();
+await tick();
+await tick();
+
+assert.equal(
+  getValue(selectRegisteredAnchors(router.routes.docsTrack).top),
+  undefined,
+  'trackScroll: an unmounted active section reads as absent, not inactive'
+);
+assert.equal(
+  getValue(selectRegisteredAnchors(router.routes.docsTrack).bottom),
+  'active',
+  'trackScroll: the highlight moves to what is left'
+);
+
+registerAnchor(router.routes.docsTrack, 'top').ref(
+  fakeElement({ rect: () => topRect })
+);
+await tick();
 
 // 8c2. leaving the page with a scroll frame still queued must not leave the
 // handle behind, or `??=` never schedules the spy again on the next visit
@@ -841,6 +1009,9 @@ assert.equal(roCallback, undefined, 'refresh: stops on user input');
 // page's controls have detached before the value goes). Headless (no view),
 // the router alone therefore keeps the last value; a re-match overwrites it.
 {
+  // `paths` has no not-found route, so it has to be built on a url it matches
+  history.pushState(null, '', '/');
+
   const dRouter = createRouter(paths);
 
   navigate(dRouter.navigation.user({ id: 42 }).profile());
