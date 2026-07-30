@@ -26,7 +26,7 @@ import makePrimitiveInternals from '#internal/makePrimitiveInternals';
 import append from '#internal/append';
 
 import NOT_FOUND from '#router/NOT_FOUND';
-import { INTERNALS, EMPTY_ARR, PASSIVE } from '#internal/constants';
+import { INTERNALS, EMPTY_ARR } from '#internal/constants';
 import { getLane, getSchedulerLane, scheduleFlush } from '#internal/flushQueue';
 import addToQueue from '#internal/addToQueue';
 import type { AsyncControlScope, ControlScope } from '#types';
@@ -51,6 +51,7 @@ import queueRouterPatch from '#router/internal/queueRouterPatch';
 import removeFromArray from '#internal/removeFromArray';
 import scheduleSet from '#internal/scheduleSet';
 import throwNotMatched from '#router/internal/throwNotMatched';
+import watchReflow from '#router/internal/watchReflow';
 import reportError from '#internal/reportError';
 
 type HistoryState = {
@@ -141,33 +142,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
     apply();
 
-    if (typeof ResizeObserver == 'undefined') {
-      return;
-    }
-
-    const stop = () => {
-      stopRestore = noop;
-
-      clearTimeout(timer);
-
-      observer.disconnect();
-
-      window.removeEventListener('wheel', stop);
-      window.removeEventListener('touchmove', stop);
-      window.removeEventListener('keydown', stop);
-    };
-
-    window.addEventListener('wheel', stop, PASSIVE);
-    window.addEventListener('touchmove', stop, PASSIVE);
-    window.addEventListener('keydown', stop, PASSIVE);
-
-    const observer = new ResizeObserver(apply);
-
-    const timer = setTimeout(stop, 3000);
-
-    observer.observe(documentElement);
-
-    stopRestore = stop;
+    stopRestore = watchReflow(apply);
   };
 
   const chains: RouteData[][] = [];

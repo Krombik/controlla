@@ -4,6 +4,7 @@ import createControl from '#core/createControl';
 import noop from '#internal/noop';
 import { INTERNALS } from '#internal/constants';
 import { EMPTY_OBJECT, ONCE_PASSIVE } from '#router/internal/constants';
+import watchReflow from '#router/internal/watchReflow';
 import type { AnchorScrollOptions } from '#router/types';
 import type { AnchorParam } from '#router/internal/types';
 import type { Lane } from '#internal/types';
@@ -15,10 +16,26 @@ type GetAnchorScrollOptions<Ids extends string = string> = (
 
 const returnDefaultOptions = () => EMPTY_OBJECT as AnchorScrollOptions;
 
+let stopAiming = noop;
+
+const armPending = (self: AnchorParam) => {
+  self._isPending = true;
+
+  window.addEventListener(
+    'scroll',
+    () => {
+      self._isPending = false;
+    },
+    ONCE_PASSIVE
+  );
+};
+
 function anchorScrollTo(this: AnchorParam, id: string, instant?: boolean) {
   const self = this;
 
   const entries = self._entries;
+
+  stopAiming();
 
   for (let i = 0; i < entries.length; i++) {
     const item = entries[i];
@@ -34,21 +51,37 @@ function anchorScrollTo(this: AnchorParam, id: string, instant?: boolean) {
 
       self._onScrollStart(id, options);
 
-      if (options.topOffset != null || options.leftOffset != null) {
-        const rect = el.getBoundingClientRect();
+      const scroll = () => {
+        if (!el.isConnected) {
+          stopAiming();
 
-        window.scrollTo({
-          top: rect.top + window.scrollY - (options.topOffset || 0),
-          left: rect.left + window.scrollX - (options.leftOffset || 0),
-          behavior: options.behavior,
-        });
-      } else {
-        el.scrollIntoView(options);
-      }
+          stopAiming = noop;
+
+          return;
+        }
+
+        if (options.topOffset != null || options.leftOffset != null) {
+          const rect = el.getBoundingClientRect();
+
+          window.scrollTo({
+            top: rect.top + window.scrollY - (options.topOffset || 0),
+            left: rect.left + window.scrollX - (options.leftOffset || 0),
+            behavior: options.behavior,
+          });
+        } else {
+          el.scrollIntoView(options);
+        }
+      };
+
+      scroll();
+
+      stopAiming = watchReflow(scroll);
 
       return;
     }
   }
+
+  armPending(self);
 }
 
 function activate(this: AnchorParam, lane: Lane) {
@@ -56,15 +89,7 @@ function activate(this: AnchorParam, lane: Lane) {
 
   self._hash._set!('', lane);
 
-  self._isPending = true;
-
-  window.addEventListener(
-    'scroll',
-    () => {
-      self._isPending = false;
-    },
-    ONCE_PASSIVE
-  );
+  armPending(self);
 
   self._startTrack();
 }

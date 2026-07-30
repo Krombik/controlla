@@ -634,10 +634,13 @@ await tick();
 assert.equal(location.hash, '#toc', 'pending: nav sets hash');
 
 let scrolledTo: string | undefined;
+let aims = 0;
 registerAnchor(router.routes.docs, 'toc').ref(
   fakeElement({
     onScroll: () => {
       scrolledTo = 'toc';
+
+      aims++;
     },
   })
 );
@@ -645,7 +648,43 @@ await tick();
 
 assert.equal(scrolledTo, 'toc', 'pending: resolved once the element mounted');
 
+// content above the target keeps arriving after that first aim, pushing the
+// section off the position it was just scrolled to, so it is re-aimed on reflow
+const aimsBefore = aims;
+triggerResize();
+
+assert.equal(aims, aimsBefore + 1, 'pending: re-aimed after the page reflowed');
+
+// and it stops as soon as the user takes over (a copy: each `stop` unsubscribes)
+for (const fn of [...(listeners.wheel || [])]) fn({});
+triggerResize();
+
+assert.equal(
+  aims,
+  aimsBefore + 1,
+  'pending: stops re-aiming once the user scrolls'
+);
+
 registerAnchor(router.routes.docs, 'toc').ref(null);
+
+// a scroll-to on a page already open, whose target has unmounted to reload its
+// data, waits for it to come back - the same as arriving at the page would
+navigate(router.navigation.docs('later'));
+await tick();
+
+let scrolledLater = 0;
+registerAnchor(router.routes.docs, 'later').ref(
+  fakeElement({
+    onScroll: () => {
+      scrolledLater++;
+    },
+  })
+);
+await tick();
+
+assert.ok(scrolledLater > 0, 'pending: a remounted target still gets scrolled');
+
+registerAnchor(router.routes.docs, 'later').ref(null);
 
 // the retry always uses instant scroll, even if the anchor is configured smooth
 navigate(router.navigation.docsSmooth('x'));

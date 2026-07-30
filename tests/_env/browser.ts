@@ -14,6 +14,7 @@ export const fakeElement = (options?: {
   onScroll?: (options?: ScrollIntoViewOptions) => void;
 }) =>
   ({
+    isConnected: true,
     scrollIntoView: options?.onScroll || (() => {}),
     getBoundingClientRect: options?.rect || (() => ({ top: 0 })),
   }) as unknown as HTMLElement;
