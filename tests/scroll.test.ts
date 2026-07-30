@@ -6,6 +6,8 @@ import {
   tick,
   windowMock,
   listeners,
+  setScrollHeight,
+  defineGlobal,
 } from './_env/browser.ts';
 import assert from 'node:assert';
 
@@ -118,6 +120,49 @@ assert.equal(
   stateOf(2).scroll,
   undefined,
   'a push must not inherit a marker left by a cancelled unload'
+);
+
+// A pop restores before the target page has swapped in, so the position is just
+// as unreachable as on a refresh and needs the same waiting-for-content retry.
+let roCallback: (() => void) | undefined;
+
+defineGlobal(
+  'ResizeObserver',
+  class {
+    constructor(cb: () => void) {
+      roCallback = cb;
+    }
+    observe() {}
+    disconnect() {
+      roCallback = undefined;
+    }
+  }
+);
+
+windowMock.scrollY = 700;
+navigate(router.navigation.a());
+await settle();
+
+setScrollHeight(600);
+scrolls.length = 0;
+history.go(-1);
+await settle();
+
+assert.equal(location.pathname, '/c', 'popped back to /c');
+assert.equal(
+  scrolls.length,
+  0,
+  'pop: not scrolled while the page is too short'
+);
+assert.ok(roCallback, 'pop: growth observer active');
+
+setScrollHeight(2000);
+roCallback!();
+
+assert.deepEqual(
+  scrolls.at(-1),
+  [0, 700],
+  'pop: restored once the content arrived'
 );
 
 console.log('scroll.test.ts: all assertions passed');

@@ -63,33 +63,7 @@ let devPopStateListener: undefined | ((e: PopStateEvent) => void);
 
 let devPageHideListener: undefined | (() => void);
 
-const beforeUnloadListener = (e: BeforeUnloadEvent) => {
-  e.preventDefault();
-
-  e.returnValue = true;
-};
-
-const writeState = (state: HistoryState) => {
-  try {
-    history.replaceState(state, '');
-  } catch (err) {
-    // best effort: a refused write only costs the restored scroll position
-    reportError(err);
-  }
-};
-
-/**
- * `scroll` is a marker meaning "restore this on the way back", so it belongs
- * only on entries that have been left. It's dropped again once consumed, and
- * never carried onto the entry being opened.
- */
-const saveScroll = (state: HistoryState | null) => {
-  writeState({ ...state, scroll: [window.scrollX, window.scrollY] });
-};
-
-const clearScroll = () => {
-  writeState({ ...(history.state as HistoryState), scroll: undefined });
-};
+let stopRestore = noop;
 
 /**
  * Creates the app's router (there is exactly one) from the given path tree:
@@ -120,6 +94,8 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
       window.removeEventListener('popstate', devPopStateListener);
 
       window.removeEventListener('beforeunload', devPageHideListener!);
+
+      stopRestore();
     }
 
     clearWrites();
@@ -128,6 +104,71 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
   if ('scrollRestoration' in history) {
     history.scrollRestoration = 'manual';
   }
+
+  const beforeUnloadListener = (e: BeforeUnloadEvent) => {
+    e.preventDefault();
+
+    e.returnValue = true;
+  };
+
+  const writeState = (state: HistoryState) => {
+    try {
+      history.replaceState(state, '');
+    } catch (err) {
+      reportError(err);
+    }
+  };
+
+  /** `scroll` means "restore on the way back", so only a left entry may hold one. */
+  const saveScroll = (state: HistoryState | null) => {
+    writeState({ ...state, scroll: [window.scrollX, window.scrollY] });
+  };
+
+  const clearScroll = () => {
+    writeState({ ...(history.state as HistoryState), scroll: undefined });
+  };
+
+  const restoreScroll = (x: number, y: number) => {
+    const documentElement = document.documentElement;
+
+    const apply = () => {
+      if (documentElement.scrollHeight - window.innerHeight >= y) {
+        window.scroll(x, y);
+      }
+    };
+
+    stopRestore();
+
+    apply();
+
+    if (typeof ResizeObserver == 'undefined') {
+      return;
+    }
+
+    const stop = () => {
+      stopRestore = noop;
+
+      clearTimeout(timer);
+
+      observer.disconnect();
+
+      window.removeEventListener('wheel', stop);
+      window.removeEventListener('touchmove', stop);
+      window.removeEventListener('keydown', stop);
+    };
+
+    window.addEventListener('wheel', stop, PASSIVE);
+    window.addEventListener('touchmove', stop, PASSIVE);
+    window.addEventListener('keydown', stop, PASSIVE);
+
+    const observer = new ResizeObserver(apply);
+
+    const timer = setTimeout(stop, 3000);
+
+    observer.observe(documentElement);
+
+    stopRestore = stop;
+  };
 
   const chains: RouteData[][] = [];
 
@@ -1002,7 +1043,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
         if (scroll && isScrollRestorePop) {
           isScrollRestorePop = false;
 
-          window.scroll(scroll[0], scroll[1]);
+          restoreScroll(scroll[0], scroll[1]);
 
           clearScroll();
         }
@@ -1059,40 +1100,22 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
   matchLocation(pathname, searchParams, applyInitial);
 
+  if (currentChainIndex < 0) {
+    throw new Error(`no path matched "${pathname}" - use withNotFound`);
+  }
+
   if (savedScroll) {
     clearScroll();
 
-    const x = savedScroll[0];
+    const currentChain = chains[currentChainIndex];
 
-    const y = savedScroll[1];
+    const anchorParam = currentChain[currentChain.length - 1]._anchor;
 
-    if (document.documentElement.scrollHeight - window.innerHeight >= y) {
-      window.scroll(x, y);
-    } else if (typeof ResizeObserver != 'undefined') {
-      const stop = () => {
-        clearTimeout(timer);
-
-        observer.disconnect();
-
-        window.removeEventListener('wheel', stop);
-        window.removeEventListener('touchmove', stop);
-        window.removeEventListener('keydown', stop);
-      };
-
-      window.addEventListener('wheel', stop, PASSIVE);
-      window.addEventListener('touchmove', stop, PASSIVE);
-      window.addEventListener('keydown', stop, PASSIVE);
-
-      const observer = new ResizeObserver(() => {
-        if (document.documentElement.scrollHeight - window.innerHeight >= y) {
-          window.scroll(x, y);
-        }
-      });
-
-      const timer = setTimeout(stop, 3000);
-
-      observer.observe(document.body);
+    if (anchorParam) {
+      anchorParam._isPending = false;
     }
+
+    restoreScroll(savedScroll[0], savedScroll[1]);
   }
 
   const pageHideListener = () => {
