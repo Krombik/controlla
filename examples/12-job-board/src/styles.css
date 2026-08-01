@@ -1,0 +1,186 @@
+/* Deliberately plain: nothing here is part of the library's story. */
+
+:root {
+  --line: #d9dce1;
+  --muted: #6b7280;
+  --accent: #2c5aa0;
+  --bg-soft: #f6f7f9;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --line: #333840;
+    --muted: #9aa1ac;
+    --accent: #8ab4f8;
+    --bg-soft: #1b1e23;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font: 15px/1.55 system-ui, sans-serif;
+}
+
+a {
+  color: var(--accent);
+}
+
+.shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.shell > nav {
+  flex: 0 0 15rem;
+  padding: 1.25rem 1rem;
+  border-right: 1px solid var(--line);
+  background: var(--bg-soft);
+}
+
+.shell > nav ol {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.shell > nav li {
+  margin: 0.55rem 0;
+}
+
+.shell > nav a[aria-current='page'] {
+  font-weight: 600;
+}
+
+main {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 1.5rem 2rem 6rem;
+  max-width: 62rem;
+}
+
+h1 {
+  font-size: 1.4rem;
+  margin: 0 0 0.35rem;
+}
+
+h2 {
+  font-size: 1.05rem;
+  margin: 0;
+}
+
+.lede {
+  color: var(--muted);
+  margin: 0 0 1.75rem;
+}
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 1rem 1.1rem;
+  margin: 0 0 1rem;
+}
+
+.row {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+label {
+  display: block;
+  margin: 0 0 0.75rem;
+}
+
+label > span {
+  display: block;
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-bottom: 0.2rem;
+}
+
+input,
+select,
+button {
+  font: inherit;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.renders {
+  float: right;
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.skeleton {
+  display: inline-block;
+  height: 1em;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--line), var(--bg-soft), var(--line));
+  background-size: 200% 100%;
+  animation: shimmer 1.2s linear infinite;
+  vertical-align: middle;
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.section-nav {
+  position: sticky;
+  top: 0;
+  display: flex;
+  gap: 0.9rem;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-soft);
+  z-index: 1;
+}
+
+.section-nav button[data-state='active'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.tag {
+  font-size: 0.78rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  color: var(--muted);
+}
+
+.error {
+  color: #b3261e;
+}
+
+@media (prefers-color-scheme: dark) {
+  .error {
+    color: #f2b8b5;
+  }
+}
+
+.mono {
+  font-family: ui-monospace, monospace;
+  font-size: 0.85em;
+}

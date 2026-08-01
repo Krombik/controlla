@@ -1,0 +1,14 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "#api": ["./src/api.ts"],
+      "#router": ["./src/router.ts"],
+      "#App": ["./src/App.tsx"],
+      "#components/*": ["./src/components/*.tsx"],
+      "#controls/*": ["./src/controls/*.ts"],
+      "#pages/*": ["./src/pages/*", "./src/pages/*/index.tsx"]
+    }
+  },
+  "include": ["src"]
+}

@@ -1,0 +1,23 @@
+{
+  "name": "controlla-examples",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#api": "./src/api.ts",
+    "#router": "./src/router.ts",
+    "#App": "./src/App.tsx",
+    "#components/*": "./src/components/*.tsx",
+    "#controls/*": "./src/controls/*.ts",
+    "#pages/*": "./src/pages/*"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "controlla": "link:../../build",
+    "react": "catalog:",
+    "react-dom": "catalog:"
+  }
+}

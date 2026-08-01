@@ -1,0 +1,7 @@
+packages:
+  - '*'
+
+# One version per dependency for every example - they reference it as `catalog:`.
+catalog:
+  react: ^19.2.8
+  react-dom: ^19.2.8

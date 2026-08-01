@@ -1,0 +1,32 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "anchors",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd examples/11-router-anchors && pnpm dev --port 5191"
+      ],
+      "port": 5191
+    },
+    {
+      "name": "router",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd examples/10-router && pnpm dev --port 5190"
+      ],
+      "port": 5190
+    },
+    {
+      "name": "job-board",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd examples/12-job-board && pnpm dev --port 5192"
+      ],
+      "port": 5192
+    }
+  ]
+}

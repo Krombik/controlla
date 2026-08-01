@@ -1,0 +1,15 @@
+{
+  "name": "controlla-example-05-registry",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "controlla": "link:../../build",
+    "react": "catalog:",
+    "react-dom": "catalog:"
+  }
+}
