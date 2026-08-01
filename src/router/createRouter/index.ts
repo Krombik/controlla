@@ -26,7 +26,7 @@ import makePrimitiveInternals from '#internal/makePrimitiveInternals';
 import append from '#internal/append';
 
 import NOT_FOUND from '#router/NOT_FOUND';
-import { INTERNALS, EMPTY_ARR } from '#internal/constants';
+import { INTERNALS, EMPTY_ARR, PASSIVE } from '#internal/constants';
 import { getLane, getSchedulerLane, scheduleFlush } from '#internal/flushQueue';
 import addToQueue from '#internal/addToQueue';
 import type { AsyncControlScope, ControlScope } from '#types';
@@ -53,16 +53,15 @@ import scheduleSet from '#internal/scheduleSet';
 import throwNotMatched from '#router/internal/throwNotMatched';
 import watchReflow from '#router/internal/watchReflow';
 import reportError from '#internal/reportError';
+import safeSessionStorage from '#persist/safeSessionStorage';
 
 type HistoryState = {
   idx?: number;
-  scroll?: [x: number, y: number];
-  init?: 1;
 };
 
 let devPopStateListener: undefined | ((e: PopStateEvent) => void);
 
-let devPageHideListener: undefined | (() => void);
+let devScrollListener: undefined | (() => void);
 
 let stopRestore = noop;
 
@@ -90,11 +89,16 @@ let stopRestore = noop;
  * ```
  */
 const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
+  const SCROLL_POS_HISTORY_KEY = 'controlla.SPH';
+  const CURRENT_SCROLL_POS_KEY = 'controlla.CSP';
+
+  const SCROLL_SAVE_DELAY = 100;
+
   if (process.env.NODE_ENV !== 'production') {
     if (devPopStateListener) {
       window.removeEventListener('popstate', devPopStateListener);
 
-      window.removeEventListener('beforeunload', devPageHideListener!);
+      window.removeEventListener('scroll', devScrollListener!);
 
       stopRestore();
     }
@@ -112,22 +116,14 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
     e.returnValue = true;
   };
 
-  const writeState = (state: HistoryState) => {
-    try {
-      history.replaceState(state, '');
-    } catch (err) {
-      reportError(err);
-    }
-  };
-
-  /** `scroll` means "restore on the way back", so only a left entry may hold one. */
-  const saveScroll = (state: HistoryState | null) => {
-    writeState({ ...state, scroll: [window.scrollX, window.scrollY] });
-  };
-
-  const clearScroll = () => {
-    writeState({ ...(history.state as HistoryState), scroll: undefined });
-  };
+  const saveScrollPosHistory: () => void = safeSessionStorage
+    ? () => {
+        safeSessionStorage!.setItem(
+          SCROLL_POS_HISTORY_KEY,
+          scrollPosHistory.join()
+        );
+      }
+    : noop;
 
   const restoreScroll = (x: number, y: number) => {
     const documentElement = document.documentElement;
@@ -451,27 +447,46 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
             );
           }
         } else {
+          const nextHistoryIndex = currentHistoryIndex + 1;
+
+          history.pushState(
+            {
+              ...state,
+              idx: nextHistoryIndex,
+            } satisfies HistoryState,
+            '',
+            path
+          );
+
+          const nextPosHistorySize = nextHistoryIndex * 2;
+
+          scrollPosHistory.length = nextPosHistorySize;
+
           if (
             nav &&
             (nav._scrollRestoration == null
               ? nav._isNewPage
               : nav._scrollRestoration)
           ) {
-            saveScroll(state);
+            scrollPosHistory[nextPosHistorySize - 2] = Math.round(
+              window.scrollX
+            );
+            scrollPosHistory[nextPosHistorySize - 1] = Math.round(
+              window.scrollY
+            );
+          } else {
+            // whatever an earlier departure left here is stale now
+            scrollPosHistory[nextPosHistorySize - 2] = undefined;
+
+            scrollPosHistory[nextPosHistorySize - 1] = undefined;
           }
 
-          history.pushState(
-            {
-              ...state,
-              idx: currentHistoryIndex + 1,
-              scroll: undefined,
-            } satisfies HistoryState,
-            '',
-            path
-          );
+          saveScrollPosHistory();
+
+          knownLength = history.length;
 
           // only once the entry exists, or the index outruns the real history
-          currentHistoryIndex++;
+          currentHistoryIndex = nextHistoryIndex;
 
           navigationStateRoot._enqueueSet({ action: 'push', delta: 1 }, lane);
         }
@@ -939,8 +954,6 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
   const state = history.state as HistoryState | null;
 
-  const savedScroll = state && state.scroll;
-
   const navigations: Record<string, Navigation<AnyPaths, any>> = {};
 
   const routes: Route<any, any, any> = {} as any;
@@ -957,9 +970,11 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
   let canBlockPop = true;
 
-  let isScrollSavePop = false;
+  let knownLength = history.length;
 
-  let isScrollRestorePop = false;
+  let historyRepairResolve: ((value: true) => void) | undefined | void;
+
+  let repairedUrl = '';
 
   let currentHistoryIndex = 0;
 
@@ -968,81 +983,92 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
   let resumeNavigation: () => void = noop;
 
   const popStateListener = (e: PopStateEvent) => {
+    if (historyRepairResolve) {
+      history.pushState(
+        {
+          ...(history.state as HistoryState),
+          idx: currentHistoryIndex,
+        } satisfies HistoryState,
+        '',
+        repairedUrl
+      );
+
+      knownLength = history.length;
+
+      historyRepairResolve = historyRepairResolve(true);
+
+      return;
+    }
+
     const state = e.state as HistoryState | null;
 
     const nextHistoryIndex = state && state.idx;
 
-    if (isBlockedPop) {
-      isBlockedPop = false;
+    if (nextHistoryIndex != null) {
+      if (isBlockedPop) {
+        isBlockedPop = false;
 
-      scheduleSet(pendingNavigationRoot, true);
-    } else if (isScrollSavePop) {
-      isScrollSavePop = false;
-
-      isScrollRestorePop = true;
-
-      saveScroll(state);
-
-      history.go(delta);
-    } else if (nextHistoryIndex != currentHistoryIndex) {
-      if (nextHistoryIndex != null) {
-        const scroll = state && state.scroll;
-
-        // blocker active: undo the pop and park it for allow()/deny()
-        isBlockedPop = canBlockPop && !canNavigate;
-
+        scheduleSet(pendingNavigationRoot, true);
+      } else {
         delta = nextHistoryIndex - currentHistoryIndex;
 
-        if (isBlockedPop) {
-          resumeNavigation = () => {
-            canBlockPop = false;
+        if (delta) {
+          // blocker active: undo the pop and park it for allow()/deny()
+          isBlockedPop = canBlockPop && !canNavigate;
 
-            history.go(delta);
-          };
+          if (isBlockedPop) {
+            resumeNavigation = () => {
+              canBlockPop = false;
 
-          history.go(-delta);
+              history.go(delta);
+            };
 
-          return;
+            history.go(-delta);
+
+            return;
+          }
+
+          const nextScrollPosHistoryIndex = nextHistoryIndex * 2;
+
+          const currScrollPosHistoryIndex = currentHistoryIndex * 2;
+
+          const nextScrollX = scrollPosHistory[nextScrollPosHistoryIndex];
+
+          if (nextScrollX != null) {
+            scrollPosHistory[currScrollPosHistoryIndex] = Math.round(
+              window.scrollX
+            );
+
+            scrollPosHistory[currScrollPosHistoryIndex + 1] = Math.round(
+              window.scrollY
+            );
+
+            saveScrollPosHistory();
+
+            restoreScroll(
+              nextScrollX,
+              scrollPosHistory[nextScrollPosHistoryIndex + 1]!
+            );
+          } else if (scrollPosHistory[currScrollPosHistoryIndex] != null) {
+            scrollPosHistory[currScrollPosHistoryIndex] = undefined;
+
+            scrollPosHistory[currScrollPosHistoryIndex + 1] = undefined;
+
+            saveScrollPosHistory();
+          }
+
+          currentHistoryIndex = nextHistoryIndex;
+
+          canBlockPop = true;
         }
-
-        // the target entry restores scroll: hop back to stamp the current
-        // entry's scroll first, then re-run the pop
-        isScrollSavePop = !!scroll && !isScrollRestorePop;
-
-        if (isScrollSavePop) {
-          history.go(-delta);
-
-          return;
-        }
-
-        if (scroll && isScrollRestorePop) {
-          isScrollRestorePop = false;
-
-          restoreScroll(scroll[0], scroll[1]);
-
-          clearScroll();
-        }
-
-        currentHistoryIndex = nextHistoryIndex;
-      } else {
-        history.replaceState(
-          {
-            ...(state as HistoryState),
-            idx: ++currentHistoryIndex,
-            init: 1,
-          } satisfies HistoryState,
-          ''
-        );
-
-        delta = 0;
       }
-
-      canBlockPop = true;
-
-      navigationStateRoot._enqueueSet({ action: 'pop', delta }, historyLane);
-
-      matchLocation(location.pathname, parseSearch(location.search), false);
+    } else {
+      delta = 0;
     }
+
+    navigationStateRoot._enqueueSet({ action: 'pop', delta }, historyLane);
+
+    matchLocation(location.pathname, parseSearch(location.search), false);
   };
 
   buildRoutes(routes, navigations, paths, EMPTY_ARR, '', 0, false);
@@ -1056,32 +1082,94 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
     history.replaceState(state, '', pathname + search + location.hash);
   }
 
-  const applyInitial = !state || !state.init;
-
   if (state && state.idx != null) {
     currentHistoryIndex = state.idx;
-  }
-
-  if (applyInitial || state!.idx == null) {
+  } else {
     history.replaceState(
       {
         ...(typeof state == 'object' ? state : null),
         idx: currentHistoryIndex,
-        init: 1,
       } satisfies HistoryState,
       ''
     );
   }
 
-  matchLocation(pathname, searchParams, applyInitial);
+  let scrollPosHistory: (number | undefined)[];
+
+  const rawScrollPosHistory =
+    safeSessionStorage && safeSessionStorage.getItem(SCROLL_POS_HISTORY_KEY);
+
+  if (rawScrollPosHistory) {
+    scrollPosHistory = [];
+
+    const rawSize = rawScrollPosHistory.length;
+
+    let start = 0;
+    let comma;
+    let end;
+
+    do {
+      comma = rawScrollPosHistory.indexOf(',', start);
+
+      end = rawScrollPosHistory.indexOf(',', comma + 1);
+
+      if (end < 0) {
+        end = rawSize;
+      }
+
+      if (comma > start) {
+        scrollPosHistory.push(
+          +rawScrollPosHistory.slice(start, comma),
+          +rawScrollPosHistory.slice(comma + 1, end)
+        );
+      } else {
+        scrollPosHistory.push(undefined, undefined);
+      }
+
+      start = end + 1;
+    } while (start <= rawSize);
+  } else {
+    scrollPosHistory = Array(currentHistoryIndex * 2);
+  }
+
+  const rawSavedScroll =
+    safeSessionStorage && safeSessionStorage.getItem(CURRENT_SCROLL_POS_KEY);
+
+  let restoreX: number | undefined;
+
+  let restoreY: number | undefined;
+
+  if (rawSavedScroll) {
+    let comma = rawSavedScroll.indexOf(',');
+
+    if (+rawSavedScroll.slice(0, comma) == currentHistoryIndex) {
+      const start = comma + 1;
+
+      comma = rawSavedScroll.indexOf(',', start);
+
+      restoreX = +rawSavedScroll.slice(start, comma);
+
+      restoreY = +rawSavedScroll.slice(comma + 1);
+    }
+  }
+
+  if (restoreX === undefined) {
+    const currentScrollPosHistoryIndex = currentHistoryIndex * 2;
+
+    restoreX = scrollPosHistory[currentScrollPosHistoryIndex];
+
+    restoreY = scrollPosHistory[currentScrollPosHistoryIndex + 1];
+  }
+
+  // nothing to restore means this entry has not been visited, so the params'
+  // initial values apply
+  matchLocation(pathname, searchParams, restoreX === undefined);
 
   if (currentChainIndex < 0) {
     throw new Error(`no path matched "${pathname}" - use withNotFound`);
   }
 
-  if (savedScroll) {
-    clearScroll();
-
+  if (restoreX !== undefined) {
     const currentChain = chains[currentChainIndex];
 
     const anchorParam = currentChain[currentChain.length - 1]._anchor;
@@ -1090,27 +1178,54 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
       anchorParam._isPending = false;
     }
 
-    restoreScroll(savedScroll[0], savedScroll[1]);
+    restoreScroll(restoreX, restoreY!);
   }
 
-  const pageHideListener = () => {
-    saveScroll(history.state);
+  let scrollSaveTimeout: ReturnType<typeof setTimeout> | undefined;
+
+  const scrollListener = () => {
+    if (scrollSaveTimeout === undefined) {
+      scrollSaveTimeout = setTimeout(() => {
+        scrollSaveTimeout = undefined;
+
+        safeSessionStorage!.setItem(
+          CURRENT_SCROLL_POS_KEY,
+          `${currentHistoryIndex},${Math.round(window.scrollX)},${Math.round(window.scrollY)}`
+        );
+      }, SCROLL_SAVE_DELAY);
+    }
   };
 
   window.addEventListener('popstate', popStateListener);
 
-  window.addEventListener('beforeunload', pageHideListener);
+  if (safeSessionStorage) {
+    window.addEventListener('scroll', scrollListener, PASSIVE);
+  }
 
   if (process.env.NODE_ENV !== 'production') {
     devPopStateListener = popStateListener;
 
-    devPageHideListener = pageHideListener;
+    devScrollListener = scrollListener;
   }
 
   return {
     routes: routes as any,
     navigation: navigations as any,
     navigationState: $navigationState,
+    repairHistory: () =>
+      new Promise<boolean>((resolve) => {
+        const foreignCount = history.length - knownLength;
+
+        if (foreignCount < 1 || !currentHistoryIndex) {
+          resolve(false);
+        } else {
+          repairedUrl = location.pathname + location.search + location.hash;
+
+          historyRepairResolve = resolve;
+
+          history.go(-foreignCount - 1);
+        }
+      }),
     navigationBlocker: {
       enable() {
         canNavigate = false;

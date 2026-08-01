@@ -13,6 +13,9 @@ import {
   defineGlobal,
   setScrollHeight,
   triggerResize,
+  session,
+  SCROLL_POS_HISTORY_KEY,
+  CURRENT_SCROLL_POS_KEY,
 } from './_env/browser.ts';
 import assert from 'node:assert';
 
@@ -933,11 +936,13 @@ manual.flush();
 assert.equal(getValue(a), 3, 'sched: batch committed on flush');
 assert.equal(getValue(b), 30, 'sched: batch writes joined the batch lane');
 
-// ---------- initialValue: boot-only, session-flagged ----------
+// ---------- initialValue: boot-only, decided by the stored scroll ----------
 
-// fresh entry — no history.state, so initialValue applies
+// a fresh entry: nothing stored against it, so initialValue applies
 history.pushState(null, '', '/items');
 current().state = null;
+delete session[SCROLL_POS_HISTORY_KEY];
+delete session[CURRENT_SCROLL_POS_KEY];
 
 const makeItemsRouter = () =>
   createRouter({
@@ -956,7 +961,7 @@ assert.deepEqual(
 );
 await tick();
 assert.equal(location.search, '?sort=asc', 'initial: url normalized');
-assert.equal(current().state.init, 1, 'initial: session flag stamped');
+assert.equal(current().state.idx, 0, 'initial: the entry is stamped');
 
 // clearing via setValue — stays cleared, absence now means undefined
 setValue(selectParams(router3.routes.items), {});
@@ -978,7 +983,8 @@ assert.deepEqual(
 );
 assert.equal(location.search, '', 'initial: nav url clean');
 
-// "refresh": same history entry (state.init = 1), router recreated
+// "refresh": the same entry, and now a position is stored against it
+session[CURRENT_SCROLL_POS_KEY] = `${current().state.idx},0,0`;
 router3 = makeItemsRouter();
 assert.equal(
   getValue(selectParams(router3.routes.items)).sort,
@@ -1014,13 +1020,14 @@ windowMock.scroll = (x, y) => {
   windowMock.scrollY = Math.min(y, docEl.scrollHeight - windowMock.innerHeight);
 };
 
-// beforeunload stores the position in history.state
+// no unload event is reliable, so scrolling keeps the position up to date
 windowMock.scrollY = 321;
-for (const fn of listeners.beforeunload) fn({});
-assert.deepEqual(
-  current().state.scroll,
-  [0, 321],
-  'refresh: scroll saved on beforeunload'
+for (const fn of listeners.scroll) fn();
+await sleep(150);
+assert.equal(
+  session[CURRENT_SCROLL_POS_KEY],
+  `${current().state.idx},0,321`,
+  'refresh: scroll saved against the entry it belongs to'
 );
 
 // "refresh" — page too short to reach 321, so it doesn't scroll (no clamp)

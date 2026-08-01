@@ -130,6 +130,18 @@ export type Router<
   };
   /** The last history action: `push`, `replace` or `pop` (with its delta). */
   readonly navigationState: ReadonlyControl<NavigationState>;
+  /**
+   * Drops the entries a third party left in the history - every navigation of
+   * an iframe (a 3DS payment frame, an ad) appends one, and while they are
+   * there the back button does nothing for as many presses. Every navigation
+   * repairs the history first, so calling this is only for staying on the page
+   * after whatever produced them: `await router.repairHistory()`.
+   *
+   * Resolves once done, or right away when there is nothing to drop. Cannot
+   * repair the very first entry of the session, which has nothing in front of
+   * it to push from.
+   */
+  repairHistory(): Promise<boolean>;
 };
 
 declare const IS_PAGE_MARKER: unique symbol;

@@ -4,19 +4,24 @@ import {
   entries,
   history,
   tick,
+  sleep,
   windowMock,
   listeners,
   setScrollHeight,
   defineGlobal,
+  session,
+  SCROLL_POS_HISTORY_KEY,
+  CURRENT_SCROLL_POS_KEY,
 } from './_env/browser.ts';
 import assert from 'node:assert';
 
-// a refresh: the unload stamped a scroll marker on the entry we are opening
+// a refresh: the scroll listener left the position of the entry being opened
 entries.length = 0;
-entries.push({ url: '/a', state: { idx: 0, init: 1, scroll: [0, 250] } });
+entries.push({ url: '/a', state: { idx: 0 } });
 location.pathname = '/a';
 location.search = '';
 location.hash = '';
+session[CURRENT_SCROLL_POS_KEY] = '0,0,250';
 
 const { default: createRouter } =
   await import('../build/router/createRouter/index.js');
@@ -40,86 +45,54 @@ const settle = async () => {
   for (let i = 0; i < 4; i++) await tick();
 };
 
-const stateOf = (i: number) => entries[i].state;
+const storedScrolls = () => session[SCROLL_POS_HISTORY_KEY];
 
 await settle();
 
-// `scroll` means "restore this on the way back", so the entry being viewed
-// must never hold one - it has already been consumed
 assert.deepEqual(
   scrolls[0],
   [0, 250],
-  'refresh restores the scroll the unload saved'
-);
-assert.equal(
-  'scroll' in stateOf(0) ? stateOf(0).scroll : undefined,
-  undefined,
-  'refresh drops the marker once restored'
+  'refresh restores the position saved for this entry'
 );
 
+// a marked navigation records where it is leaving, and only that - the entry
+// being opened has no position yet
 windowMock.scrollY = 400;
 navigate(router.navigation.b());
 await settle();
 
-assert.deepEqual(
-  stateOf(0).scroll,
-  [0, 400],
-  'leaving an entry for a new page marks it'
-);
-assert.equal(
-  stateOf(1).scroll,
-  undefined,
-  'the entry being opened must not inherit the marker'
-);
+assert.equal(storedScrolls(), '0,400', 'leaving an entry records it');
 
 windowMock.scrollY = 900;
 navigate(router.navigation.c());
 await settle();
 
-assert.deepEqual(
-  stateOf(1).scroll,
-  [0, 900],
-  'each entry marks its own scroll'
-);
-assert.equal(stateOf(2).scroll, undefined, 'still no marker on the new entry');
+assert.equal(storedScrolls(), '0,400,0,900', 'each entry records its own');
 
-// back to /b: its marker is consumed and cleared
+// back to /b: it has a position, so this run of entries tracks scroll and the
+// one being left joins it
+windowMock.scrollY = 1500;
 history.go(-1);
 await settle();
 
 assert.equal(location.pathname, '/b', 'popped back to /b');
-assert.deepEqual(scrolls.at(-1), [0, 900], "/b's own scroll was restored");
+assert.deepEqual(scrolls.at(-1), [0, 900], "/b's own position was restored");
 assert.equal(
-  stateOf(1).scroll,
-  undefined,
-  'a consumed marker is cleared from the entry now being viewed'
+  storedScrolls(),
+  '0,400,0,900,0,1500',
+  'the entry the pop left behind keeps its position for the way forward'
 );
 
-// An unload marks the current entry so a refresh can restore it - but the
-// blocker cancels unloads, so the marker can outlive the attempt and sit on the
-// entry still being viewed. A push from there must not carry it over.
-windowMock.scrollY = 1200;
-router.navigationBlocker.enable();
+// no unload event is reliable, so the current position is kept up to date from
+// the scroll event instead
+for (const fn of listeners.scroll || []) fn();
 
-for (const fn of listeners.beforeunload || []) {
-  fn({ preventDefault() {}, returnValue: false });
-}
-await settle();
-
-assert.deepEqual(
-  stateOf(1).scroll,
-  [0, 1200],
-  'a cancelled unload leaves its marker behind'
-);
-
-router.navigationBlocker.disable();
-navigate(router.navigation.c());
-await settle();
+await sleep(150);
 
 assert.equal(
-  stateOf(2).scroll,
-  undefined,
-  'a push must not inherit a marker left by a cancelled unload'
+  session[CURRENT_SCROLL_POS_KEY],
+  '1,0,1500',
+  'scrolling stamps the position against the entry it belongs to'
 );
 
 // A pop restores before the target page has swapped in, so the position is just
@@ -138,6 +111,9 @@ defineGlobal(
     }
   }
 );
+
+navigate(router.navigation.c());
+await settle();
 
 windowMock.scrollY = 700;
 navigate(router.navigation.a());

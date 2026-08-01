@@ -8,10 +8,10 @@ import {
 } from './_env/browser.ts';
 import assert from 'node:assert';
 
-// the back target carries a stamped idx and a saved scroll, so the blocker has
-// to interleave with the scroll-save round trip rather than replace it
+// the blocker undoes a pop and replays it later, so it has to leave the scroll
+// bookkeeping of the entries it passes over intact
 entries.length = 0;
-entries.push({ url: '/a', state: { idx: 0, scroll: [0, 250] } });
+entries.push({ url: '/a', state: { idx: 0 } });
 location.pathname = '/a';
 location.search = '';
 location.hash = '';
@@ -29,6 +29,12 @@ const pending = blocker.isPendingNavigation;
 
 const settle = async () => {
   for (let i = 0; i < 4; i++) await tick();
+};
+
+const scrolls: Array<[number, number]> = [];
+
+windowMock.scroll = (x: number, y: number) => {
+  scrolls.push([x, y]);
 };
 
 // ---- user navigation, denied ----
@@ -100,11 +106,6 @@ const settle = async () => {
     1,
     'pop: the entry left behind keeps its own idx'
   );
-  assert.deepEqual(
-    entries[1].state.scroll,
-    [0, 700],
-    "pop: allow still saves the left entry's scroll"
-  );
 }
 
 // ---- and the entry survives a later visit ----
@@ -115,6 +116,11 @@ const settle = async () => {
 
   assert.equal(location.pathname, '/b', 'forward moves the url');
   assert.equal(getValue(router.routes.b), true, 'forward actually routes');
+  assert.deepEqual(
+    scrolls.at(-1),
+    [0, 700],
+    'forward restores the scroll the blocked pop saved for the entry it left'
+  );
 }
 
 console.log('blocker.test.ts: all assertions passed');

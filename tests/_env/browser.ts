@@ -42,10 +42,28 @@ let idx = 0;
 
 export const current = () => entries[idx];
 
+/**
+ * What an iframe navigating does: appends an entry carrying the top document's
+ * state and url, and stands on it. Only `history.length` shows it.
+ */
+export const addForeignEntry = () => {
+  const entry = current();
+
+  entries.splice(idx + 1, entries.length, {
+    url: entry.url,
+    state: entry.state,
+  });
+
+  idx++;
+};
+
 export const history: any = {
   scrollRestoration: 'auto',
   get state() {
     return entries[idx].state;
+  },
+  get length() {
+    return entries.length;
   },
   pushState(state: any, _: string, url?: string) {
     entries.splice(idx + 1);
@@ -126,6 +144,24 @@ export const setScrollHeight = (px: number) => {
 
   triggerResize();
 };
+
+/** The flat `x,y` pairs the router keeps, one per history entry. */
+export const SCROLL_POS_HISTORY_KEY = 'controlla.SPH';
+
+/** Where the page is right now, as `idx,x,y` - what a refresh restores. */
+export const CURRENT_SCROLL_POS_KEY = 'controlla.CSP';
+
+export const session: Record<string, string> = {};
+
+defineGlobal('sessionStorage', {
+  getItem: (key: string) => session[key] ?? null,
+  setItem: (key: string, value: string) => {
+    session[key] = value;
+  },
+  removeItem: (key: string) => {
+    delete session[key];
+  },
+});
 
 defineGlobal('requestAnimationFrame', (cb: () => void) => setTimeout(cb, 0));
 
