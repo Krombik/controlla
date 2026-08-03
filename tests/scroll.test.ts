@@ -31,7 +31,7 @@ const { default: navigate } = await import('../build/router/navigate/index.js');
 
 const scrolls: Array<[number, number]> = [];
 
-windowMock.scroll = (x: number, y: number) => {
+windowMock.onScroll = (x: number, y: number) => {
   scrolls.push([x, y]);
 };
 

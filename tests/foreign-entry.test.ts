@@ -27,7 +27,7 @@ const { default: createPath } =
 const { default: navigate } = await import('../build/router/navigate/index.js');
 import getValue from '../build/core/getValue/index.js';
 
-windowMock.scroll = () => {};
+windowMock.onScroll = () => {};
 
 const router = createRouter({
   checkout: createPath('checkout'),

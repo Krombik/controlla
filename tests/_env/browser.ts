@@ -42,6 +42,14 @@ let idx = 0;
 
 export const current = () => entries[idx];
 
+/** Back to a single entry standing on it, as a freshly opened tab would be. */
+export const resetEntries = (entry: Entry) => {
+  entries.length = 0;
+  entries.push(entry);
+  idx = 0;
+  setLocation(entry.url);
+};
+
 /**
  * What an iframe navigating does: appends an entry carrying the top document's
  * state and url, and stands on it. Only `history.length` shows it.
@@ -103,7 +111,15 @@ export const windowMock = {
   scrollX: 0,
   scrollY: 0,
   innerHeight: 800,
-  scroll(_x: number, _y: number) {},
+  /** Normalizes both call shapes the router uses into {@link onScroll}. */
+  scroll(x: number | ScrollToOptions, y?: number) {
+    if (typeof x == 'object') {
+      windowMock.onScroll(x.left!, x.top!);
+    } else {
+      windowMock.onScroll(x, y!);
+    }
+  },
+  onScroll(_x: number, _y: number) {},
   scrollTo() {},
 };
 

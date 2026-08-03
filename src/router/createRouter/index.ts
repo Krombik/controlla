@@ -130,11 +130,9 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
     const apply = () => {
       if (documentElement.scrollHeight - window.innerHeight >= y) {
-        window.scroll(x, y);
+        window.scroll({ left: x, top: y, behavior: 'instant' });
       }
     };
-
-    stopRestore();
 
     apply();
 
@@ -312,7 +310,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
         }
 
         if (nextAnchor) {
-          nextAnchor._activate(lane);
+          nextAnchor._activate(lane, patch._hashChanged);
         }
       }
 
@@ -425,7 +423,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
       }
 
       if (anchorValue) {
-        scrollToAnchor = patch._hashChanged;
+        scrollToAnchor = patch._hashChanged && (!nav || !nav._isHistoryEvent);
 
         path += '#' + anchorValue;
       }
@@ -1082,9 +1080,13 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
     history.replaceState(state, '', pathname + search + location.hash);
   }
 
+  let isKnownEntry = true;
+
   if (state && state.idx != null) {
     currentHistoryIndex = state.idx;
   } else {
+    isKnownEntry = false;
+
     history.replaceState(
       {
         ...(typeof state == 'object' ? state : null),
@@ -1092,12 +1094,20 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
       } satisfies HistoryState,
       ''
     );
+
+    if (safeSessionStorage) {
+      safeSessionStorage.removeItem(SCROLL_POS_HISTORY_KEY);
+
+      safeSessionStorage.removeItem(CURRENT_SCROLL_POS_KEY);
+    }
   }
 
   let scrollPosHistory: (number | undefined)[];
 
   const rawScrollPosHistory =
-    safeSessionStorage && safeSessionStorage.getItem(SCROLL_POS_HISTORY_KEY);
+    isKnownEntry &&
+    safeSessionStorage &&
+    safeSessionStorage.getItem(SCROLL_POS_HISTORY_KEY);
 
   if (rawScrollPosHistory) {
     scrollPosHistory = [];
@@ -1133,7 +1143,9 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
   }
 
   const rawSavedScroll =
-    safeSessionStorage && safeSessionStorage.getItem(CURRENT_SCROLL_POS_KEY);
+    isKnownEntry &&
+    safeSessionStorage &&
+    safeSessionStorage.getItem(CURRENT_SCROLL_POS_KEY);
 
   let restoreX: number | undefined;
 
@@ -1162,7 +1174,8 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
   }
 
   // nothing to restore means this entry has not been visited, so the params'
-  // initial values apply
+  // initial values apply - and the url's hash is a fresh instruction, not
+  // something being returned to
   matchLocation(pathname, searchParams, restoreX === undefined);
 
   if (currentChainIndex < 0) {
@@ -1170,14 +1183,6 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
   }
 
   if (restoreX !== undefined) {
-    const currentChain = chains[currentChainIndex];
-
-    const anchorParam = currentChain[currentChain.length - 1]._anchor;
-
-    if (anchorParam) {
-      anchorParam._isPending = false;
-    }
-
     restoreScroll(restoreX, restoreY!);
   }
 

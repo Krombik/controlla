@@ -1,14 +1,19 @@
 import noop from '#internal/noop';
 import { PASSIVE } from '#internal/constants';
 
+let stopCurrent = noop;
+
 /**
  * Runs {@link apply} again on every reflow, for 3s or until the user scrolls -
  * a position aimed at while the page is still filling in is aimed at too early.
- * Returns the stop, so the next aim can cancel this one.
+ * Only one watch runs at a time: two of them would pull the page apart. Returns
+ * the stop, for cancelling without starting another.
  */
 const watchReflow: (apply: () => void) => () => void =
   typeof ResizeObserver != 'undefined'
     ? (apply) => {
+        stopCurrent();
+
         const stop = () => {
           clearTimeout(timer);
 
@@ -29,7 +34,7 @@ const watchReflow: (apply: () => void) => () => void =
 
         observer.observe(document.documentElement);
 
-        return stop;
+        return (stopCurrent = stop);
       }
     : () => noop;
 

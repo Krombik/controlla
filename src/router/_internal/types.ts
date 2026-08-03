@@ -406,7 +406,7 @@ export type AnchorParam<Ids extends string = string> = {
   /** @internal */
   _isPending: boolean;
   /** @internal */
-  _activate(lane: Lane): void;
+  _activate(lane: Lane, isHashRequested: boolean): void;
   /** @internal */
   _startTrack(): void;
   /** @internal */

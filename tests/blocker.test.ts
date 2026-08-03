@@ -33,7 +33,7 @@ const settle = async () => {
 
 const scrolls: Array<[number, number]> = [];
 
-windowMock.scroll = (x: number, y: number) => {
+windowMock.onScroll = (x: number, y: number) => {
   scrolls.push([x, y]);
 };
 

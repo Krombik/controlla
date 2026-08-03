@@ -38,11 +38,9 @@ function anchorScrollTo(this: AnchorParam, id: string, instant?: boolean) {
   stopAiming();
 
   for (let i = 0; i < entries.length; i++) {
-    const item = entries[i];
+    const entry = entries[i];
 
-    if (item._id == id) {
-      const el = item._el;
-
+    if (entry._id == id) {
       let options = self._getOptions(self._offsetEl, id);
 
       if (instant) {
@@ -52,11 +50,9 @@ function anchorScrollTo(this: AnchorParam, id: string, instant?: boolean) {
       self._onScrollStart(id, options);
 
       const scroll = () => {
+        const el = entry._el;
+
         if (!el.isConnected) {
-          stopAiming();
-
-          stopAiming = noop;
-
           return;
         }
 
@@ -84,12 +80,16 @@ function anchorScrollTo(this: AnchorParam, id: string, instant?: boolean) {
   armPending(self);
 }
 
-function activate(this: AnchorParam, lane: Lane) {
+function activate(this: AnchorParam, lane: Lane, isHashRequested: boolean) {
   const self = this;
 
   self._hash._set!('', lane);
 
-  armPending(self);
+  if (isHashRequested) {
+    armPending(self);
+  } else {
+    self._isPending = false;
+  }
 
   self._startTrack();
 }

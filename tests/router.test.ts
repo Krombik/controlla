@@ -689,6 +689,28 @@ assert.ok(scrolledLater > 0, 'pending: a remounted target still gets scrolled');
 
 registerAnchor(router.routes.docs, 'later').ref(null);
 
+// a section that remounts while an aim is still in flight - suspense resolving,
+// a list swapping keys - is followed: the aim resolves the element on every run,
+// so it lands on the node that replaced the one it started on
+navigate(router.navigation.docs('swap'));
+await tick();
+
+const swapHandle = registerAnchor(router.routes.docs, 'swap');
+swapHandle.ref(fakeElement({ onScroll: () => {} }));
+await tick();
+
+let aimedAtReplacement = 0;
+swapHandle.ref(null);
+swapHandle.ref(fakeElement({ onScroll: () => aimedAtReplacement++ }));
+triggerResize();
+
+assert.ok(
+  aimedAtReplacement > 0,
+  'pending: the aim follows the section that remounted under it'
+);
+
+swapHandle.ref(null);
+
 // the retry always uses instant scroll, even if the anchor is configured smooth
 navigate(router.navigation.docsSmooth('x'));
 await tick();
@@ -1014,7 +1036,7 @@ defineGlobal(
 const docEl = document.documentElement as { scrollHeight: number };
 let scrolled: [number, number] | undefined;
 docEl.scrollHeight = 900; // max scroll = 900 - innerHeight(800) = 100
-windowMock.scroll = (x, y) => {
+windowMock.onScroll = (x, y) => {
   scrolled = [x, y];
   windowMock.scrollX = x;
   windowMock.scrollY = Math.min(y, docEl.scrollHeight - windowMock.innerHeight);

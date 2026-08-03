@@ -29,7 +29,10 @@ const registerAnchor = <A extends string>(
   let handle = anchorParam._handles.get(id);
 
   if (!handle) {
+    // reused across remounts, so an aim in flight follows the element it gets
     let entry: AnchorEntry | undefined;
+
+    let isMounted = false;
 
     anchorParam._handles.set(
       id,
@@ -41,10 +44,16 @@ const registerAnchor = <A extends string>(
           const root = anchorParam._registered[INTERNALS] as ControlInternals;
 
           if (el) {
-            if (entry) {
-              entry._el = el;
-            } else {
-              anchorParam._entries.push((entry = { _id: id, _el: el }));
+            if (!isMounted) {
+              isMounted = true;
+
+              if (entry) {
+                entry._el = el;
+              } else {
+                entry = { _id: id, _el: el };
+              }
+
+              anchorParam._entries.push(entry);
             }
 
             root._enqueueSet(
@@ -64,12 +73,12 @@ const registerAnchor = <A extends string>(
                 }
               });
             }
-          } else if (entry) {
-            removeFromArray(anchorParam._entries, entry);
+          } else if (isMounted) {
+            isMounted = false;
+
+            removeFromArray(anchorParam._entries, entry!);
 
             root._enqueueSet(undefined, lane, [id]);
-
-            entry = undefined;
           }
 
           scheduleFlush(lane);
