@@ -98,8 +98,13 @@ defineGlobal('location', location);
 defineGlobal('history', history);
 
 export const windowMock = {
+  onscrollend: null,
   addEventListener(type: string, fn: Function) {
-    (listeners[type] ||= []).push(fn);
+    const arr = (listeners[type] ||= []);
+
+    // the real one ignores a listener it already has, which is what lets a
+    // handler re-arm itself without stacking up
+    if (!arr.includes(fn)) arr.push(fn);
   },
   removeEventListener(type: string, fn: Function) {
     const arr = listeners[type];

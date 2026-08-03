@@ -47,17 +47,15 @@ function anchorScrollTo(this: AnchorParam, id: string, instant?: boolean) {
         options = { ...options, behavior: 'instant' };
       }
 
-      self._onScrollStart(id, options);
-
       const scroll = () => {
-        const el = entry._el;
-
-        if (!el.isConnected) {
+        if (self._entries.indexOf(entry) < 0) {
           return;
         }
 
+        self._onScrollStart(id, options);
+
         if (options.topOffset != null || options.leftOffset != null) {
-          const rect = el.getBoundingClientRect();
+          const rect = entry._el.getBoundingClientRect();
 
           window.scrollTo({
             top: rect.top + window.scrollY - (options.topOffset || 0),
@@ -65,7 +63,7 @@ function anchorScrollTo(this: AnchorParam, id: string, instant?: boolean) {
             behavior: options.behavior,
           });
         } else {
-          el.scrollIntoView(options);
+          entry._el.scrollIntoView(options);
         }
       };
 
