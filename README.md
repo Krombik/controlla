@@ -32,7 +32,7 @@ yarn add controlla
 npm install --save controlla
 ```
 
-> Requires React 17 or above.
+> Requires React 17 or above. Runs anywhere - where `WeakRef`/`FinalizationRegistry` are missing (React Native's Hermes, browsers older than mid-2020) controls are kept alive instead of collected: behavior is identical, memory just isn't reclaimed on its own.
 
 ## Quick start
 

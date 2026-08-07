@@ -8,6 +8,7 @@ import { getSchedulerLane, scheduleFlush } from '#internal/flushQueue';
 import { INTERNALS, RELOAD } from '#internal/constants';
 import reportError from '#internal/reportError';
 import cleanupRegistry from '#internal/cleanupRegistry';
+import Ref from '#internal/Ref';
 
 const initControl = <I extends PrimitiveControlInternals>(
   internals: I,
@@ -41,7 +42,7 @@ const initControl = <I extends PrimitiveControlInternals>(
     }
 
     if (externalStorage.observe) {
-      const ref = new WeakRef(internals);
+      const ref = new Ref(internals);
 
       // the scope may release it before it is collected, and the finalizer
       // still runs afterwards - the storage must be unobserved exactly once

@@ -37,6 +37,7 @@ import { AggregateControlError } from '#internal/AggregateControlError';
 import { notify } from '#internal/flushQueue';
 import cleanupRegistry from '#internal/cleanupRegistry';
 import removeFromArray from '#internal/removeFromArray';
+import Ref from '#internal/Ref';
 
 interface AsyncDerivedControlInternals
   extends
@@ -296,7 +297,7 @@ const makeAsyncDerivedControl = (params: any[]) => {
     _errors: errors,
   };
 
-  const weakRef = new WeakRef(derivedRoot);
+  const weakRef = new Ref(derivedRoot);
 
   let maxLevel = 0;
 

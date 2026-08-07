@@ -49,6 +49,7 @@ import { AggregateControlError } from '#internal/AggregateControlError';
 import throwReadonlyError from '#internal/throwReadonlyError';
 import { commitErrorValue, commitStatusValue } from '#internal/commitStatus';
 import cleanupRegistry from '#internal/cleanupRegistry';
+import Ref from '#internal/Ref';
 
 type Undefinable<O extends {}> = {
   [key in keyof O]: O[key] | undefined;
@@ -667,7 +668,7 @@ function attach(
     control._boundData === undefined
   ) {
     const notifier: Notifier = {
-      _ref: new WeakRef(control),
+      _ref: new Ref(control),
       _notify: childNodeNotify,
       _index: 0,
       _attachedTo: EMPTY_ARR,
@@ -1001,7 +1002,7 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
         _errors: undefined,
       };
 
-      const weakRef = new WeakRef(boundInternals);
+      const weakRef = new Ref(boundInternals);
 
       const rootNotifier: Notifier = {
         _ref: weakRef,

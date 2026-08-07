@@ -31,6 +31,7 @@ import { notify } from '#internal/flushQueue';
 import reportError from '#internal/reportError';
 import cleanupRegistry from '#internal/cleanupRegistry';
 import removeFromArray from '#internal/removeFromArray';
+import Ref from '#internal/Ref';
 
 function commitSet(
   this: DerivedControlInternals,
@@ -104,7 +105,7 @@ const makeDerivedControl = (params: any[]) => {
     _upToDate: true,
   };
 
-  const weakRef = new WeakRef(derivedRoot);
+  const weakRef = new Ref(derivedRoot);
 
   if (controlCount > 1) {
     const seenLoadableSources = new Set<ControlInternals>();
