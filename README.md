@@ -118,6 +118,7 @@ For working code rather than snippets, [`examples/`](examples) has twelve standa
 ## Contents
 
 - **Controls**: [`createControl`](#createcontrol--usecontrol), [`createPrimitiveControl`](#createprimitivecontrol--useprimitivecontrol), [`createAsyncControl`](#createasynccontrol--useasynccontrol), [`createDerivedControl`](#createderivedcontrol--usederivedcontrol), [`createAsyncDerivedControl`](#createasyncderivedcontrol--useasyncderivedcontrol)
+- **Controls context**: [`createControlsContext`](#createcontrolscontextcreatecontrols-useparentcontrols)
 - **Reading values**: [`getValue`](#getvaluecontrol), [`useValue`](#usevaluecontrol), [`toPromise`](#topromisecontrol), [`useSuspenseValue`](#usesuspensevaluecontrol-safe), [`useSuspenseValues`](#usesuspensevaluescontrols-safe), [`useInfiniteValues`](#useinfinitevaluescontrols)
 - **Writing values**: [`setValue`](#setvaluecontrol-value-scheduler), [`invalidate`](#invalidatecontrol-silentorscheduler)
 - **Subscribing**: [`watchValue`](#watchvaluecontrol-callback-immediate), [`watchValues`](#watchvaluescontrols-callback-immediate), [`retain`](#retaincontrol), [`watchSlowLoading`](#watchslowloadingcontrol-callback)
@@ -129,7 +130,7 @@ For working code rather than snippets, [`examples/`](examples) has twelve standa
 - **Persistence**: [`getPersistStorage`](#getpersiststorageoptions), [`safeLocalStorage`](#safelocalstorage), [`safeSessionStorage`](#safesessionstorage)
 - **DOM**: [`mediaQuery`](#mediaqueryquery), [`$online`](#online), [`$pageVisible`](#pagevisible), [`$windowSize`](#windowsize)
 - **Schedulers**: [`batch`](#batchcallback-scheduler), [`createManualScheduler`](#createmanualscheduler), [`createThrottleScheduler`](#createthrottleschedulerms), [`createDebounceScheduler`](#createdebounceschedulerms)
-- **Router**: [`createRouter`](#createrouterpaths), [`createPath`](#createpathpath), [`createAsyncPath`](#createasyncpathsource), [`param`](#paramoptions), [`query`](#queryoptions), [`oneOf`](#oneofoptions), [`arrayParam`](#arrayparamoptions), [`createRouterView`](#createrouterviewroutes), [`Link` / `useLink`](#link--uselink), [`navigate`](#navigateto-replace-ignoreblock-scrolltotop-scrollrestoration), [params as controls](#route-params-are-controls), [`replaceValue`](#replacevaluecontrol-value-scheduler), [anchors](#anchors), [`registerAnchorOffset`](#registeranchoroffsetroute), [`selectRegisteredAnchors`](#selectregisteredanchorsroute), [`trackScroll`](#trackscrollanchor), [`navigationBlocker`](#blocking-navigation)
+- **Router**: [`createRouter`](#createrouterpaths), [`createPath`](#createpathpath), [`createAsyncPath`](#createasyncpathsource), [`param`](#paramoptions), [`query`](#queryoptions), [`oneOf`](#oneofoptions), [`arrayParam`](#arrayparamoptions), [`createRouterView`](#createrouterviewroutes), [`Link` / `useLink`](#link--uselink), [`navigate`](#navigateto-replace-ignoreblock-scrolltotop-scrollrestoration), [params as controls](#route-params-are-controls), [`replaceValue`](#replacevaluecontrol-value-scheduler), [anchors](#anchors), [`registerAnchorOffset`](#registeranchoroffsetroute), [`selectRegisteredAnchors`](#selectregisteredanchorsroute), [`trackScroll`](#trackscrollanchor), [`navigationBlocker`](#blocking-navigation), [`repairHistory`](#repairhistory)
 - **[Troubleshooting](#troubleshooting)**: [param value type + `stringify`](#paramquery-value-type-breaks-when-stringify-is-present), [named import suggestions in VS Code](#get-named-controlla-import-suggestions-in-vs-code)
 
 ---
@@ -280,6 +281,63 @@ const $fromSync = createAsyncDerivedControl($syncSource);                 // syn
 const $userName = createAsyncDerivedControl($user, (user) => user.name);  // map one source
 const $total = createAsyncDerivedControl($cart, $rates, (cart, rates) => cart.total * rates.usd); // combine many
 ```
+
+---
+
+## Controls context
+
+### `createControlsContext(createControls, useParentControls?)`
+
+Builds a bag of controls and registries **per mounted provider** instead of per module, so a subtree owns its own state - two instances of a screen don't share it. Returns the provider and the hook that reads it.
+
+```tsx
+const [Provider, useControls] = createControlsContext(createControls, useParentControls?)
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `createControls` | `(parent?) => bag` | Runs once per mounted provider, returning a record of controls and registries. |
+| `useParentControls?` | `() => parent` | Any hook - its result is passed to `createControls`, so a bag can build on an enclosing one. |
+
+The bag is built on the provider's first render and kept for the provider's whole life, so the context value never changes. The hook throws when used outside its provider.
+
+```tsx
+const [SearchProvider, useSearch] = createControlsContext(() => ({
+  query: createPrimitiveControl(''),
+  page: createPrimitiveControl(1),
+}));
+
+const Input = () => {
+  const { query } = useSearch();
+
+  return (
+    <input
+      value={useValue(query)}
+      onChange={(e) => setValue(query, e.target.value)}
+    />
+  );
+};
+
+const Page = () => (
+  <SearchProvider>
+    <Input />
+  </SearchProvider>
+);
+```
+
+Pass a hook as the second argument to build on an enclosing bag. It runs on every render while `createControls` runs once, so the bag keeps the parent it saw first:
+
+```tsx
+const [FiltersProvider, useFilters] = createControlsContext(
+  ({ query }) => ({
+    tags: createPrimitiveControl<string[]>([]),
+    hits: createDerivedControl(query, search),
+  }),
+  useSearch
+);
+```
+
+Don't spread a parent bag into a child one (`{ ...parent }`). A bag rendered inside a [`createRouterView`](#createrouterviewroutes) page or layout releases everything in it when that page or layout goes away, re-exported entries included.
 
 ---
 
@@ -1257,6 +1315,16 @@ if (pending) {
   navigationBlocker.isPendingNavigation.deny();
 }
 ```
+
+### `repairHistory()`
+
+Drops the history entries a third party left behind. Every navigation inside an iframe - a 3DS payment frame, an embedded ad - appends one, and while they're there the back button does nothing for as many presses as were added.
+
+```ts
+const repaired = await router.repairHistory();
+```
+
+Every navigation repairs the history first, so call this only to fix the back button while staying on the page. Resolves to `false` when there was nothing to drop, or when the current entry is the session's first - that one has nothing in front of it to push from.
 
 The router also handles what you'd expect from the platform - scroll position is restored on back/forward and across refreshes, and the anchor is scrolled on first load.
 
