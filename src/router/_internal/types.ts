@@ -238,22 +238,28 @@ export type NavigationState = {
  */
 export type ParamDefaults = Array<string | ((source: any) => any)>;
 
+/**
+ * Writes the route's path or search chunk to it, or returns it on a peek.
+ *
+ * @internal
+ */
+export type ChunkBuilder = {
+  <T extends boolean>(
+    this: RouteData,
+    params: Record<string, any>,
+    typed: boolean,
+    peek: T
+  ): T extends true ? string : void;
+};
+
 /** @internal */
 export type RouteData = {
   readonly _params: ControlInternals | DerivedControlInternals | null;
   readonly _isMatched: PrimitiveControlInternals;
   readonly _anchor: AnchorParam | undefined;
   readonly _source: ControlInternalsChild | undefined;
-  _buildPath<T extends boolean>(
-    params: Record<string, any>,
-    typed: boolean,
-    peek: T
-  ): T extends true ? string : void;
-  _buildSearch<T extends boolean>(
-    params: Record<string, any>,
-    typed: boolean,
-    peek: T
-  ): T extends true ? string : void;
+  _buildPath: ChunkBuilder;
+  _buildSearch: ChunkBuilder;
   _parsePath(
     target: Record<string, any>,
     stringifiedParams: Record<string, string | undefined>,

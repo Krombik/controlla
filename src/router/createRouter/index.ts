@@ -12,6 +12,7 @@ import type {
   Route,
   AnyPaths,
   RouterWrite,
+  ChunkBuilder,
 } from '#router/internal/types';
 
 import noop from '#internal/noop';
@@ -63,6 +64,23 @@ let devPopStateListener: undefined | ((e: PopStateEvent) => void);
 let devScrollListener: undefined | (() => void);
 
 let stopRestore = noop;
+
+function buildStaticPath(
+  this: RouteData,
+  _params: any,
+  _typed: boolean,
+  peek: boolean
+): any {
+  if (peek) {
+    return this._currentPath;
+  }
+}
+
+function buildEmpty(_params: any, _typed: boolean, peek: boolean): any {
+  if (peek) {
+    return '';
+  }
+}
 
 /**
  * Creates the app's router (there is exactly one) from the given path tree:
@@ -541,7 +559,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
         _currentPath: pathParamsCount || !segmentsCount ? '' : _path[0],
         _currentSearch: '',
         _buildPath: pathParamsCount
-          ? (params, typed, peek) => {
+          ? (((params, typed, peek) => {
               const store: typeof storeAsyncParam = peek ? noop : storeString;
 
               let str = '';
@@ -577,10 +595,12 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
               }
 
               (routeData as Mutable<RouteData>)._currentPath = str;
-            }
-          : (noop as any),
+            }) as ChunkBuilder)
+          : segmentsCount
+            ? buildStaticPath
+            : buildEmpty,
         _buildSearch: queryParamsCount
-          ? (params, typed, peek) => {
+          ? (((params, typed, peek) => {
               const store: typeof storeAsyncParam = peek ? noop : storeString;
 
               let search = '';
@@ -610,8 +630,8 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
               }
 
               (routeData as Mutable<RouteData>)._currentSearch = search;
-            }
-          : (noop as any),
+            }) as ChunkBuilder)
+          : buildEmpty,
         _parsePath: pathParamsCount ? makeParse(_pathParams, _parsers) : noop,
         _parseQuery: queryParamsCount
           ? makeParse(_queryParams, _parsers)
