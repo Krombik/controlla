@@ -8,15 +8,16 @@ import type {
   ControlInternals,
   AsyncControlInternals,
   AsyncControlInternalsChild,
+  RegistryBrand,
 } from '#internal/types';
 import type { ControlType } from '#internal/constants';
 import type { AggregateControlError } from '#internal/AggregateControlError';
 
-declare const CONTROL_MARKER: unique symbol;
+declare const CONTROL_BRAND: unique symbol;
 
-declare const SETTABLE_MARKER: unique symbol;
+declare const SETTABLE_BRAND: unique symbol;
 
-declare const ERROR_MARKER: unique symbol;
+declare const ERROR_BRAND: unique symbol;
 
 export type { AggregateControlError };
 
@@ -24,7 +25,7 @@ export type { AggregateControlError };
 export type ReadonlyControl<Value = any> = {
   /** @internal */
   [INTERNALS]: ControlInternals | ControlInternalsChild;
-  [CONTROL_MARKER]: Value;
+  [CONTROL_BRAND]: Value;
 };
 
 /** A readonly control over an asynchronously arriving value (`undefined` until it loads), with loading/ready/error statuses. */
@@ -39,13 +40,13 @@ export type ReadonlyAsyncControl<
  * assignable to it as well.
  */
 export type Control<Value = any> = ReadonlyControl<Value> & {
-  [SETTABLE_MARKER]: true;
+  [SETTABLE_BRAND]: true;
 };
 
 type AsyncControlBase<Error> = {
   /** @internal */
   readonly [INTERNALS]: AsyncControlInternals | AsyncControlInternalsChild;
-  [ERROR_MARKER]: Error;
+  [ERROR_BRAND]: Error;
 };
 
 /**
@@ -279,7 +280,7 @@ type BoundControl<T extends Control, K extends any[]> = CombineErrors<
 export type Registry<
   T extends Control,
   Keys extends Exclude<PrimitiveOrNested, undefined>[],
-> = {
+> = RegistryBrand & {
   /** Returns the item for the given keys, creating and caching it on first access. */
   get(...keys: Keys): T;
   /**
@@ -338,11 +339,11 @@ export type Registry<
   /** @internal */
   readonly _suppressError: boolean;
 } & (T extends AsyncControl
-  ? {
-      /** Resets all items under the given keys or key prefix (every item when called with no keys), triggering reloads for those in use. */
-      invalidate(...keys: Keys | PartialTuple<Keys> | []): void;
-    }
-  : {});
+    ? {
+        /** Resets all items under the given keys or key prefix (every item when called with no keys), triggering reloads for those in use. */
+        invalidate(...keys: Keys | PartialTuple<Keys> | []): void;
+      }
+    : {});
 
 /** A per-control instance of a {@link SyncExternalStorage}. */
 export type ExternalStorageInstance<T = any> = {

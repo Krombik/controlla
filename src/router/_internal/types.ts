@@ -73,8 +73,7 @@ export type Route<
         >
           ? Route<Children, Params, Async, Anchor>
           : never;
-      }) &
-  ReadonlyControl<boolean>;
+      });
 
 export type Router<
   Paths extends AnyPaths,
@@ -144,22 +143,24 @@ export type Router<
   repairHistory(): Promise<boolean>;
 };
 
-declare const IS_PAGE_MARKER: unique symbol;
+declare const IS_PAGE_BRAND: unique symbol;
 
-export type PageRoute<IsPage extends boolean> = {
-  [IS_PAGE_MARKER]: IsPage;
+export type PageRoute<IsPage extends boolean> = ReadonlyControl<boolean> & {
+  [IS_PAGE_BRAND]: IsPage;
   /** @internal */
   _register(setComponents: () => void): void;
   /** @internal */
   readonly _anchor: AnchorParam | undefined;
+  /** @internal */
+  readonly _routes: RouteData[];
 };
 
-declare const PARAMS_MARKER: unique symbol;
+declare const PARAMS_BRAND: unique symbol;
 
 export type RouteParams<Params, Async, Anchor> = {
   /** @internal */
   [ROUTE_PARAMS]: ControlScope;
-  [PARAMS_MARKER]: [Params, Async, Anchor];
+  [PARAMS_BRAND]: [Params, Async, Anchor];
 };
 
 export type AnchorRoute<A extends string> = [A] extends [never]
@@ -325,11 +326,11 @@ export type RouteMethods = {
 
 export type ValueOrUpdater<O, P = never> = O | ((prev: O | P) => O);
 
-declare const ROUTE_MARKER: unique symbol;
+declare const ROUTE_BRAND: unique symbol;
 
-declare const PATH_PARAM_MARKER: unique symbol;
+declare const PATH_PARAM_BRAND: unique symbol;
 
-declare const QUERY_PARAM_MARKER: unique symbol;
+declare const QUERY_PARAM_BRAND: unique symbol;
 
 declare const SOURCE: unique symbol;
 
@@ -356,7 +357,7 @@ export type QueryParam<
     queryParams: string[],
     defaults: ParamDefaults
   ): void;
-  [QUERY_PARAM_MARKER]: P;
+  [QUERY_PARAM_BRAND]: P;
   [SOURCE]: Source;
 };
 
@@ -372,7 +373,7 @@ export type PathParam<
     path: string[],
     defaults: ParamDefaults
   ): string;
-  [PATH_PARAM_MARKER]: P;
+  [PATH_PARAM_BRAND]: P;
   [SOURCE]: Source;
 };
 
@@ -582,7 +583,7 @@ export interface Path<
   Async extends boolean = false,
   Anchor extends string = never,
 > {
-  [ROUTE_MARKER]: [Children, Params, OptionalParams, Async, Anchor];
+  [ROUTE_BRAND]: [Children, Params, OptionalParams, Async, Anchor];
   /** @internal */
   readonly _pathParams: string[];
   /** @internal */

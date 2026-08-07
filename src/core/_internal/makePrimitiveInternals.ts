@@ -2,6 +2,7 @@ import noop from '#internal/noop';
 import type {
   ControlInternals,
   Lane,
+  Mutable,
   PrimitiveControlInternals,
 } from '#internal/types';
 import readRootValue from '#internal/readRootValue';
@@ -49,10 +50,11 @@ const makePrimitiveInternals = (value: any): PrimitiveControlInternals => {
     _load: false,
     _commitSet: commitSet,
     _enqueueSet: enqueueSet,
+    _cleanup: undefined,
     _setExternal: noop,
   };
 
-  (internals as { _root: PrimitiveControlInternals })._root = internals;
+  (internals as Mutable<PrimitiveControlInternals>)._root = internals;
 
   return internals;
 };

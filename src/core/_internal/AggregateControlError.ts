@@ -1,4 +1,4 @@
-const AGGREGATE_ERROR_CONTROL_MARKER = Symbol.for('rc.aggError');
+const AGGREGATE_ERROR_CONTROL_BRAND = Symbol.for('controlla.aggError');
 
 /**
  * The error of a derived or bound control, aggregating the errors of its
@@ -11,7 +11,7 @@ export class AggregateControlError<Errors extends any[] = any[]> extends Error {
 
   readonly errors: Readonly<Partial<Errors>>;
 
-  readonly [AGGREGATE_ERROR_CONTROL_MARKER] = true;
+  readonly [AGGREGATE_ERROR_CONTROL_BRAND] = true;
 
   constructor(errors: Errors) {
     super(
@@ -39,4 +39,4 @@ export class AggregateControlError<Errors extends any[] = any[]> extends Error {
 export const isAggregateControlError = <Errors extends any[] = any[]>(
   error: any
 ): error is AggregateControlError<Errors> =>
-  !!(error && error[AGGREGATE_ERROR_CONTROL_MARKER]);
+  !!(error && error[AGGREGATE_ERROR_CONTROL_BRAND]);

@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "module": "preserve",
-    "target": "es2020",
+    "target": "es2021",
     "lib": ["dom", "esnext"],
     "moduleResolution": "bundler",
     "sourceMap": true,

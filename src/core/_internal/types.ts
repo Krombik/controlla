@@ -88,7 +88,8 @@ interface Settable {
 
 type WithExternalStorage = {
   _setExternal(value: any): void;
-  _unobserve?: (() => void) | undefined;
+  /** Unobserves the external storage - only set when the storage is observable. */
+  _cleanup?(): void;
 };
 
 export type PrimitiveControlInternals = Attachers &
@@ -214,3 +215,9 @@ export type NeverControl = {
 } & AsyncControlInternals;
 
 export type RenderablePrimitives = string | number | null | undefined | boolean;
+
+declare const REGISTRY_BRAND: unique symbol;
+
+export declare class RegistryBrand {
+  [REGISTRY_BRAND]: true;
+}

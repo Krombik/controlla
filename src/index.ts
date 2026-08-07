@@ -13,6 +13,7 @@ export { default as batch } from './core/batch';
 export { default as createAsyncControl } from './core/createAsyncControl';
 export { default as createAsyncDerivedControl } from './core/createAsyncDerivedControl';
 export { default as createControl } from './core/createControl';
+export { default as createControlsContext } from './core/createControlsContext';
 export { default as createDerivedControl } from './core/createDerivedControl';
 export { default as createPrimitiveControl } from './core/createPrimitiveControl';
 export { default as createRegistry } from './core/createRegistry';

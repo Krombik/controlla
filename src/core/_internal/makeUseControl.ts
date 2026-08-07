@@ -1,35 +1,41 @@
-import { EMPTY_ARR, INTERNALS } from '#internal/constants';
-import type { SyncExternalStorage } from '#types';
-import { useEffect, useRef } from 'react';
-import type { ControlInternals } from '#internal/types';
+import { INTERNALS } from '#internal/constants';
+import type { Control, SyncExternalStorage } from '#types';
+import { useContext, useRef } from 'react';
+import type { PrimitiveControlInternals } from '#internal/types';
+import DisposeContext from '#internal/DisposeContext';
 
 const makeUseControl =
   (
-    createControl: (arg1?: any, externalStorage?: SyncExternalStorage) => any,
-    hasLazyArg?: boolean
+    createControl: (
+      arg1?: any,
+      externalStorage?: SyncExternalStorage
+    ) => Control,
+    withoutLazyArg: boolean
   ) =>
   (arg1?: any, externalStorage?: SyncExternalStorage): any => {
-    const controlRef = useRef<{ [INTERNALS]: ControlInternals } | null>(null);
+    const controlRef = useRef<Control | null>(null);
 
-    if (controlRef.current == null) {
-      controlRef.current = createControl(
-        hasLazyArg && typeof arg1 == 'function' ? arg1() : arg1,
+    const scope = useContext(DisposeContext);
+
+    let control = controlRef.current;
+
+    if (control === null) {
+      controlRef.current = control = createControl(
+        withoutLazyArg || typeof arg1 != 'function' ? arg1 : arg1(),
         externalStorage
       );
+
+      if (scope) {
+        const cleanup = (control[INTERNALS] as PrimitiveControlInternals)
+          ._cleanup;
+
+        if (cleanup) {
+          scope.push(cleanup);
+        }
+      }
     }
 
-    useEffect(
-      () => () => {
-        const internals: ControlInternals = controlRef.current![INTERNALS];
-
-        if (internals._unobserve) {
-          internals._unobserve();
-        }
-      },
-      EMPTY_ARR
-    );
-
-    return controlRef.current;
+    return control;
   };
 
 export default makeUseControl;

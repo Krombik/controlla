@@ -32,6 +32,6 @@ const useAsyncControl: {
     options?: AsyncControlOptions<T, E> | (() => AsyncControlOptions<T, E>),
     syncExternalStorage?: SyncExternalStorage<T | undefined>
   ): AsyncControlScope<T, E>;
-} = makeUseControl(createAsyncControl, true);
+} = makeUseControl(createAsyncControl, false);
 
 export default useAsyncControl;

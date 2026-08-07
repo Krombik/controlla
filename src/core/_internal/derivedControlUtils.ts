@@ -12,12 +12,12 @@ import addToQueue from '#internal/addToQueue';
 
 export type DerivedControlInternals = ControlInternals & {
   readonly _load: ReadonlyArray<ControlInternals> | ControlInternals | false;
-  readonly _notifiers: Notifier | Notifier[];
   _mapper(...args: any[]): any;
   _values: any;
   /** `false` while a source change awaits recompute; local writes are dropped meanwhile */
   _upToDate: boolean;
   readonly _isSingleDependency: boolean;
+  _cleanup(): void;
 };
 
 export function attachSingleLoad(

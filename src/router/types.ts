@@ -11,7 +11,7 @@ import type {
   ROUTE_HASH,
 } from '#router/internal/constants';
 
-declare const NAVIGATION_MARKER: unique symbol;
+declare const NAVIGATION_BRAND: unique symbol;
 
 export type NavigationTarget<Navigable extends boolean = true> = {
   /** @internal */
@@ -20,7 +20,7 @@ export type NavigationTarget<Navigable extends boolean = true> = {
   readonly [ROUTE_PARAMS]?: TargetParams[];
   /** @internal */
   readonly [ROUTE_HASH]?: Hash;
-  [NAVIGATION_MARKER]: Navigable;
+  [NAVIGATION_BRAND]: Navigable;
 };
 
 export type AnchorScrollOptions = ScrollIntoViewOptions & {

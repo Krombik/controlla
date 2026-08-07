@@ -7,6 +7,7 @@ import type { SyncExternalStorage } from '#types';
 import { getSchedulerLane, scheduleFlush } from '#internal/flushQueue';
 import { INTERNALS, RELOAD } from '#internal/constants';
 import reportError from '#internal/reportError';
+import cleanupRegistry from '#internal/cleanupRegistry';
 
 const initControl = <I extends PrimitiveControlInternals>(
   internals: I,
@@ -42,7 +43,9 @@ const initControl = <I extends PrimitiveControlInternals>(
     if (externalStorage.observe) {
       const ref = new WeakRef(internals);
 
-      const unobserve = (internals._unobserve = externalStorage.observe(
+      // the scope may release it before it is collected, and the finalizer
+      // still runs afterwards - the storage must be unobserved exactly once
+      let unobserve: (() => void) | undefined = externalStorage.observe(
         (value) => {
           const self = ref.deref();
 
@@ -68,11 +71,20 @@ const initControl = <I extends PrimitiveControlInternals>(
             }
 
             scheduleFlush(lane);
-          } else {
-            unobserve();
           }
         }
-      ));
+      );
+
+      cleanupRegistry.register(
+        internals,
+        (internals._cleanup = () => {
+          if (unobserve) {
+            unobserve();
+
+            unobserve = undefined;
+          }
+        })
+      );
     }
 
     const setExternal = (value: any) => {

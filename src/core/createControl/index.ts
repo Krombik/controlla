@@ -45,7 +45,7 @@ function commitSet(
  * access, and a change notifies only the paths it actually touched.
  *
  * The initial {@link initialValue} can be a plain value or a lazy initializer.
- * Pass a {@link syncExternalStorage} to back the value with an external
+ * Pass a {@link externalStorage} to back the value with an external
  * storage — the control starts from the stored value and writes changes
  * back (and, if the storage is observable, picks up external changes).
  *
@@ -70,11 +70,11 @@ const createControl: {
   <T>(): ControlScope<T | undefined>;
   <T>(
     initialValue: T | (() => T),
-    syncExternalStorage?: SyncExternalStorage<T>
+    externalStorage?: SyncExternalStorage<T>
   ): ControlScope<T>;
 } = (
   initialValue?: unknown | (() => unknown),
-  syncExternalStorage?: SyncExternalStorage,
+  externalStorage?: SyncExternalStorage,
   keys?: any[]
 ) =>
   createScope(
@@ -95,10 +95,11 @@ const createControl: {
         _load: false,
         _commitSet: commitSet,
         _enqueueSet: enqueueSet,
+        _cleanup: undefined,
         _setExternal: noop,
       },
       initialValue,
-      syncExternalStorage,
+      externalStorage,
       keys,
       true
     )

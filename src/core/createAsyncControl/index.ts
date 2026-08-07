@@ -251,11 +251,11 @@ const createAsyncControl: {
    */
   <T, E = any>(
     options?: AsyncControlOptions<T, E>,
-    syncExternalStorage?: SyncExternalStorage<T | undefined>
+    externalStorage?: SyncExternalStorage<T | undefined>
   ): AsyncControlScope<T, E>;
 } = (
   options?: AsyncControlOptions,
-  syncExternalStorage?: SyncExternalStorage,
+  externalStorage?: SyncExternalStorage,
   keys?: any[]
 ) => {
   const isLoaded = options && options.isLoaded;
@@ -298,6 +298,7 @@ const createAsyncControl: {
       _enqueueSet: asyncEnqueueSet,
       _attach: isLoadable ? attachAsync : attach,
       _detach: isLoadable ? detachAsync : detach,
+      _cleanup: undefined,
       _setExternal: noop,
       _errorControl: { [INTERNALS]: errorControl },
       _loadingControl: { [INTERNALS]: loadingInternals },
@@ -322,7 +323,7 @@ const createAsyncControl: {
       _promise: undefined,
     },
     options && options.initialValue,
-    syncExternalStorage,
+    externalStorage,
     keys,
     false
   );

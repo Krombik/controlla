@@ -43,7 +43,6 @@ import {
   clearWrites,
   getRouterPatch,
   paramsHandler,
-  pendingParamClears,
   replacing,
   urlFinalizer,
 } from '#router/internal/state';
@@ -298,15 +297,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
         }
 
         if (prevRoutesCount) {
-          const prevLastRoute = currentRoutes[prevRoutesCount - 1];
-
-          const prevAnchor = prevLastRoute._anchor;
-
-          if (prevAnchor) {
-            pendingParamClears.push(prevLastRoute._isMatched, prevAnchor._hash);
-
-            prevAnchor._clear();
-          }
+          currentRoutes[prevRoutesCount - 1]._anchor?._clear();
         }
 
         if (nextAnchor) {
@@ -327,14 +318,6 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
             if (currRoute) {
               currRoute._isMatched._enqueueSet(false, lane);
-
-              if (currRoute._params) {
-                // cleared by createRouterView once the page unmounts, not now
-                pendingParamClears.push(
-                  currRoute._isMatched,
-                  currRoute._params
-                );
-              }
             }
           }
         }
@@ -787,6 +770,8 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
         };
 
         (route as Mutable<typeof route>)._anchor = _anchor;
+
+        (route as Mutable<typeof route>)._routes = routesData;
 
         navigation = paramsControl
           ? function (params, hash) {

@@ -25,18 +25,18 @@ const createPrimitiveControl: {
   <T>(): Control<T | undefined>;
   <T>(
     initialValue: T | (() => T),
-    syncExternalStorage?: SyncExternalStorage<T>
+    externalStorage?: SyncExternalStorage<T>
   ): Control<T>;
 } = (
   initialValue?: unknown | (() => unknown),
-  syncExternalStorage?: SyncExternalStorage,
+  externalStorage?: SyncExternalStorage,
   keys?: any[]
 ) =>
   ({
     [INTERNALS]: initControl<PrimitiveControlInternals>(
       makePrimitiveInternals(undefined),
       initialValue,
-      syncExternalStorage,
+      externalStorage,
       keys,
       true
     ),

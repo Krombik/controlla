@@ -1,25 +1,10 @@
 import type { DerivedControlInternals } from '#internal/derivedControlUtils';
-import { EMPTY_ARR, INTERNALS } from '#internal/constants';
-import { useEffect, useRef } from 'react';
-import removeFromArray from '#internal/removeFromArray';
+import { INTERNALS } from '#internal/constants';
+import DisposeContext from '#internal/DisposeContext';
+import { useContext, useRef } from 'react';
 import type { Control } from '#types';
 import append from '#internal/append';
-
-const detach = (item: Control) => {
-  const notifiers = (item[INTERNALS] as DerivedControlInternals)._notifiers;
-
-  if (Array.isArray(notifiers)) {
-    for (let i = 0, l = notifiers.length; i < l; i++) {
-      removeFromArray(notifiers[i]._attachedTo, notifiers[i]);
-
-      notifiers[i]._source = undefined;
-    }
-  } else {
-    removeFromArray(notifiers._attachedTo, notifiers);
-
-    notifiers._source = undefined;
-  }
-};
+import removeFromArray from '#internal/removeFromArray';
 
 /**
  * Rebuilds the control when a {@link controls} entry changes identity.
@@ -32,6 +17,8 @@ const useDerived = (
   combiner?: (...values: any[]) => any
 ) => {
   const ref = useRef<null | { _controls: Control[]; _item: Control }>(null);
+
+  const scope = useContext(DisposeContext);
 
   let item = ref.current;
 
@@ -48,27 +35,42 @@ const useDerived = (
 
     for (let i = 0; i < controlsCount; i++) {
       if (prevControls[i] != controls[i]) {
-        detach(item._item);
+        const cleanup = (item._item[INTERNALS] as DerivedControlInternals)
+          ._cleanup;
+
+        cleanup();
+
+        const control = make(
+          combiner === undefined ? controls : append(controls, combiner)
+        );
+
+        if (scope) {
+          removeFromArray(scope, cleanup);
+
+          scope.push((control[INTERNALS] as DerivedControlInternals)._cleanup);
+        }
 
         item._controls = controls;
 
-        item._item = make(
-          withoutCombiner ? controls : append(controls, combiner)
-        );
+        item._item = control;
 
         break;
       }
     }
   } else {
+    const control = make(
+      combiner === undefined ? controls : append(controls, combiner)
+    );
+
     ref.current = item = {
       _controls: controls,
-      _item: make(
-        combiner === undefined ? controls : append(controls, combiner)
-      ),
+      _item: control,
     };
-  }
 
-  useEffect(() => () => detach(ref.current!._item), EMPTY_ARR);
+    if (scope) {
+      scope.push((control[INTERNALS] as DerivedControlInternals)._cleanup);
+    }
+  }
 
   return item._item;
 };

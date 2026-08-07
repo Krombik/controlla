@@ -10,6 +10,7 @@ import type {
   ControlInternals,
   Lane,
   PatchTreeNode,
+  Notifier,
 } from '#internal/types';
 import {
   commitNextValue,
@@ -28,6 +29,8 @@ import {
 } from '#internal/derivedControlUtils';
 import { notify } from '#internal/flushQueue';
 import reportError from '#internal/reportError';
+import cleanupRegistry from '#internal/cleanupRegistry';
+import removeFromArray from '#internal/removeFromArray';
 
 function commitSet(
   this: DerivedControlInternals,
@@ -87,6 +90,7 @@ const makeDerivedControl = (params: any[]) => {
     _children: undefined,
     _storage: undefined,
     _setExternal: noop,
+    _cleanup: noop,
     _commitSet: commitSet,
     _enqueueSet: enqueueSet,
     _level: 0,
@@ -98,7 +102,6 @@ const makeDerivedControl = (params: any[]) => {
     _values: undefined,
     _isSingleDependency: controlCount < 2,
     _upToDate: true,
-    _notifiers: undefined!,
   };
 
   const weakRef = new WeakRef(derivedRoot);
@@ -110,7 +113,7 @@ const makeDerivedControl = (params: any[]) => {
 
     const values = Array(controlCount);
 
-    const notifiers = Array(controlCount);
+    const notifiers = Array<Notifier>(controlCount);
 
     for (let i = 0; i < controlCount; i++) {
       const internals: ChildControlNode<
@@ -146,13 +149,26 @@ const makeDerivedControl = (params: any[]) => {
       values[i] = internals._get();
     }
 
+    cleanupRegistry.register(
+      derivedRoot,
+      (derivedRoot._cleanup = () => {
+        for (let i = 0, l = notifiers.length; i < l; i++) {
+          const notifier = notifiers[i];
+
+          if (notifier._source) {
+            removeFromArray(notifier._attachedTo, notifier);
+
+            notifier._source = undefined;
+          }
+        }
+      })
+    );
+
     const combine: (...values: any[]) => any = params[controlCount];
 
     derivedRoot._mapper = combine;
 
     derivedRoot._value = combine(...values);
-
-    (derivedRoot as Mutable<typeof derivedRoot>)._notifiers = notifiers;
 
     derivedRoot._values = values;
 
@@ -163,6 +179,14 @@ const makeDerivedControl = (params: any[]) => {
     > = params[0][INTERNALS];
 
     const root = internals._root;
+
+    const notifier: Notifier = {
+      _ref: weakRef,
+      _notify: sourceChangeNotify,
+      _index: 0,
+      _attachedTo: EMPTY_ARR,
+      _source: undefined,
+    };
 
     maxLevel = root._level;
 
@@ -184,14 +208,16 @@ const makeDerivedControl = (params: any[]) => {
       derivedRoot._detach = detachSingleLoad;
     }
 
-    attachNotifier(
-      internals,
-      ((derivedRoot as Mutable<typeof derivedRoot>)._notifiers = {
-        _ref: weakRef,
-        _notify: sourceChangeNotify,
-        _index: 0,
-        _attachedTo: EMPTY_ARR,
-        _source: undefined,
+    attachNotifier(internals, notifier);
+
+    cleanupRegistry.register(
+      derivedRoot,
+      (derivedRoot._cleanup = () => {
+        if (notifier._source) {
+          removeFromArray(notifier._attachedTo, notifier);
+
+          notifier._source = undefined;
+        }
       })
     );
 

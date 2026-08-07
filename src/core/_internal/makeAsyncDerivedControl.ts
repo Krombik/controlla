@@ -35,6 +35,8 @@ import settlePromise from '#internal/settlePromise';
 import addToQueue from '#internal/addToQueue';
 import { AggregateControlError } from '#internal/AggregateControlError';
 import { notify } from '#internal/flushQueue';
+import cleanupRegistry from '#internal/cleanupRegistry';
+import removeFromArray from '#internal/removeFromArray';
 
 interface AsyncDerivedControlInternals
   extends
@@ -266,6 +268,17 @@ const makeAsyncDerivedControl = (params: any[]) => {
     _storage: undefined,
     _setExternal: noop,
     _commitSet: commitSet,
+    _cleanup: () => {
+      for (let i = 0, l = notifiers.length; i < l; i++) {
+        const notifier = notifiers[i];
+
+        if (notifier._source) {
+          removeFromArray(notifier._attachedTo, notifier);
+
+          notifier._source = undefined;
+        }
+      }
+    },
     _enqueueSet: enqueueSet,
     _level: 0,
     _value: undefined,
@@ -276,7 +289,6 @@ const makeAsyncDerivedControl = (params: any[]) => {
     _values: undefined,
     _isSingleDependency: isSingle,
     _upToDate: true,
-    _notifiers: notifiers,
     _errorControl: undefined!,
     _loadingControl: undefined!,
     _readyControl: undefined!,
@@ -358,6 +370,8 @@ const makeAsyncDerivedControl = (params: any[]) => {
     // activate the source (no-op unless it's a bound child) so its value
     internals._root._attach(internals, undefined, false);
   }
+
+  cleanupRegistry.register(derivedRoot, derivedRoot._cleanup);
 
   derivedRoot._values = isSingle ? values[0] : values;
 

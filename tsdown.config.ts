@@ -165,7 +165,7 @@ export default defineConfig({
   clean: true,
   sourcemap: true,
   platform: 'browser',
-  target: 'es2020',
+  target: 'es2021',
   treeshake: true,
   dts: true,
   plugins: [_mangleInternals],

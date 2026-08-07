@@ -48,6 +48,7 @@ import settlePromise from '#internal/settlePromise';
 import { AggregateControlError } from '#internal/AggregateControlError';
 import throwReadonlyError from '#internal/throwReadonlyError';
 import { commitErrorValue, commitStatusValue } from '#internal/commitStatus';
+import cleanupRegistry from '#internal/cleanupRegistry';
 
 type Undefinable<O extends {}> = {
   [key in keyof O]: O[key] | undefined;
@@ -56,11 +57,11 @@ type Undefinable<O extends {}> = {
 interface BoundInternals
   extends ControlInternals, Undefinable<AsyncStatusControls<BoundInternals>> {
   _activeCount: number;
+  _cleanup: () => void;
   _holdingPrev: boolean;
   _target: ControlInternals | AsyncControlInternals | undefined;
   readonly _activeNodes: BoundInternalsChild[];
   readonly _changedNodes: BoundInternalsChild[];
-  readonly _notifiers: Notifier[];
   readonly _selfNotifier: Notifier;
   _keys: any[];
   readonly _load: ReadonlyArray<ControlInternals> | undefined;
@@ -178,6 +179,64 @@ const cleanupPrevTarget = (root: BoundInternals) => {
 
     if (root._changedNodes.length) {
       root._changedNodes.length = 0;
+    }
+  }
+};
+
+/** Descends {@link levels} storage levels and visits every item below. */
+const forEachItem = (
+  storage: Map<any, any>,
+  levels: number,
+  fn: (control: any) => void
+) => {
+  let queue: Map<any, any>[] = [storage];
+
+  for (let i = 0; i < levels; i++) {
+    const nextQueue: Map<any, any>[] = [];
+
+    for (let i = 0, l = queue.length; i < l; i++) {
+      const storage = queue[i];
+
+      const it = storage.values();
+
+      for (let i = storage.size; i--;) {
+        nextQueue.push(it.next().value);
+      }
+    }
+
+    queue = nextQueue;
+  }
+
+  for (let i = 0, l = queue.length; i < l; i++) {
+    const storage = queue[i];
+
+    const it = storage.values();
+
+    for (let i = storage.size; i--;) {
+      fn(it.next().value);
+    }
+  }
+};
+
+/**
+ * A deleted item stays alive under every bound control targeting it - detach
+ * them, leaving them targetless until a key change re-resolves them.
+ */
+const detachBoundDependents = (control: Control) => {
+  const targetInternals = control[INTERNALS] as ControlInternals;
+
+  const dependents = targetInternals._dependents;
+
+  // swap-pop removal, so a backwards walk covers every entry exactly once
+  for (let i = dependents.length; i--;) {
+    const notifier = dependents[i];
+
+    if (notifier._notify == addToQueue) {
+      const bound: BoundInternals | undefined = notifier._ref.deref();
+
+      if (bound && bound._target == targetInternals) {
+        cleanupPrevTarget(bound);
+      }
     }
   }
 };
@@ -720,38 +779,46 @@ function registryDelete(this: Registry<any, any>, ...keys: any[]) {
       if (depth == registryDepth) {
         const boundInternals = boundControl[INTERNALS] as BoundInternals;
 
-        const notifiers = boundInternals._notifiers;
-
         cleanupPrevTarget(boundInternals);
 
-        for (let i = 0, l = notifiers.length; i < l; i++) {
-          const notifier = notifiers[i];
-
-          removeFromArray(notifier._attachedTo!, notifier);
-
-          notifier._source = undefined;
-        }
+        boundInternals._cleanup();
       }
 
       return bound.delete(lastKey);
     }
 
-    if (i == endIndex) {
-      return storage.delete(getStorageKey(keyValue));
-    }
+    const storageKey = getStorageKey(keyValue);
 
-    storage = storage.get(getStorageKey(keyValue));
+    const nextStorage = storage.get(storageKey);
 
-    if (storage === undefined) {
+    if (nextStorage === undefined) {
       return false;
     }
+
+    if (i == endIndex) {
+      if (depth == registryDepth) {
+        detachBoundDependents(nextStorage);
+      } else {
+        forEachItem(
+          nextStorage,
+          registryDepth - depth - 1,
+          detachBoundDependents
+        );
+      }
+
+      return storage.delete(storageKey);
+    }
+
+    storage = nextStorage;
   }
 }
 
 function clear(this: Registry<any, any[]>) {
-  this._storage.clear();
+  const storage = this._storage;
 
-  (this as Mutable<typeof this>)._bound = undefined;
+  forEachItem(storage, this._depth - 1, detachBoundDependents);
+
+  storage.clear();
 }
 
 function registryInvalidate(
@@ -776,33 +843,7 @@ function registryInvalidate(
     if (registryDepth == depth) {
       invalidate(storage as any);
     } else {
-      let queue: Map<any, any>[] = [storage];
-
-      for (let i = 0, diff = registryDepth - depth - 1; i < diff; i++) {
-        const nextQueue: Map<any, any>[] = [];
-
-        for (let i = 0, l = queue.length; i < l; i++) {
-          const storage = queue[i];
-
-          const it = storage.values();
-
-          for (let i = storage.size; i--;) {
-            nextQueue.push(it.next().value);
-          }
-        }
-
-        queue = nextQueue;
-      }
-
-      for (let i = 0, l = queue.length; i < l; i++) {
-        const storage = queue[i];
-
-        const it = storage.values();
-
-        for (let i = storage.size; i--;) {
-          invalidate(it.next().value);
-        }
-      }
+      forEachItem(storage, registryDepth - depth - 1, invalidate);
     }
   }
 }
@@ -947,10 +988,10 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
         _attach: attach,
         _detach: detach,
         _activeCount: 0,
+        _cleanup: noop,
         _holdingPrev: false,
         _activeNodes: [],
         _changedNodes: [],
-        _notifiers: notifiers,
         _commitSet: commitSet,
         _selfNotifier: undefined!,
         _errorControl: undefined,
@@ -1178,6 +1219,21 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
                 [INTERNALS]: errorInternals,
               };
             }
+
+            cleanupRegistry.register(
+              boundInternals,
+              (boundInternals._cleanup = () => {
+                for (let i = 0, l = notifiers.length; i < l; i++) {
+                  const notifier = notifiers[i];
+
+                  if (notifier._source) {
+                    removeFromArray(notifier._attachedTo, notifier);
+
+                    notifier._source = undefined;
+                  }
+                }
+              })
+            );
 
             const boundControl = createScope(boundInternals);
 
