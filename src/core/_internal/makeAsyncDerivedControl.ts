@@ -35,7 +35,7 @@ import settlePromise from '#internal/settlePromise';
 import addToQueue from '#internal/addToQueue';
 import { AggregateControlError } from '#internal/AggregateControlError';
 import { notify } from '#internal/flushQueue';
-import cleanupRegistry from '#internal/cleanupRegistry';
+import { registerCleanup } from '#internal/cleanup';
 import removeFromArray from '#internal/removeFromArray';
 import Ref from '#internal/Ref';
 
@@ -372,7 +372,7 @@ const makeAsyncDerivedControl = (params: any[]) => {
     internals._root._attach(internals, undefined, false);
   }
 
-  cleanupRegistry.register(derivedRoot, derivedRoot._cleanup);
+  registerCleanup(derivedRoot, derivedRoot._cleanup);
 
   derivedRoot._values = isSingle ? values[0] : values;
 

@@ -1,8 +1,5 @@
 import noop from '#internal/noop';
 import DisposeContext from '#internal/DisposeContext';
-import { INTERNALS } from '#internal/constants';
-import type { PrimitiveControlInternals, RegistryBrand } from '#internal/types';
-import type { ReadonlyControl } from '#types';
 import {
   createContext,
   useContext,
@@ -10,6 +7,7 @@ import {
   type FC,
   type PropsWithChildren,
 } from 'react';
+import { cleanupScope } from '#internal/cleanup';
 
 const throwNoProvider = () => {
   throw new Error('no controls provider');
@@ -24,8 +22,7 @@ const createControlsContext: {
    * throws outside the provider.
    *
    * The bag is built on the provider's first render and kept for its whole
-   * life, so the context itself never changes: rerenders come from the
-   * controls in it, through `useValue` and friends.
+   * life, so the context itself never changes.
    *
    * @example
    * ```tsx
@@ -47,7 +44,7 @@ const createControlsContext: {
    * );
    * ```
    */
-  <T extends Record<string, ReadonlyControl | RegistryBrand>>(
+  <T>(
     createControls: () => T
   ): [Provider: FC<PropsWithChildren>, useControls: () => T];
   /**
@@ -71,11 +68,11 @@ const createControlsContext: {
    * );
    * ```
    */
-  <T extends Record<string, ReadonlyControl | RegistryBrand>, P>(
+  <T, P>(
     createControls: (parent: P) => T,
     useParentControls: () => P
   ): [Provider: FC<PropsWithChildren>, useControls: () => T];
-} = <T extends Record<string, ReadonlyControl | RegistryBrand>>(
+} = <T,>(
   createControls: (parent: any) => T,
   useParentControls: () => any = noop
 ) => {
@@ -93,18 +90,12 @@ const createControlsContext: {
     let controls = ref.current;
 
     if (controls === null) {
-      ref.current = controls = createControls(parent);
+      cleanupScope._value = scope;
 
-      if (scope) {
-        for (const key in controls) {
-          // registries have no internals; a plain control has no cleanup
-          const internals = (controls[key] as any)[INTERNALS] as
-            PrimitiveControlInternals | undefined;
-
-          if (internals && internals._cleanup) {
-            scope.push(internals._cleanup);
-          }
-        }
+      try {
+        ref.current = controls = createControls(parent);
+      } finally {
+        cleanupScope._value = null;
       }
     }
 

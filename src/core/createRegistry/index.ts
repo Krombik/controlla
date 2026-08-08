@@ -48,7 +48,7 @@ import settlePromise from '#internal/settlePromise';
 import { AggregateControlError } from '#internal/AggregateControlError';
 import throwReadonlyError from '#internal/throwReadonlyError';
 import { commitErrorValue, commitStatusValue } from '#internal/commitStatus';
-import cleanupRegistry from '#internal/cleanupRegistry';
+import { gcRegistry } from '#internal/cleanup';
 import Ref from '#internal/Ref';
 
 type Undefinable<O extends {}> = {
@@ -989,7 +989,17 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
         _attach: attach,
         _detach: detach,
         _activeCount: 0,
-        _cleanup: noop,
+        _cleanup: () => {
+          for (let i = 0, l = notifiers.length; i < l; i++) {
+            const notifier = notifiers[i];
+
+            if (notifier._source) {
+              removeFromArray(notifier._attachedTo, notifier);
+
+              notifier._source = undefined;
+            }
+          }
+        },
         _holdingPrev: false,
         _activeNodes: [],
         _changedNodes: [],
@@ -1221,20 +1231,7 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
               };
             }
 
-            cleanupRegistry.register(
-              boundInternals,
-              (boundInternals._cleanup = () => {
-                for (let i = 0, l = notifiers.length; i < l; i++) {
-                  const notifier = notifiers[i];
-
-                  if (notifier._source) {
-                    removeFromArray(notifier._attachedTo, notifier);
-
-                    notifier._source = undefined;
-                  }
-                }
-              })
-            );
+            gcRegistry.register(boundInternals, boundInternals._cleanup);
 
             const boundControl = createScope(boundInternals);
 

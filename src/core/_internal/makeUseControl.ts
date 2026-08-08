@@ -1,8 +1,7 @@
-import { INTERNALS } from '#internal/constants';
 import type { Control, SyncExternalStorage } from '#types';
 import { useContext, useRef } from 'react';
-import type { PrimitiveControlInternals } from '#internal/types';
 import DisposeContext from '#internal/DisposeContext';
+import { cleanupScope } from '#internal/cleanup';
 
 const makeUseControl =
   (
@@ -20,18 +19,15 @@ const makeUseControl =
     let control = controlRef.current;
 
     if (control === null) {
-      controlRef.current = control = createControl(
-        withoutLazyArg || typeof arg1 != 'function' ? arg1 : arg1(),
-        externalStorage
-      );
+      cleanupScope._value = scope;
 
-      if (scope) {
-        const cleanup = (control[INTERNALS] as PrimitiveControlInternals)
-          ._cleanup;
-
-        if (cleanup) {
-          scope.push(cleanup);
-        }
+      try {
+        controlRef.current = control = createControl(
+          withoutLazyArg || typeof arg1 != 'function' ? arg1 : arg1(),
+          externalStorage
+        );
+      } finally {
+        cleanupScope._value = null;
       }
     }
 

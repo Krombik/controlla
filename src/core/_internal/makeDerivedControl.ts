@@ -29,7 +29,7 @@ import {
 } from '#internal/derivedControlUtils';
 import { notify } from '#internal/flushQueue';
 import reportError from '#internal/reportError';
-import cleanupRegistry from '#internal/cleanupRegistry';
+import { registerCleanup } from '#internal/cleanup';
 import removeFromArray from '#internal/removeFromArray';
 import Ref from '#internal/Ref';
 
@@ -150,7 +150,7 @@ const makeDerivedControl = (params: any[]) => {
       values[i] = internals._get();
     }
 
-    cleanupRegistry.register(
+    registerCleanup(
       derivedRoot,
       (derivedRoot._cleanup = () => {
         for (let i = 0, l = notifiers.length; i < l; i++) {
@@ -211,7 +211,7 @@ const makeDerivedControl = (params: any[]) => {
 
     attachNotifier(internals, notifier);
 
-    cleanupRegistry.register(
+    registerCleanup(
       derivedRoot,
       (derivedRoot._cleanup = () => {
         if (notifier._source) {

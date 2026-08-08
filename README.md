@@ -337,8 +337,6 @@ const [FiltersProvider, useFilters] = createControlsContext(
 );
 ```
 
-Don't spread a parent bag into a child one (`{ ...parent }`). A bag rendered inside a [`createRouterView`](#createrouterviewroutes) page or layout releases everything in it when that page or layout goes away, re-exported entries included.
-
 ---
 
 ## Reading values

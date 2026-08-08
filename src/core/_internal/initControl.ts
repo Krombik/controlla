@@ -7,7 +7,7 @@ import type { SyncExternalStorage } from '#types';
 import { getSchedulerLane, scheduleFlush } from '#internal/flushQueue';
 import { INTERNALS, RELOAD } from '#internal/constants';
 import reportError from '#internal/reportError';
-import cleanupRegistry from '#internal/cleanupRegistry';
+import { registerCleanup } from '#internal/cleanup';
 import Ref from '#internal/Ref';
 
 const initControl = <I extends PrimitiveControlInternals>(
@@ -76,16 +76,13 @@ const initControl = <I extends PrimitiveControlInternals>(
         }
       );
 
-      cleanupRegistry.register(
-        internals,
-        (internals._cleanup = () => {
-          if (unobserve) {
-            unobserve();
+      registerCleanup(internals, () => {
+        if (unobserve) {
+          unobserve();
 
-            unobserve = undefined;
-          }
-        })
-      );
+          unobserve = undefined;
+        }
+      });
     }
 
     const setExternal = (value: any) => {

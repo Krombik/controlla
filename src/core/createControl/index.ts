@@ -95,7 +95,6 @@ const createControl: {
         _load: false,
         _commitSet: commitSet,
         _enqueueSet: enqueueSet,
-        _cleanup: undefined,
         _setExternal: noop,
       },
       initialValue,

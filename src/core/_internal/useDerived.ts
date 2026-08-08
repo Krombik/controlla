@@ -5,6 +5,7 @@ import { useContext, useRef } from 'react';
 import type { Control } from '#types';
 import append from '#internal/append';
 import removeFromArray from '#internal/removeFromArray';
+import { cleanupScope } from '#internal/cleanup';
 
 /**
  * Rebuilds the control when a {@link controls} entry changes identity.
@@ -40,35 +41,37 @@ const useDerived = (
 
         cleanup();
 
-        const control = make(
-          combiner === undefined ? controls : append(controls, combiner)
-        );
-
         if (scope) {
           removeFromArray(scope, cleanup);
 
-          scope.push((control[INTERNALS] as DerivedControlInternals)._cleanup);
+          cleanupScope._value = scope;
         }
 
-        item._controls = controls;
+        try {
+          item._controls = controls;
 
-        item._item = control;
+          item._item = make(
+            combiner === undefined ? controls : append(controls, combiner)
+          );
+        } finally {
+          cleanupScope._value = null;
+        }
 
         break;
       }
     }
   } else {
-    const control = make(
-      combiner === undefined ? controls : append(controls, combiner)
-    );
+    cleanupScope._value = scope;
 
-    ref.current = item = {
-      _controls: controls,
-      _item: control,
-    };
-
-    if (scope) {
-      scope.push((control[INTERNALS] as DerivedControlInternals)._cleanup);
+    try {
+      ref.current = item = {
+        _controls: controls,
+        _item: make(
+          combiner === undefined ? controls : append(controls, combiner)
+        ),
+      };
+    } finally {
+      cleanupScope._value = null;
     }
   }
 

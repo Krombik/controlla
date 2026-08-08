@@ -8,7 +8,6 @@ import type {
   ControlInternals,
   AsyncControlInternals,
   AsyncControlInternalsChild,
-  RegistryBrand,
 } from '#internal/types';
 import type { ControlType } from '#internal/constants';
 import type { AggregateControlError } from '#internal/AggregateControlError';
@@ -276,6 +275,12 @@ type BoundControl<T extends Control, K extends any[]> = CombineErrors<
       : never;
   }
 >;
+
+declare const REGISTRY_BRAND: unique symbol;
+
+declare class RegistryBrand {
+  [REGISTRY_BRAND]: true;
+}
 
 export type Registry<
   T extends Control,
