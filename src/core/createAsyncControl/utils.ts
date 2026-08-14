@@ -6,9 +6,10 @@ import type {
 } from '#internal/types';
 import scheduleMicrotask from '#internal/scheduleMicrotask';
 import { addListener, notify, removeListener } from '#internal/flushQueue';
-import { EMPTY_ARR, SILENT_RELOAD, INTERNALS } from '#internal/constants';
+import { SILENT_RELOAD, INTERNALS } from '#internal/constants';
 import scheduleSet from '#internal/scheduleSet';
 import reportError from '#internal/reportError';
+import syncScheduler from '#scheduler/syncScheduler';
 
 const visibilityChangeQueue: AsyncControlInternals[] = [];
 
@@ -25,7 +26,11 @@ const visibilityChangeListener = () => {
         source._loadedAt &&
         source._options.reloadOnFocus! + source._loadedAt < Date.now()
       ) {
-        scheduleSet(internals._errorControl[INTERNALS], SILENT_RELOAD);
+        scheduleSet(
+          internals._errorControl[INTERNALS],
+          SILENT_RELOAD,
+          syncScheduler
+        );
       }
     }
   }
@@ -100,13 +105,7 @@ export const triggerLoad = (internals: AsyncControlInternals) => {
 
   if (_slowLoadMonitor) {
     _slowLoadMonitor._timerId = setTimeout(() => {
-      notify(
-        _slowLoadMonitor._listeners,
-        EMPTY_ARR,
-        null!,
-        undefined,
-        undefined
-      );
+      notify(_slowLoadMonitor, null!, undefined, undefined);
     }, data._options.loadingTimeout!);
   }
 };
@@ -186,7 +185,11 @@ const attachLoad = (control: AsyncControlInternals) => {
       data._options.reloadIfStale &&
       data._loadedAt + data._options.reloadIfStale < Date.now()
     ) {
-      scheduleSet(control._errorControl[INTERNALS], SILENT_RELOAD);
+      scheduleSet(
+        control._errorControl[INTERNALS],
+        SILENT_RELOAD,
+        syncScheduler
+      );
     }
 
     if (data._options.reloadOnFocus) {

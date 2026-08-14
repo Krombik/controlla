@@ -2,7 +2,7 @@ import type { ControlInternals, Lane, PatchTreeNode } from '#internal/types';
 import noop from '#internal/noop';
 import createScope from '#internal/createScope';
 import type { ControlScope, SyncExternalStorage } from '#types';
-import { commitPatchNode, UNCHANGED } from '#internal/commitPatchNode';
+import { commitRootPatch, UNCHANGED } from '#internal/commitPatchNode';
 import initControl from '#internal/initControl';
 import readRootValue from '#internal/readRootValue';
 import { EMPTY_ARR } from '#internal/constants';
@@ -28,12 +28,10 @@ function commitSet(
 
   const prevValue = root._value;
 
-  const nextValue = commitPatchNode(patchNode, prevValue, root, lane);
+  const nextValue = commitRootPatch(root, patchNode, prevValue, lane);
 
   if (nextValue !== UNCHANGED) {
-    root._value = nextValue;
-
-    notify(root._listeners, root._dependents, lane, nextValue, prevValue);
+    notify(root, lane, nextValue, prevValue);
 
     root._setExternal(nextValue);
   }

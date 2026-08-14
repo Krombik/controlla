@@ -54,10 +54,13 @@
     "#core/*": "./src/core/*/index.ts",
     "#router/internal/*": "./src/router/_internal/*.ts",
     "#persist/internal/*": "./src/persist/_internal/*.ts",
+    "#form/internal/*": "./src/form/_internal/*.ts",
     "#router/types": "./src/router/types.ts",
     "#persist/types": "./src/persist/types.ts",
+    "#form/types": "./src/form/types.ts",
     "#router/*": "./src/router/*/index.ts",
     "#persist/*": "./src/persist/*/index.ts",
+    "#form/*": "./src/form/*/index.ts",
     "#scheduler/*": "./src/scheduler/*/index.ts",
     "#types": "./src/core/types.ts"
   },

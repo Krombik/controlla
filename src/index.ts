@@ -1,6 +1,7 @@
 export type * from './core/types';
 export type * from './router/types';
 export type * from './persist/types';
+export type * from './form/types';
 
 export { default as ControlConsumer } from './core/ControlConsumer';
 export { default as ControlsConsumer } from './core/ControlsConsumer';
@@ -40,6 +41,14 @@ export { default as watchSlowLoading } from './core/watchSlowLoading';
 export { default as watchValue } from './core/watchValue';
 export { default as watchValues } from './core/watchValues';
 export { default as wrapErrorBoundary } from './core/wrapErrorBoundary';
+
+export { default as Field } from './form/Field';
+export { default as NativeField } from './form/NativeField';
+export { default as FormProvider } from './form/FormProvider';
+export { default as useFieldArray } from './form/useFieldArray';
+export { default as useFieldState } from './form/useFieldState';
+export { default as useForm } from './form/useForm';
+export { default as useFormState } from './form/useFormState';
 
 export { default as mediaQuery } from './dom/mediaQuery';
 export { default as $online } from './dom/online';

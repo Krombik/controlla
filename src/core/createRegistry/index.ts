@@ -37,7 +37,7 @@ import {
 import append from '#internal/append';
 import { addListener, notify, removeListener } from '#internal/flushQueue';
 import addToQueue from '#internal/addToQueue';
-import { commitNextValue, UNCHANGED } from '#internal/commitPatchNode';
+import { commitRootValue, UNCHANGED } from '#internal/commitPatchNode';
 import removeFromArray from '#internal/removeFromArray';
 import attachNotifier from '#internal/attachNotifier';
 import makeChildNode from '#internal/makeChildNode';
@@ -362,6 +362,10 @@ function commitSet(this: BoundInternals, _: any, lane: Lane) {
 
         changedNodes.length = 0;
       } else {
+        // the target already holds it, so the bound nodes below can be told
+        // straight away
+        root._value = value;
+
         for (let i = 0, l = changedNodes.length; i < l; i++) {
           const node = changedNodes[i];
 
@@ -373,14 +377,12 @@ function commitSet(this: BoundInternals, _: any, lane: Lane) {
 
           data._value = undefined;
 
-          notify(node._listeners, node._dependents, lane, nextValue, prevValue);
+          notify(node, lane, nextValue, prevValue);
         }
 
         changedNodes.length = 0;
 
-        root._value = value;
-
-        notify(root._listeners, root._dependents, lane, value, prevValue);
+        notify(root, lane, value, prevValue);
 
         if (value !== undefined) {
           settlePromise(root, true, value);
@@ -438,12 +440,10 @@ function commitSet(this: BoundInternals, _: any, lane: Lane) {
     }
 
     if (!heldPrev) {
-      const nextValue = commitNextValue(newValue, prevValue, root, lane);
+      const nextValue = commitRootValue(root, newValue, prevValue, lane);
 
       if (nextValue !== UNCHANGED) {
-        root._value = nextValue;
-
-        notify(root._listeners, root._dependents, lane, nextValue, prevValue);
+        notify(root, lane, nextValue, prevValue);
 
         if (nextValue !== undefined) {
           settlePromise(root, true, nextValue);

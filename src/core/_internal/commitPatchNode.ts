@@ -2,8 +2,9 @@ import type {
   PatchTreeNode,
   Lane,
   ControlInternalsChild,
+  RootBase,
 } from '#internal/types';
-import { notify } from '#internal/flushQueue';
+import { flushNotifications, notify, queueNotify } from '#internal/flushQueue';
 import reportError from '#internal/reportError';
 
 export const UNCHANGED = Symbol();
@@ -18,6 +19,17 @@ const getPrototypeOf = Object.getPrototypeOf;
 
 const isArray = Array.isArray;
 
+/** Whether anything would be reached by notifying it. */
+const isListened = (internals: ControlInternalsChild) =>
+  !!internals._listeners.length || !!internals._dependents.length;
+
+/**
+ * How the walk reports a changed node: {@link notify} straight through while the
+ * root value it belongs to is already in place, {@link queueNotify} while the
+ * walk is still assembling it.
+ */
+type Emit = typeof notify;
+
 /**
  * A subtree appeared or vanished: children get `(value, undefined)` when
  * `emitSourceValues`, `(undefined, value)` otherwise.
@@ -26,7 +38,8 @@ const notifyDescendants = (
   children: Map<string, ControlInternalsChild>,
   source: any,
   emitSourceValues: boolean,
-  lane: Lane
+  lane: Lane,
+  emit: Emit
 ) => {
   const queue = [children, source];
 
@@ -45,13 +58,14 @@ const notifyDescendants = (
       if (childValue !== undefined) {
         const child = children.get(key)!;
 
-        notify(
-          child._listeners,
-          child._dependents,
-          lane,
-          emitSourceValues ? childValue : undefined,
-          emitSourceValues ? undefined : childValue
-        );
+        if (isListened(child)) {
+          emit(
+            child,
+            lane,
+            emitSourceValues ? childValue : undefined,
+            emitSourceValues ? undefined : childValue
+          );
+        }
 
         if (child._children && childValue && typeof childValue == 'object') {
           queue.push(child._children, childValue);
@@ -70,22 +84,19 @@ const diffPair = (
   b: any,
   child: ControlInternalsChild | undefined,
   scan: boolean,
-  lane: Lane
+  lane: Lane,
+  emit: Emit
 ): boolean => {
-  if (a === b) {
+  // NaN is the only value that isn't itself, so two of them are one input
+  if (a === b || (a !== a && b !== b)) {
     return false;
   }
 
-  const listeners = child && child._listeners;
-
-  const dependents = child && child._dependents;
-
-  const isListened =
-    !!(listeners && listeners.length) || !!(dependents && dependents.length);
+  const listened = !!child && isListened(child);
 
   const grandchildren = child && child._children;
 
-  if (!scan && !isListened && !grandchildren) {
+  if (!scan && !listened && !grandchildren) {
     return false;
   }
 
@@ -96,19 +107,20 @@ const diffPair = (
   if (
     isAPrimitive ||
     isBPrimitive ||
-    compareAndNotify(a, b, grandchildren, scan || isListened, lane)
+    compareAndNotify(a, b, grandchildren, scan || listened, lane, emit)
   ) {
     if (isAPrimitive != isBPrimitive && grandchildren) {
       notifyDescendants(
         grandchildren,
         isAPrimitive ? b : a,
         isAPrimitive,
-        lane
+        lane,
+        emit
       );
     }
 
-    if (isListened) {
-      notify(listeners!, dependents!, lane, b, a);
+    if (listened) {
+      emit(child!, lane, b, a);
     }
 
     return true;
@@ -126,7 +138,8 @@ const compareAndNotify = (
   nextValue: any,
   children: Map<string, ControlInternalsChild> | undefined,
   scanUntilMismatch: boolean,
-  lane: Lane
+  lane: Lane,
+  emit: Emit
 ) => {
   const aPrototype = getPrototypeOf(prevValue);
 
@@ -142,7 +155,8 @@ const compareAndNotify = (
           nextValue[key],
           children.get(key)!,
           false,
-          lane
+          lane,
+          emit
         );
       }
     }
@@ -175,7 +189,8 @@ const compareAndNotify = (
             nextValue[key],
             child,
             scanUntilMismatch,
-            lane
+            lane,
+            emit
           )
         ) {
           if (scanUntilMismatch) {
@@ -211,7 +226,8 @@ const compareAndNotify = (
                   nextValue[key],
                   child,
                   scanUntilMismatch,
-                  lane
+                  lane,
+                  emit
                 )
               ) {
                 if (scanUntilMismatch) {
@@ -248,14 +264,8 @@ const compareAndNotify = (
         // `.length` is a readonly child control that changes only with the count
         const lengthChild = children.get('length');
 
-        if (lengthChild) {
-          notify(
-            lengthChild._listeners,
-            lengthChild._dependents,
-            lane,
-            lNext,
-            lPrev
-          );
+        if (lengthChild && isListened(lengthChild)) {
+          emit(lengthChild, lane, lNext, lPrev);
         }
       } else if (scanUntilMismatch) {
         return true;
@@ -267,7 +277,14 @@ const compareAndNotify = (
 
       if (scanUntilMismatch || child) {
         if (
-          diffPair(prevValue[i], nextValue[i], child, scanUntilMismatch, lane)
+          diffPair(
+            prevValue[i],
+            nextValue[i],
+            child,
+            scanUntilMismatch,
+            lane,
+            emit
+          )
         ) {
           if (scanUntilMismatch) {
             if (!children) {
@@ -289,10 +306,12 @@ const compareAndNotify = (
 
       if (child && a !== undefined) {
         if (child._children && a && typeof a == 'object') {
-          notifyDescendants(child._children, a, false, lane);
+          notifyDescendants(child._children, a, false, lane, emit);
         }
 
-        notify(child._listeners, child._dependents, lane, undefined, a);
+        if (isListened(child)) {
+          emit(child, lane, undefined, a);
+        }
       }
     }
 
@@ -328,13 +347,17 @@ const buildPatchedValue = (patchNode: PatchTreeNode, base: any) => {
   return value;
 };
 
-export const commitNextValue = (
+const commitNextValue = (
   nextValue: any,
   prevValue: any,
   internals: ControlInternalsChild | undefined,
-  lane: Lane
+  lane: Lane,
+  emit: Emit
 ) => {
-  if (prevValue !== nextValue) {
+  if (
+    prevValue !== nextValue &&
+    (prevValue === prevValue || nextValue === nextValue)
+  ) {
     const isAPrimitive = prevValue == null || typeof prevValue != 'object';
 
     const isBPrimitive = nextValue == null || typeof nextValue != 'object';
@@ -344,14 +367,15 @@ export const commitNextValue = (
     if (
       isAPrimitive ||
       isBPrimitive ||
-      compareAndNotify(prevValue, nextValue, children, true, lane)
+      compareAndNotify(prevValue, nextValue, children, true, lane, emit)
     ) {
       if (isAPrimitive != isBPrimitive && children) {
         notifyDescendants(
           children,
           isAPrimitive ? nextValue : prevValue,
           isAPrimitive,
-          lane
+          lane,
+          emit
         );
       }
 
@@ -362,21 +386,13 @@ export const commitNextValue = (
   return UNCHANGED;
 };
 
-export const commitPatchNode = (
+const commitKeyedPatch = (
   patchNode: PatchTreeNode,
   prevValue: any,
   internals: ControlInternalsChild | undefined,
-  lane: Lane
+  lane: Lane,
+  emit: Emit
 ): any => {
-  if (patchNode._type) {
-    return commitNextValue(
-      buildPatchedValue(patchNode, prevValue),
-      prevValue,
-      internals,
-      lane
-    );
-  }
-
   if (prevValue == null || typeof prevValue != 'object') {
     // the patch targets a subtree that is not there - drop it, a sibling key
     // still commits
@@ -406,23 +422,18 @@ export const commitPatchNode = (
 
     const child = controlChildren && controlChildren.get(key);
 
-    const nextValue = commitPatchNode(
+    const nextValue = commitPatch(
       children.get(key)!,
       prevChildValue,
       child,
-      lane
+      lane,
+      emit
     );
 
     if (nextValue !== UNCHANGED) {
       // each level notifies its changed children; the root is the commit's job
-      if (child) {
-        notify(
-          child._listeners,
-          child._dependents,
-          lane,
-          nextValue,
-          prevChildValue
-        );
+      if (child && isListened(child)) {
+        emit(child, lane, nextValue, prevChildValue);
       }
 
       if (value === undefined) {
@@ -434,4 +445,82 @@ export const commitPatchNode = (
   }
 
   return value !== undefined ? value : UNCHANGED;
+};
+
+/** A patch node of either kind - the keys of a keyed one carry either. */
+const commitPatch = (
+  patchNode: PatchTreeNode,
+  prevValue: any,
+  internals: ControlInternalsChild | undefined,
+  lane: Lane,
+  emit: Emit
+) =>
+  patchNode._type
+    ? commitNextValue(
+        buildPatchedValue(patchNode, prevValue),
+        prevValue,
+        internals,
+        lane,
+        emit
+      )
+    : commitKeyedPatch(patchNode, prevValue, internals, lane, emit);
+
+/**
+ * Commits a {@link nextValue} the caller already holds: it goes into the
+ * {@link root} before the diff runs, so every listener the diff reaches reads
+ * the value its change is part of, and is rolled back if nothing turned out to
+ * differ - nothing was notified, so nobody saw it.
+ */
+export const commitRootValue = (
+  root: ControlInternalsChild & RootBase,
+  nextValue: any,
+  prevValue: any,
+  lane: Lane
+) => {
+  root._value = nextValue;
+
+  const result = commitNextValue(nextValue, prevValue, root, lane, notify);
+
+  if (result === UNCHANGED) {
+    root._value = prevValue;
+  }
+
+  return result;
+};
+
+/**
+ * The same for a patch. One that carries a whole value knows it up front, so it
+ * takes the direct route; a keyed one is only assembled by the walk, so its
+ * notifications wait for the value that walk returns.
+ */
+export const commitRootPatch = (
+  root: ControlInternalsChild & RootBase,
+  patchNode: PatchTreeNode,
+  prevValue: any,
+  lane: Lane
+) => {
+  if (patchNode._type) {
+    return commitRootValue(
+      root,
+      buildPatchedValue(patchNode, prevValue),
+      prevValue,
+      lane
+    );
+  }
+
+  const nextValue = commitKeyedPatch(
+    patchNode,
+    prevValue,
+    root,
+    lane,
+    queueNotify
+  );
+
+  if (nextValue !== UNCHANGED) {
+    root._value = nextValue;
+
+    flushNotifications();
+  }
+
+  return nextValue;
 };

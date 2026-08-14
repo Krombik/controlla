@@ -16,8 +16,8 @@ import type {
   Notifier,
 } from '#internal/types';
 import {
-  commitNextValue,
-  commitPatchNode,
+  commitRootPatch,
+  commitRootValue,
   UNCHANGED,
 } from '#internal/commitPatchNode';
 import { attach, detach } from '#internal/syncLifecycle';
@@ -105,12 +105,10 @@ function commitSet(
   const prevValue = root._value;
 
   if (root._upToDate) {
-    const nextValue = commitPatchNode(patchNode, prevValue, root, lane);
+    const nextValue = commitRootPatch(root, patchNode, prevValue, lane);
 
     if (nextValue !== UNCHANGED) {
-      root._value = nextValue;
-
-      notify(root._listeners, root._dependents, lane, nextValue, prevValue);
+      notify(root, lane, nextValue, prevValue);
 
       root._setExternal(nextValue);
 
@@ -201,12 +199,10 @@ function commitSet(
     errors[count] = undefined;
   }
 
-  const nextValue = commitNextValue(next, prevValue, root, lane);
+  const nextValue = commitRootValue(root, next, prevValue, lane);
 
   if (nextValue !== UNCHANGED) {
-    root._value = nextValue;
-
-    notify(root._listeners, root._dependents, lane, nextValue, prevValue);
+    notify(root, lane, nextValue, prevValue);
 
     root._setExternal(nextValue);
 

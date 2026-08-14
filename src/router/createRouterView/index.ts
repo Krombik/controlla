@@ -102,20 +102,15 @@ const handleRouter = (
     } else {
       const count = components.length;
 
-      const effect = () => () => {
-        const isMatched = (
-          (arg1 as PageRoute<true>)[INTERNALS] as PrimitiveControlInternals
-        )._value;
-
-        if (isMatched) {
-          if (unmounting._value) {
-            disposeAll(disposables);
-          }
-
+      const clearParams = () => {
+        // a navigation back to the page within the task leaves nothing to
+        // clear - the match has already refilled these from the url
+        if (
+          ((arg1 as PageRoute<true>)[INTERNALS] as PrimitiveControlInternals)
+            ._value
+        ) {
           return;
         }
-
-        disposeAll(disposables);
 
         const routes = (arg1 as PageRoute<true>)._routes;
 
@@ -138,6 +133,27 @@ const handleRouter = (
         if (clearLane) {
           scheduleFlush(clearLane);
         }
+      };
+
+      const effect = () => () => {
+        if (
+          ((arg1 as PageRoute<true>)[INTERNALS] as PrimitiveControlInternals)
+            ._value
+        ) {
+          if (unmounting._value) {
+            disposeAll(disposables);
+          }
+
+          return;
+        }
+
+        disposeAll(disposables);
+
+        // the params outlive the page by a task. React tears a deleted subtree
+        // down parent-first, so this runs before the cleanups inside the page:
+        // clearing them here would notify every `watchValue` in it while it is
+        // still subscribed, with the params of a page on its way out
+        setTimeout(clearParams);
       };
 
       const PageSlot = () => {

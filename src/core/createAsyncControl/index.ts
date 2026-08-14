@@ -24,8 +24,8 @@ import {
 } from '#internal/constants';
 import queuePatch from '#internal/queuePatch';
 import {
-  commitNextValue,
-  commitPatchNode,
+  commitRootPatch,
+  commitRootValue,
   UNCHANGED,
 } from '#internal/commitPatchNode';
 import {
@@ -41,6 +41,7 @@ import addToLevel from '#internal/addToLevel';
 import { attach, detach } from '#internal/syncLifecycle';
 import makeStatusInternals from '#internal/makeStatusInternals';
 import settlePromise from '#internal/settlePromise';
+import armPromise from '#internal/armPromise';
 import { commitErrorValue, commitStatusValue } from '#internal/commitStatus';
 import { notify } from '#internal/flushQueue';
 
@@ -83,6 +84,15 @@ function errorEnqueueSet(
       : value === SILENT_RELOAD
         ? PatchType.SILENT_RELOAD
         : PatchType.ERROR;
+
+  // the kept value is indistinguishable from a settled one once the reload is
+  // under way, so the promise is armed here rather than at the commit: a
+  // `toPromise` right after this must not read that value as settled, and the
+  // patch may well be committed by a flush already running
+  if (type == PatchType.SILENT_RELOAD && !internals._promise) {
+    // nobody has to be awaiting it yet, and a failed reload rejects it
+    armPromise(internals).catch(noop);
+  }
 
   if (patchNode) {
     patchNode._type = type;
@@ -138,7 +148,7 @@ function commitAsyncSet(
   let nextLoadingValue = prevLoading;
 
   if (patchType < PatchType.ERROR) {
-    nextValue = commitPatchNode(patchNode, prevValue, internals, lane);
+    nextValue = commitRootPatch(internals, patchNode, prevValue, lane);
 
     const value = nextValue !== UNCHANGED ? nextValue : prevValue;
 
@@ -149,10 +159,12 @@ function commitAsyncSet(
 
       internals._attempt = nextLoadingValue ? internals._attempt + 1 : 0;
 
+      // the value is already in place, and whoever awaited it is a microtask
+      // behind either way
       settlePromise(internals, true, value);
     }
   } else if (patchType == PatchType.ERROR) {
-    nextValue = commitNextValue(undefined, prevValue, internals, lane);
+    nextValue = commitRootValue(internals, undefined, prevValue, lane);
 
     nextErrorValue = patchNode._value;
 
@@ -162,7 +174,7 @@ function commitAsyncSet(
 
     internals._attempt = 0;
   } else if (patchType == PatchType.RELOAD) {
-    nextValue = commitNextValue(undefined, prevValue, internals, lane);
+    nextValue = commitRootValue(internals, undefined, prevValue, lane);
 
     nextLoadingValue = true;
 
@@ -174,15 +186,7 @@ function commitAsyncSet(
   }
 
   if (nextValue !== UNCHANGED) {
-    internals._value = nextValue;
-
-    notify(
-      internals._listeners,
-      internals._dependents,
-      lane,
-      nextValue,
-      prevValue
-    );
+    notify(internals, lane, nextValue, prevValue);
 
     internals._setExternal(nextValue);
   }
@@ -199,13 +203,7 @@ function commitAsyncSet(
   if (nextLoadingValue != prevLoading) {
     loadingControl._value = nextLoadingValue;
 
-    notify(
-      loadingControl._listeners,
-      loadingControl._dependents,
-      lane,
-      nextLoadingValue,
-      prevLoading
-    );
+    notify(loadingControl, lane, nextLoadingValue, prevLoading);
 
     if (load) {
       // still in use, or the deferred unload cleanup hasn't flushed yet
@@ -314,6 +312,7 @@ const createAsyncControl: {
               _timerId: undefined,
               _indexMap: undefined,
               _listeners: EMPTY_ARR,
+              _dependents: EMPTY_ARR,
             }
           : null,
       },

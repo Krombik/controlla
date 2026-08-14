@@ -2,7 +2,7 @@ import type { ContextType } from 'react';
 import type { AsyncControlInternals, NeverControl } from '#internal/types';
 import type ErrorBoundaryContext from '#internal/ErrorBoundaryContext';
 import type SuspenseContext from '#internal/SuspenseContext';
-import ensurePromise from '#internal/ensurePromise';
+import armPromise from '#internal/armPromise';
 
 const suspendOnControl = (
   root: AsyncControlInternals | NeverControl,
@@ -27,7 +27,7 @@ const suspendOnControl = (
     }
   }
 
-  return ensurePromise(root);
+  return root._promise ? root._promise._promise : armPromise(root);
 };
 
 export default suspendOnControl;

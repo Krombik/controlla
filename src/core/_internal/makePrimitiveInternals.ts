@@ -29,7 +29,7 @@ function commitSet(this: ControlInternals, nextValue: any, lane: Lane) {
   if (nextValue !== prevValue) {
     root._value = nextValue;
 
-    notify(root._listeners, root._dependents, lane, nextValue, prevValue);
+    notify(root, lane, nextValue, prevValue);
 
     root._setExternal(nextValue);
   }

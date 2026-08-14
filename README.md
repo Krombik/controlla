@@ -15,6 +15,7 @@ A **control** is a reactive value you read, write, derive from, persist, and sub
 - ⚡ **Built-in async**: loading / ready / error states, Suspense, request & polling loaders.
 - 🔗 **Derived & combined**: controls that recompute only when their sources are ready.
 - 🗂️ **Keyed registries**: one control per key, created on demand.
+- 📝 **Forms**: validation, submit sweeps, dirty tracking and keyed field arrays over the controls you already have - uncontrolled inputs, so typing re-renders nothing.
 - 🗺️ **Typed router**: a typed path tree instead of URL strings, params/query/hash as controls, anchors with scroll restoration, and navigation blocking - all built in.
 - 💾 **Persistence**: `localStorage` / `sessionStorage`, observable across tabs.
 - ⏱️ **Batching & scheduling**: microtask by default; throttle, debounce, manual.
@@ -121,7 +122,7 @@ For working code rather than snippets, [`examples/`](examples) has twelve standa
 - **Controls context**: [`createControlsContext`](#createcontrolscontextcreatecontrols-useparentcontrols)
 - **Reading values**: [`getValue`](#getvaluecontrol), [`useValue`](#usevaluecontrol), [`toPromise`](#topromisecontrol), [`useSuspenseValue`](#usesuspensevaluecontrol-safe), [`useSuspenseValues`](#usesuspensevaluescontrols-safe), [`useInfiniteValues`](#useinfinitevaluescontrols)
 - **Writing values**: [`setValue`](#setvaluecontrol-value-scheduler), [`invalidate`](#invalidatecontrol-silentorscheduler)
-- **Subscribing**: [`watchValue`](#watchvaluecontrol-callback-immediate), [`watchValues`](#watchvaluescontrols-callback-immediate), [`retain`](#retaincontrol), [`watchSlowLoading`](#watchslowloadingcontrol-callback)
+- **Subscribing**: [`watchValue`](#watchvaluecontrol-callback-immediate-withempty), [`watchValues`](#watchvaluescontrols-callback-immediate-withempty), [`retain`](#retaincontrol), [`watchSlowLoading`](#watchslowloadingcontrol-callback)
 - **Async status**: [`selectLoading`](#selectloadingcontrol), [`selectReady`](#selectreadycontrol), [`selectError`](#selecterrorcontrol)
 - **Components**: [`ControlConsumer`](#controlconsumer), [`ControlsConsumer`](#controlsconsumer), [`CombinedControlsConsumer`](#combinedcontrolsconsumer), [`InfiniteControlsConsumer`](#infinitecontrolsconsumer), [`Suspense`](#suspense), [`SuspenseControlConsumer`](#suspensecontrolconsumer), [`SuspenseControlsConsumer`](#suspensecontrolsconsumer), [`wrapErrorBoundary`](#wraperrorboundaryboundarycomponent)
 - **Utils**: [`$never`](#never), [`isAggregateControlError`](#isaggregatecontrolerrorerr)
@@ -130,6 +131,7 @@ For working code rather than snippets, [`examples/`](examples) has twelve standa
 - **Persistence**: [`getPersistStorage`](#getpersiststorageoptions), [`safeLocalStorage`](#safelocalstorage), [`safeSessionStorage`](#safesessionstorage)
 - **DOM**: [`mediaQuery`](#mediaqueryquery), [`$online`](#online), [`$pageVisible`](#pagevisible), [`$windowSize`](#windowsize)
 - **Schedulers**: [`batch`](#batchcallback-scheduler), [`createManualScheduler`](#createmanualscheduler), [`createThrottleScheduler`](#createthrottleschedulerms), [`createDebounceScheduler`](#createdebounceschedulerms)
+- **Forms**: [`useForm`](#useformcontrol-options), [`FormProvider`](#formprovider-form), [`Field`](#field), [`NativeField`](#nativefield), [`useFieldArray`](#usefieldarraycontrol-options), [`useFieldState`](#usefieldstatecontrol), [`useFormState`](#useformstate)
 - **Router**: [`createRouter`](#createrouterpaths), [`createPath`](#createpathpath), [`createAsyncPath`](#createasyncpathsource), [`param`](#paramoptions), [`query`](#queryoptions), [`oneOf`](#oneofoptions), [`arrayParam`](#arrayparamoptions), [`createRouterView`](#createrouterviewroutes), [`Link` / `useLink`](#link--uselink), [`navigate`](#navigateto-replace-ignoreblock-scrolltotop-scrollrestoration), [params as controls](#route-params-are-controls), [`replaceValue`](#replacevaluecontrol-value-scheduler), [anchors](#anchors), [`registerAnchorOffset`](#registeranchoroffsetroute), [`selectRegisteredAnchors`](#selectregisteredanchorsroute), [`trackScroll`](#trackscrollanchor), [`navigationBlocker`](#blocking-navigation), [`repairHistory`](#repairhistory)
 - **[Troubleshooting](#troubleshooting)**: [param value type + `stringify`](#paramquery-value-type-breaks-when-stringify-is-present), [named import suggestions in VS Code](#get-named-controlla-import-suggestions-in-vs-code)
 
@@ -451,31 +453,40 @@ invalidate($user, true);   // keep value while reloading
 
 ## Subscribing
 
-### `watchValue(control, callback, immediate?)`
+### `watchValue(control, callback, immediate?, withEmpty?)`
 
 Runs `callback` on every value change. Returns an **unwatch** function.
+
+**Only values count.** An async control says nothing when its first value arrives, nor while an `invalidate` leaves it with none - what comes back is reported as a change from the last value handed over, so the callback never sees `undefined` in between. Pass `withEmpty` to watch those stretches too.
 
 | Parameter | Type | Description |
 |---|---|---|
 | `control` | `ReadonlyControl` | The control. |
 | `callback` | `(value, prevValue) => void` | May return a cleanup, run before the next call and on unwatch. |
-| `immediate?` | `boolean` | If `true`, also runs now with the current value (previous = `undefined`). |
+| `immediate?` | `boolean` | If `true`, also runs now with the current value (previous = `undefined`) - or with the first one, if the control has none yet. |
+| `withEmpty?` | `true` | Reports the empty stretches as well: both arguments come as `undefined` for those. Async controls only. |
 
 ```ts
 const unwatch = watchValue($theme, (theme, prevTheme) => {
   console.log(`theme: ${prevTheme} -> ${theme}`);
 });
+
+// what someone edited, not the settings landing from the server
+watchValue($settings, () => form.submit());
 ```
 
-### `watchValues(controls, callback, immediate?)`
+### `watchValues(controls, callback, immediate?, withEmpty?)`
 
 Like `watchValue` for multiple controls - one call per flush.
+
+**Only full tuples count.** Nothing is reported while any of them holds no value; whatever moved meanwhile is kept and goes out with the rest once the tuple is complete.
 
 | Parameter | Type | Description |
 |---|---|---|
 | `controls` | `ReadonlyControl[]` | The controls. |
 | `callback` | `(values, prevValues) => void` | Positional value arrays; may return a cleanup. |
-| `immediate?` | `boolean` | Also run now with current values (previous = all `undefined`). |
+| `immediate?` | `boolean` | Also run now with the current values (previous = all `undefined`) - or with the first complete tuple. |
+| `withEmpty?` | `true` | Reports the empty stretches as well: that control's place in both tuples comes as `undefined`. |
 
 ```ts
 const unwatch = watchValues([$query, $page], ([query, page]) => {
@@ -951,6 +962,8 @@ A scheduler that commits **only** when `.flush()` is called.
 
 **Returns**: a `Scheduler` with `flush(): boolean` (runs the pending commit; `true` if there was one).
 
+Called from inside a listener - that is, while another scheduler is already committing - it runs right after that one finishes instead of in the middle of it. `true` still means there was something pending.
+
 ```ts
 // stage several filter edits, apply them on "Search" as one update
 const scheduler = createManualScheduler();
@@ -993,6 +1006,166 @@ Delays the flush until `ms` of quiet - each update resets the timer, so it commi
 ```ts
 const debounce = createDebounceScheduler(300);
 setValue($search, value, debounce);   // commits 300ms after the last change
+```
+
+---
+
+## Forms
+
+Validation, submit orchestration and dirty tracking over controls you already have. The form **doesn't own the values**: `useForm` takes a control, fields register against controls, and reading and writing stay what they are everywhere else - `useValue`, `setValue`, granular per-path re-renders.
+
+Fields register by being mounted, so a conditional field un-registers by disappearing. Registration is loose in both directions: the form control is what gets submitted and reset, including paths no field sits on, while validation and `$isValid` come from whatever registered - a field over some unrelated control still takes part in the sweep.
+
+### `useForm(control, options)`
+
+Creates the form handle. Created once and kept for the component's life; `options` are re-read every render.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `control` | `Control` | What gets submitted, reset and baselined. |
+| `options.submit` | `(values, changed) => void \| Promise<void>` | Runs once every registered validator passed. `changed` is the dot paths differing from the baseline - what a `PATCH` would send. |
+| `options.submitFailed?` | `(errors: FieldError[]) => void \| Promise<void>` | Runs instead, after the first invalid field is focused. |
+| `options.validateOn?` | `'submit' \| 'change' \| 'blur'` | Default trigger for the fields under it (default: `'submit'`). |
+| `options.resetValue?` | `T` | Where a bare `reset()` goes instead of the starting value. |
+
+**Returns**: a `FormState` - `$isSubmitting`, `$isValidating`, `$isValid`, `$isDirty`, `submit(event?)`, `validate()`, `reset(control?, value?)`, `setError(control, error)`.
+
+The **baseline** is taken when the form is created - or, for an async control, when its value first arrives - and moves to whatever a successful submit or a `reset` wrote. `$isDirty` and `changed` are both measured against it, so an autosaving form gets what moved since the *previous* submit.
+
+```tsx
+const $values = useControl({ email: '', tags: ['react'] });
+
+const form = useForm($values, {
+  validateOn: 'blur',
+  submit: (values, changed) => api.save(values, changed),
+});
+```
+
+### `<FormProvider form>`
+
+Exposes the form to the `Field`s and `useFieldState`/`useFormState` calls under it. A `Field` outside any provider still works - it just validates on its own and takes part in no submit.
+
+### `<Field>`
+
+Registers a control's validator for as long as it stays mounted, and renders it from its own state. `render` gets the wiring and the field's state, **not** a `value`/`onChange` pair - the value is yours to read and write.
+
+| Prop | Type | Description |
+|---|---|---|
+| `control` | `Control` | The field's control. |
+| `validate?` | `(value) => E \| undefined \| Promise<E \| undefined>` | Returns the error, or `undefined` when it passes. |
+| `validateOn?` | `'submit' \| 'change' \| 'blur'` | Overrides the form's trigger. |
+| `keepValidator?` | `boolean` | Stays registered after unmount - a wizard step that shouldn't un-validate. |
+| `render` | `(props, state) => ReactNode` | `props`: `name`, `ref`, `onBlur?`. `state`: `$field`, `$error`, `$isDirty`, `$isValidating`. |
+
+Attach `ref`: a failed `submit` focuses the first invalid field through it. Everything but `control` is read on the first render and never again.
+
+```tsx
+<Field
+  control={$values.email}
+  validate={(email) => (email.includes('@') ? undefined : 'invalid email')}
+  render={(props, { $field, $error }) => (
+    <label>
+      <ControlConsumer
+        control={$field}
+        render={(value) => (
+          <input
+            {...props}
+            value={value}
+            onChange={(e) => setValue($field, e.target.value)}
+          />
+        )}
+      />
+      <ControlConsumer control={$error} />
+    </label>
+  )}
+/>
+```
+
+### `<NativeField>`
+
+A field the **element itself owns**: read on every `input`/`change`, written back only when the control moves elsewhere (a `reset`, an async fill). Typing re-renders nothing.
+
+Takes everything `Field` does, plus:
+
+| Prop | Type | Description |
+|---|---|---|
+| `type` | `NativeFieldType` | What the field *is*, not which element renders it - see below. |
+| `parse?` / `format?` | `(value) => …` | Converts on the way to the control and back. |
+| `scheduler?` | `Scheduler` | Commits what the element writes through it - a `createDebounceScheduler(300)` on a text filter. |
+| `errorId?` / `describedBy?` | `string` | Composed into the element's `aria-describedby`. |
+
+`type` covers `text`, `search`, `url`, `tel`, `password`, `color`, `hidden`, `email`, `numeric`, `decimal`, `range`, `checkbox`, `radio`, `file`, `date`, `month`, `week`, `time`, `datetime-local`, `textarea`, `select`, `multiselect`. The value type follows from it (`checkbox` → `boolean`, `numeric` → `number`, `file` → `FileList | null`, `multiselect` → `string[]`), and a control that can't hold everything the field may write is a compile error. `numeric`/`decimal`/`email` render as `text` with an `inputmode`: the native types have no text cursor to restore a caret in, and run validation of their own before yours.
+
+```tsx
+<NativeField
+  type='decimal'
+  control={$values.amount}
+  errorId='amount-error'
+  validate={(amount) => (amount ? undefined : 'required')}
+  render={(props, { $error }) => (
+    <>
+      <input {...props} />
+      <ControlConsumer
+        control={$error}
+        render={(error) => <span id='amount-error'>{error}</span>}
+      />
+    </>
+  )}
+/>
+```
+
+### `useFieldArray(control, options?)`
+
+Gives an array control **a key per item** and the operations to restructure it. A key follows its item through an insert or a remove instead of belonging to the index, so rows keep their identity - and their DOM state - as the array moves under them.
+
+Pass `options` (`validate`, `validateOn`) to register the array as a field of its own: for what no single item can answer - how many there are, whether two of them collide.
+
+**Returns**: `$keys` plus the operations below (and `$error`, when validated).
+
+| Method | Description |
+|---|---|
+| `append(value)` / `prepend(value)` | Adds one item at either end. |
+| `insert(index, value)` | Adds one at `index`. Past the end appends. |
+| `appendMany(values)` / `prependMany(values)` / `insertMany(index, values)` | The same for a whole array - a paste, a multi-select, a fetched page. One call, one commit. |
+| `remove(index, count?)` | Drops `count` items from `index` on (default: one). |
+| `removeMany(indexes)` | Drops the items at `indexes`, which need not be neighbours - in any order, duplicates ignored. Not `remove` in a loop: each of those shifts what follows it. |
+| `replace(values)` | Swaps the whole array out. Every item gets a new key, so every row remounts. |
+| `swap(a, b)` / `move(from, to)` | Reorders, keys included. |
+
+A key is handed out once, from `0`, and never reused. A write from anywhere else (a `reset`, a server fill) keeps the keys of the indexes it kept and gives the tail of a longer array new ones. Calls compose within a flush - each starts from what the last one wrote - so `append` twice appends twice.
+
+```tsx
+const { $keys, append, removeMany } = useFieldArray($values.tags, {
+  validate: (tags) => (new Set(tags).size < tags.length ? 'no duplicates' : undefined),
+});
+
+<ControlConsumer
+  control={$keys}
+  render={(keys) =>
+    keys.map((key, index) => <Row key={key} $tag={$values.tags[index]} />)
+  }
+/>;
+
+<button onClick={() => append('')}>add</button>;
+<button onClick={() => removeMany(selectedIndexes)}>remove selected</button>;
+```
+
+### `useFieldState(control)`
+
+The state of one field - `$field`, `$error`, `$isDirty`, `$isValidating` - from anywhere under the form. The field doesn't have to be mounted yet: the entry is created on first access and its `Field` fills the validator in when it arrives.
+
+```tsx
+const { $error, $isDirty } = useFieldState($values.email);
+```
+
+### `useFormState()`
+
+The enclosing form - the same handle `useForm` created, so `$isSubmitting`, `$isValid`, `$isDirty` and `submit` are reachable without threading props down. Throws outside a `FormProvider`.
+
+```tsx
+const { $isSubmitting, $isValid } = useFormState();
+
+return <button disabled={useValue($isSubmitting) || !useValue($isValid)}>Save</button>;
 ```
 
 ---

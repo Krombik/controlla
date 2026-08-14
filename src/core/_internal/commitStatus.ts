@@ -23,13 +23,7 @@ export const commitStatusValue = (
   if (nextValue !== prevValue) {
     internals._value = nextValue;
 
-    notify(
-      internals._listeners,
-      internals._dependents,
-      lane,
-      nextValue,
-      prevValue
-    );
+    notify(internals, lane, nextValue, prevValue);
   }
 };
 
@@ -44,13 +38,7 @@ export const commitErrorValue = (
   if (nextError !== prevError) {
     internals._value = nextError;
 
-    notify(
-      internals._listeners,
-      internals._dependents,
-      lane,
-      nextError,
-      prevError
-    );
+    notify(internals, lane, nextError, prevError);
 
     if (nextError !== undefined) {
       settlePromise(root, false, nextError);

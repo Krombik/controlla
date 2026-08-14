@@ -9,22 +9,30 @@ import type { Scheduler } from '#types';
 import scheduleMicrotask from '#internal/scheduleMicrotask';
 import reportError from '#internal/reportError';
 
-let currentLane: Lane | null = null;
+type NotifiableInternals = {
+  readonly _listeners: ChangeListener[];
+  readonly _dependents: Notifier[];
+};
 
 /** Listener add/remove during notify is deferred to keep the iterated array stable. */
 const NOT_ITERATED: readonly Function[] = [];
 
-let iteratedListeners = NOT_ITERATED;
-
 const deferredListenerChanges: any[] = [];
 
+const pendingLanes: Array<() => void> = [];
+
+let iteratedListeners = NOT_ITERATED;
+
+let currentLane: Lane | null = null;
+
 export const notify = (
-  listeners: ChangeListener[],
-  dependents: Notifier[],
+  internals: NotifiableInternals,
   lane: Lane,
   value: any,
   prevValue: any
 ) => {
+  const listeners = internals._listeners;
+
   const listenersCount = listeners.length;
 
   if (listenersCount) {
@@ -54,6 +62,8 @@ export const notify = (
     }
   }
 
+  const dependents = internals._dependents;
+
   let l = dependents.length;
 
   // GC'd dependents are compacted in place via swap-pop
@@ -80,6 +90,42 @@ export const notify = (
       }
     }
   }
+};
+
+/**
+ * What a commit collected on its way down, waiting for the root value it belongs
+ * to.
+ */
+const pendingNotifications: any[] = [];
+
+/** {@link notify}, deferred until {@link flushNotifications}. */
+export const queueNotify = pendingNotifications.push.bind(
+  pendingNotifications
+) as (
+  internals: NotifiableInternals,
+  lane: Lane,
+  value: any,
+  prevValue: any
+) => void;
+
+/**
+ * Runs what the commit collected, once its root value is in place - a listener
+ * reading any control, its own included, goes through that value.
+ *
+ * Nothing is collected for a commit that changes nothing, so this is a no-op for
+ * one.
+ */
+export const flushNotifications = () => {
+  for (let i = 0; i < pendingNotifications.length; i += 4) {
+    notify(
+      pendingNotifications[i],
+      pendingNotifications[i + 1],
+      pendingNotifications[i + 2],
+      pendingNotifications[i + 3]
+    );
+  }
+
+  pendingNotifications.length = 0;
 };
 
 const flushLanes = new WeakMap<Scheduler, Lane>();
@@ -124,7 +170,13 @@ export const scheduleFlush = (lane: Lane) => {
   if (lane._canScheduleFlush) {
     lane._canScheduleFlush = false;
 
-    scheduler(() => {
+    const cb = () => {
+      if (currentLane) {
+        pendingLanes.push(cb);
+
+        return;
+      }
+
       const { _beforeFlushHooks: beforeFlushHooks } = lane;
 
       currentLane = lane;
@@ -137,18 +189,32 @@ export const scheduleFlush = (lane: Lane) => {
         }
       }
 
+      beforeFlushHooks.length = 0;
+
       flushQueue(lane, lane._pendingControlLevels, lane._patchByControl);
 
       currentLane = null;
-
-      beforeFlushHooks.length = 0;
 
       lane._minPendingLevel = Infinity;
 
       lane._maxPendingLevel = 0;
 
       lane._canScheduleFlush = true;
-    });
+
+      const pendingLanesCount = pendingLanes.length;
+
+      if (pendingLanesCount) {
+        const copy = pendingLanes.slice();
+
+        pendingLanes.length = 0;
+
+        for (let i = 0; i < pendingLanesCount; i++) {
+          copy[i]();
+        }
+      }
+    };
+
+    scheduler(cb);
   }
 
   if ('_debounce' in scheduler && lane !== currentLane) {

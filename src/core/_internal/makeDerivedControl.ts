@@ -13,8 +13,8 @@ import type {
   Notifier,
 } from '#internal/types';
 import {
-  commitNextValue,
-  commitPatchNode,
+  commitRootPatch,
+  commitRootValue,
   UNCHANGED,
 } from '#internal/commitPatchNode';
 import { attach, detach } from '#internal/syncLifecycle';
@@ -45,7 +45,7 @@ function commitSet(
   let nextValue: any;
 
   if (root._upToDate) {
-    nextValue = commitPatchNode(patchNode, prevValue, root, lane);
+    nextValue = commitRootPatch(root, patchNode, prevValue, lane);
   } else {
     let next;
 
@@ -66,13 +66,11 @@ function commitSet(
       return;
     }
 
-    nextValue = commitNextValue(next, prevValue, root, lane);
+    nextValue = commitRootValue(root, next, prevValue, lane);
   }
 
   if (nextValue !== UNCHANGED) {
-    root._value = nextValue;
-
-    notify(root._listeners, root._dependents, lane, nextValue, prevValue);
+    notify(root, lane, nextValue, prevValue);
   }
 }
 

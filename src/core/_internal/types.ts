@@ -158,6 +158,7 @@ export interface AsyncControlInternals
         readonly _slowLoadMonitor:
           | (Listeners<() => void> & {
               _timerId: ReturnType<typeof setTimeout> | undefined;
+              readonly _dependents: Notifier[];
             })
           | null;
       }

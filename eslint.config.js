@@ -3,6 +3,12 @@ import tseslint from 'typescript-eslint';
 /** Domains with private internals; core's `_internal` (#internal/*) is shared. */
 const nonCoreDomains = ['router', 'persist', 'scheduler', 'dom'];
 
+/**
+ * `syncScheduler` is the flush contract core already owns (`Scheduler._sync`)
+ * with a body of `cb()` — core commits through it, so it is exempt.
+ */
+const coreAllowed = ['syncScheduler'];
+
 const boundaries = [
   // core is the foundation — it must not depend on any non-core domain at all
   {
@@ -12,7 +18,11 @@ const boundaries = [
         'error',
         {
           patterns: nonCoreDomains.map((domain) => ({
-            group: [`\\#${domain}/**`, `**/${domain}/**`],
+            group: [
+              `\\#${domain}/**`,
+              `**/${domain}/**`,
+              ...coreAllowed.map((name) => `!**/${name}`),
+            ],
             message: `core must not depend on ${domain} — invert the dependency or move shared code to src/core.`,
           })),
         },

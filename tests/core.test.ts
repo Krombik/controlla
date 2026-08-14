@@ -18,6 +18,7 @@ import setValue from '../build/core/setValue/index.js';
 import getValue from '../build/core/getValue/index.js';
 const { default: invalidate } =
   await import('../build/core/invalidate/index.js');
+const { default: toPromise } = await import('../build/core/toPromise/index.js');
 const { default: selectLoading } =
   await import('../build/core/selectLoading/index.js');
 const { default: watchValue } =
@@ -25,6 +26,8 @@ const { default: watchValue } =
 const { default: watchValues } =
   await import('../build/core/watchValues/index.js');
 import retain from '../build/core/retain/index.js';
+const { default: createManualScheduler } =
+  await import('../build/scheduler/createManualScheduler/index.js');
 
 // derived: recompute + local override semantics (_upToDate rename)
 const $a = createPrimitiveControl(1);
@@ -72,10 +75,9 @@ invalidate($async); // loud: clears value, reloads
 await tick();
 assert.equal(getValue($async), 200, 'loud invalidate reloads');
 invalidate($async, true); // silent: keeps value while reloading
-// before the flush commits, value must persist; after reload -> 300
-await tick();
+// a silent reload commits at the call site, so this loader has already answered
+assert.equal(fetchCount, 3, 'silent: reload started synchronously');
 assert.equal(getValue($async), 300, 'silent invalidate reloaded');
-assert.equal(fetchCount, 3);
 
 // silent keeps value mid-flight: async loader
 let resolveNext: any;
@@ -93,12 +95,68 @@ resolveNext(1);
 await tick();
 assert.equal(getValue($async2), 1);
 invalidate($async2, true);
+assert.equal(count2, 2, 'silent: load started without waiting for a flush');
 await tick();
 assert.equal(getValue($async2), 1, 'silent: value kept while reloading');
 assert.equal(getValue(selectLoading($async2)), true, 'silent: loading again');
 resolveNext(2);
 await tick();
 assert.equal(getValue($async2), 2, 'silent: new value committed');
+
+// a silent reload keeps its value, but the promise must follow the reload - and
+// it commits at the call site, so no flush is needed in between
+invalidate($async2, true);
+let isSettled = false;
+const reloading = toPromise($async2).then((v: any) => {
+  isSettled = true;
+
+  return v;
+});
+await tick();
+assert.equal(isSettled, false, 'silent: promise pending while reloading');
+resolveNext(3);
+await tick();
+assert.equal(await reloading, 3, 'silent: promise resolves with the reload');
+
+// a silent reload from inside a flush joins that flush instead of committing at
+// the call site - which is why the promise is armed by the patch, not the commit
+const $trigger = createPrimitiveControl(0);
+let seenInFlush: any = 'pending';
+const unwatchTrigger = watchValue($trigger, () => {
+  invalidate($async2, true);
+  toPromise($async2).then((v: any) => {
+    seenInFlush = v;
+  });
+});
+setValue($trigger, 1);
+await tick();
+assert.equal(
+  seenInFlush,
+  'pending',
+  'silent in a flush: kept value not settled'
+);
+resolveNext(4);
+await tick();
+assert.equal(seenInFlush, 4, 'silent in a flush: resolves with the reload');
+unwatchTrigger();
+
+// a poll is loading with a value in hand, and that value is what the next page
+// waits for - only a silent reload defers the promise, not any load
+const $poll = createAsyncControl({
+  isLoaded: (v: any) => v.done,
+  load(handle: any) {
+    handle.setValue({ done: false });
+  },
+});
+const relPoll = retain($poll);
+await tick();
+assert.equal(getValue(selectLoading($poll)), true, 'poll: still loading');
+assert.deepEqual(
+  await toPromise($poll),
+  { done: false },
+  'poll: promise resolves with the value in hand'
+);
+relPoll();
 
 // a reload answering with the value already held commits as UNCHANGED, but the
 // load did end - loading/ready must follow the patch, not the value
@@ -309,9 +367,15 @@ relChained();
 // needs the activation too - `watchValue` gets it from passing its listener
 const $watchedItem = outerReg.bind(createPrimitiveControl(4)) as any;
 const watchedSeen: number[] = [];
-const unwatchBoundChild = watchValues([$watchedItem.n], ([n]) => {
-  watchedSeen.push(n as number);
-});
+// immediate, because the value landing is where the control starts rather than
+// a change to it - which is the only thing this one has to report
+const unwatchBoundChild = watchValues(
+  [$watchedItem.n],
+  ([n]) => {
+    watchedSeen.push(n as number);
+  },
+  true
+);
 const relWatched = retain($watchedItem);
 await tick();
 assert.deepEqual(watchedSeen, [40], 'watchValues fired for a bound child');
@@ -462,6 +526,225 @@ rel2();
     ),
     'binding must survive the type-probe construction'
   );
+}
+
+// a value arriving is where an async control starts, not a change to it
+{
+  const $settings = createAsyncControl<{ theme: string }>();
+
+  const changes: string[] = [];
+
+  const unwatchChanges = watchValue($settings, (settings) => {
+    changes.push(settings!.theme);
+  });
+
+  const arrivals: string[] = [];
+
+  const unwatchArrival = watchValue(
+    $settings,
+    (settings) => {
+      arrivals.push(settings!.theme);
+    },
+    true
+  );
+
+  setValue($settings, { theme: 'dark' });
+  await tick();
+
+  assert.deepEqual(changes, [], 'the load landing is not a change');
+  // immediate had nothing to be immediate about until the value was there
+  assert.deepEqual(arrivals, ['dark'], 'immediate waits for the value');
+
+  setValue($settings, { theme: 'light' });
+  await tick();
+
+  assert.deepEqual(changes, ['light'], 'an edit after it is');
+  assert.deepEqual(arrivals, ['dark', 'light']);
+
+  // already arrived: a watch started now reports changes from here on
+  const later: string[] = [];
+
+  const unwatchLater = watchValue($settings, (settings, prev) => {
+    later.push(`${prev.theme}->${settings.theme}`);
+  });
+
+  setValue($settings, { theme: 'sepia' });
+  await tick();
+
+  assert.deepEqual(
+    later,
+    ['light->sepia'],
+    'a loaded control watches as any other'
+  );
+
+  // an invalidate takes the value away and puts one back; neither the gap nor
+  // the `undefined` in it is reported, and the value from before it is what the
+  // one that follows is a change from
+  invalidate($settings);
+  await tick();
+
+  setValue($settings, { theme: 'high-contrast' });
+  await tick();
+
+  assert.deepEqual(
+    later,
+    ['light->sepia', 'sepia->high-contrast'],
+    'a reload is a change from the value held before it'
+  );
+  assert.equal(changes.length, 3, 'the cleared value reached nobody');
+
+  // `withEmpty` is the way back to hearing every value it takes, none included
+  const everything: Array<string | undefined> = [];
+
+  const unwatchEverything = watchValue(
+    $settings,
+    (settings) => {
+      everything.push(settings && settings.theme);
+    },
+    false,
+    true
+  );
+
+  invalidate($settings);
+  await tick();
+
+  setValue($settings, { theme: 'dark' });
+  await tick();
+
+  assert.deepEqual(
+    everything,
+    [undefined, 'dark'],
+    'withEmpty reports the gap and the value after it'
+  );
+
+  unwatchChanges();
+  unwatchArrival();
+  unwatchLater();
+  unwatchEverything();
+}
+
+// watchValues reports nothing until every one of them holds a value
+{
+  const $a = createAsyncControl<number>();
+  const $b = createAsyncControl<number>();
+
+  const seen: Array<[number, number]> = [];
+
+  const unwatchPair = watchValues([$a, $b], ([a, b]) => {
+    seen.push([a, b]);
+  });
+
+  const immediateSeen: Array<[number, number]> = [];
+
+  const unwatchImmediate = watchValues(
+    [$a, $b],
+    ([a, b]) => {
+      immediateSeen.push([a, b]);
+    },
+    true
+  );
+
+  setValue($a, 1);
+  await tick();
+  setValue($a, 2);
+  await tick();
+
+  // `$b` holds nothing, so there is no tuple - what `$a` did is kept for it
+  assert.deepEqual(seen, [], 'a tuple with a hole in it is not reported');
+  assert.deepEqual(immediateSeen, [], 'immediate waits for every value');
+
+  setValue($b, 10);
+  await tick();
+
+  assert.deepEqual(seen, [], 'the first full tuple is where the watch starts');
+  assert.deepEqual(
+    immediateSeen,
+    [[2, 10]],
+    'immediate is that tuple, carrying what moved while it waited'
+  );
+
+  setValue($a, 3);
+  await tick();
+
+  assert.deepEqual(seen, [[3, 10]], 'a change to a full tuple is reported');
+
+  // and `withEmpty` hears the hole itself
+  const withHoles: Array<Array<number | undefined>> = [];
+
+  const unwatchHoles = watchValues(
+    [$a, $b],
+    ([a, b]) => {
+      withHoles.push([a, b]);
+    },
+    false,
+    true
+  );
+
+  invalidate($b);
+  await tick();
+
+  assert.deepEqual(
+    withHoles,
+    [[3, undefined]],
+    'withEmpty reports a tuple with a hole in it'
+  );
+
+  unwatchPair();
+  unwatchImmediate();
+  unwatchHoles();
+}
+
+// a lane flushed from inside another lane's flush waits for it instead of
+// committing in the middle of it
+{
+  const manual = createManualScheduler();
+
+  const $nested = createControl({ y: 0 });
+
+  const $host = createControl({ x: 0, z: 0 });
+
+  const log: string[] = [];
+
+  let flushed: boolean | undefined;
+
+  let seenByX: number | undefined;
+
+  watchValue($nested.y, (v: number) => {
+    log.push(`y:${v}`);
+  });
+
+  watchValue($host.x, (v: number) => {
+    log.push(`x:${v}`);
+
+    flushed = manual.flush();
+
+    seenByX = getValue($nested.y);
+  });
+
+  watchValue($host.z, (v: number) => {
+    log.push(`z:${v}:${getValue($nested.y)}`);
+  });
+
+  setValue($nested.y, 1, manual);
+
+  setValue($host.x, 1);
+  setValue($host.z, 1);
+
+  await tick();
+
+  assert.equal(flushed, true, 'the pending flush is taken over, not refused');
+
+  // both reads land before the manual lane runs, so this flush stays one commit
+  // deep and nothing sees a half-applied tick
+  assert.equal(seenByX, 0, 'the deferred lane has not committed yet');
+
+  assert.deepEqual(
+    log,
+    ['x:1', 'z:1:0', 'y:1'],
+    'the deferred lane commits after the running one, exactly once'
+  );
+
+  assert.equal(getValue($nested.y), 1, 'the deferred lane did commit');
 }
 
 console.log('core-smoke.test.ts: all assertions passed');

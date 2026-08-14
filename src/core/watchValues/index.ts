@@ -1,19 +1,36 @@
 import noop from '#internal/noop';
-import type { ReadonlyAsyncControl, ReadonlyControl } from '#types';
-import type { Lane, Notifier } from '#internal/types';
+import type { ReadonlyControl, SelectValue } from '#types';
+import type {
+  AsyncControlInternals,
+  ControlInternals,
+  Lane,
+  Notifier,
+} from '#internal/types';
 import { EMPTY_ARR, INTERNALS } from '#internal/constants';
 import attachNotifier from '#internal/attachNotifier';
 import addToQueue from '#internal/addToQueue';
 import removeFromArray from '#internal/removeFromArray';
 import reportError from '#internal/reportError';
 
+const enum Status {
+  NONE,
+  /** The tuple they first hold together is where the watch starts, not a change. */
+  FIRST,
+  /** The same tuple, which an immediate watch has been waiting for. */
+  IMMEDIATE,
+}
+
 type Subscription = {
   _level: number;
   _callback(values?: any[], prevValues?: any[]): void | (() => void);
-  /** `undefined` when the callback takes no arguments */
   readonly _values: any[] | undefined;
-  /** `false`: not tracked (callback arity < 2); `undefined`: nothing changed since last flush */
-  _prevValues: any[] | false | undefined;
+  _prevValues: any[] | false;
+  /**
+   * The loadable roots behind them, deduped. Emptiness is theirs to answer and
+   * not the values': one of `undefined` under a loaded root is a value.
+   */
+  _loadable: ControlInternals[] | undefined;
+  _status: Status;
   _cleanup(): void;
   _commitSet(data: null, lane: Lane): void;
 };
@@ -28,13 +45,7 @@ function valuesNotify(
   sub: Subscription,
   value: any
 ) {
-  const values = sub._values!;
-
-  if (sub._prevValues === undefined) {
-    sub._prevValues = values.slice();
-  }
-
-  values[this._index] = value;
+  sub._values![this._index] = value;
 
   addToQueue(lane, sub as any);
 }
@@ -47,13 +58,44 @@ function derefSelf(this: StrongRef<any>) {
   return this._value;
 }
 
+const keepTuple = (sub: Subscription) => {
+  if (sub._prevValues !== false) {
+    sub._prevValues = sub._values!.slice();
+  }
+};
+
 function commitSet(this: Subscription) {
   const self = this;
 
+  const loadable = self._loadable;
+
+  // a tuple with a hole in it isn't what the callback is typed for, so the whole
+  // flush waits - whatever moved in it sits in `_values` for the one that does.
+  // Asked here rather than per notification: within a flush a load landing and a
+  // change to something else arrive in either order, and neither decides what
+  // the other means
+  if (loadable !== undefined) {
+    for (let i = loadable.length; i--;) {
+      if (loadable[i]._value === undefined) {
+        return;
+      }
+    }
+  }
+
+  const values = self._values;
+
   const prevValues = self._prevValues;
 
-  if (prevValues !== false) {
-    self._prevValues = undefined;
+  keepTuple(self);
+
+  if (self._status) {
+    const isFirst = self._status == Status.FIRST;
+
+    self._status = Status.NONE;
+
+    if (isFirst) {
+      return;
+    }
   }
 
   try {
@@ -63,8 +105,7 @@ function commitSet(this: Subscription) {
   }
 
   try {
-    self._cleanup =
-      self._callback(self._values, prevValues || undefined) || noop;
+    self._cleanup = self._callback(values, prevValues || undefined) || noop;
   } catch (err) {
     reportError(err);
 
@@ -75,7 +116,8 @@ function commitSet(this: Subscription) {
 const watchValues = ((
   controls: ReadonlyControl[],
   callback: (values?: any[], prevValues?: any[]) => void | (() => void),
-  immediate?: boolean
+  immediate?: boolean,
+  withEmpty?: boolean
 ): (() => void) => {
   const count = controls.length;
 
@@ -89,7 +131,9 @@ const watchValues = ((
     _level: 0,
     _callback: callback,
     _values: values,
-    _prevValues: callbackArity > 1 ? undefined : false,
+    _prevValues: callbackArity > 1 ? Array(count) : false,
+    _loadable: undefined,
+    _status: Status.NONE,
     _cleanup: noop,
     _commitSet: commitSet,
   };
@@ -118,6 +162,22 @@ const watchValues = ((
       values![i] = internals._get();
     }
 
+    // a bound control carries the key with nothing in it while its target isn't
+    // async, so what's there is what says so
+    if (
+      !withEmpty &&
+      (root as Partial<AsyncControlInternals>)._errorControl &&
+      (sub._loadable ||= []).indexOf(root) < 0
+    ) {
+      sub._loadable.push(root);
+
+      if (root._value === undefined && !sub._status) {
+        sub._status = immediate ? Status.IMMEDIATE : Status.FIRST;
+
+        immediate = false;
+      }
+    }
+
     attachNotifier(
       internals,
       (notifiers[i] = {
@@ -134,11 +194,12 @@ const watchValues = ((
 
   if (immediate) {
     try {
-      sub._cleanup =
-        callback(values, callbackArity > 1 ? Array(count) : undefined) || noop;
+      sub._cleanup = callback(values, sub._prevValues || undefined) || noop;
     } catch (err) {
       reportError(err);
     }
+
+    keepTuple(sub);
   }
 
   return () => {
@@ -162,16 +223,33 @@ const watchValues = ((
   };
 }) as {
   /**
+   * The same, reporting the stretches where one of them holds no value as well
+   * — the load it opens with, and every `invalidate` after. Its place in both
+   * tuples comes as `undefined` for those.
+   */
+  <const S extends ReadonlyControl[]>(
+    controls: S,
+    callback: (
+      values: { [index in keyof S]: SelectValue<S[index]> | undefined },
+      prevValues: { [index in keyof S]: SelectValue<S[index]> | undefined }
+    ) => void | (() => void),
+    immediate: boolean,
+    withEmpty: true
+  ): () => void;
+  /**
    * Runs the {@link callback} with the new and previous values whenever any of
-   * the {@link controls} change; changes committed in the same flush produce a
-   * single call. Pass {@link immediate} to also run it right away with the
-   * current values (previous values all `undefined`). A plain listener — it
-   * doesn't trigger loading.
+   * the {@link controls} changes, until the returned function is called;
+   * changes committed in the same flush produce a single call. A plain
+   * listener — it doesn't trigger loading.
+   *
+   * Only full tuples count. Nothing is reported while any of them holds no
+   * value — whatever moved meanwhile is kept and goes out with the rest, and
+   * what follows an `invalidate` is a change from the last tuple handed over.
+   * Pass {@link immediate} for one call with the values they already hold, or
+   * with their first once they all have one.
    *
    * The callback may return a cleanup function, run before the next call and
    * on unwatch.
-   *
-   * @returns a function to stop watching.
    *
    * @example
    * ```ts
@@ -183,20 +261,10 @@ const watchValues = ((
   <const S extends ReadonlyControl[], I extends boolean = false>(
     controls: S,
     callback: (
-      values: {
-        [index in keyof S]: S[index] extends ReadonlyControl<infer K>
-          ? K | (S[index] extends ReadonlyAsyncControl ? undefined : never)
-          : never;
-      },
+      values: { [index in keyof S]: SelectValue<S[index]> },
       prevValues: {
-        [index in keyof S]: S[index] extends ReadonlyControl<infer K>
-          ? | K
-            | (I extends false
-                ? S[index] extends ReadonlyAsyncControl
-                  ? undefined
-                  : never
-                : undefined)
-          : never;
+        [index in keyof S]:
+          SelectValue<S[index]> | (I extends true ? undefined : never);
       }
     ) => void | (() => void),
     immediate?: I

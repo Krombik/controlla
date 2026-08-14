@@ -131,4 +131,60 @@ assert.deepEqual(
   'nested listener on subtree vanish'
 );
 
+// NaN re-set is the same input arriving twice, at the root and on a path
+const $nan = createControl({ a: NaN });
+const nlog: any[] = [];
+watchValue($nan.a, () => {
+  nlog.push(1);
+});
+setValue($nan.a, NaN);
+await tick();
+assert.equal(nlog.length, 0, 'NaN over NaN on a path does not notify');
+setValue($nan, { a: NaN });
+await tick();
+assert.equal(nlog.length, 0, 'NaN over NaN at the root does not notify');
+setValue($nan.a, 1);
+await tick();
+assert.equal(nlog.length, 1, 'leaving NaN notifies');
+
+// a listener reads the value its change is part of, not the one it replaced
+const $c = createControl({ a: { x: 1 }, b: 2 });
+let seenSelf: any;
+let seenRoot: any;
+watchValue($c.a.x, () => {
+  seenSelf = getValue($c.a.x);
+  seenRoot = getValue($c);
+});
+setValue($c.a.x, 5);
+await tick();
+assert.equal(seenSelf, 5, 'the changed path reads as committed');
+assert.deepEqual(
+  seenRoot,
+  { a: { x: 5 }, b: 2 },
+  'the root reads as committed'
+);
+
+// the same for a whole-value set, which is in place before the diff even runs
+const $w = createControl({ a: { x: 1 }, b: 2 });
+let wSelf: any;
+let wRoot: any;
+watchValue($w.a.x, () => {
+  wSelf = getValue($w.a.x);
+  wRoot = getValue($w);
+});
+setValue($w, { a: { x: 9 }, b: 2 });
+await tick();
+assert.equal(wSelf, 9, 'the changed path reads as committed');
+assert.deepEqual(wRoot, { a: { x: 9 }, b: 2 }, 'the root reads as committed');
+
+// a set that changes nothing must leave the value it rolled back untouched
+const before = getValue($w);
+setValue($w, { a: { x: 9 }, b: 2 });
+await tick();
+assert.equal(
+  getValue($w),
+  before,
+  'an unchanged set keeps the committed value'
+);
+
 console.log('patch-smoke.test.ts: all assertions passed');
