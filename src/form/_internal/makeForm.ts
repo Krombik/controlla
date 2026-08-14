@@ -216,6 +216,7 @@ const makeForm = (control: Control, options: FormOptions): FormInternals => {
     _control: control,
     _entries: entries,
     _roots: new Map(),
+    _armedRoots: new Map(),
     _options: options,
     _errorCount: 0,
     _pendingCount: 0,

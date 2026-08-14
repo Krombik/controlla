@@ -1,5 +1,5 @@
 import type { Control, Scheduler } from '#types';
-import type { ControlInternals } from '#internal/types';
+import type { ChangeListener, ControlInternals } from '#internal/types';
 import type {
   FieldRenderProps,
   FieldState,
@@ -84,6 +84,8 @@ export type FormInternals = FormState & {
   readonly _entries: Map<Control, FieldEntry>;
   /** Baseline value per root, captured when the form first registers a field of it. */
   readonly _roots: Map<ControlInternals, any>;
+  /** The load watch held on every async root the form baselines against. */
+  readonly _armedRoots: Map<ControlInternals, ChangeListener>;
   _options: FormOptions;
   _errorCount: number;
   _pendingCount: number;

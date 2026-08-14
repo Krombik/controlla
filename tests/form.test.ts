@@ -4,8 +4,10 @@ import assert from 'node:assert';
 import test from 'node:test';
 
 import createControl from '../src/core/createControl/index.ts';
+import createAsyncControl from '../src/core/createAsyncControl/index.ts';
 import getValue from '../src/core/getValue/index.ts';
 import setValue from '../src/core/setValue/index.ts';
+import invalidate from '../src/core/invalidate/index.ts';
 import watchValue from '../src/core/watchValue/index.ts';
 import makeForm from '../src/form/_internal/makeForm.ts';
 import {
@@ -783,6 +785,103 @@ test('submit says which of its own paths moved since the last one', async () => 
 
   // the first submit rebaselined, so `alerts` is no longer something that moved
   assert.deepEqual(changed[1], ['digest']);
+});
+
+test('an async control is baselined by the value it was waiting for', async () => {
+  const $values = createAsyncControl<{ name: string }>();
+
+  const changed: string[][] = [];
+
+  const form = createForm($values, {
+    submit(_values: any, paths: string[]) {
+      changed.push(paths);
+    },
+  });
+
+  register(form, $values.name);
+
+  // the form was made before the load landed, so the baseline is owed - and
+  // dirtiness is tracked from before it arrives
+  assert.equal(getValue(form.$isDirty), false);
+
+  setValue($values, { name: 'jane' });
+
+  await tick();
+
+  assert.equal(
+    getValue(form.$isDirty),
+    false,
+    'the value it was waiting for is not a change to it'
+  );
+
+  setValue($values.name, 'john');
+
+  await tick();
+
+  assert.equal(getValue(form.$isDirty), true);
+
+  await form.submit();
+
+  assert.deepEqual(changed, [['name']]);
+});
+
+test('a reload takes the baseline with it, loud or silent', async () => {
+  const $values = createAsyncControl<{ name: string }>();
+
+  const changed: string[][] = [];
+
+  const form = createForm($values, {
+    submit(_values: any, paths: string[]) {
+      changed.push(paths);
+    },
+  });
+
+  register(form, $values.name);
+
+  setValue($values, { name: 'jane' });
+
+  await tick();
+
+  setValue($values.name, 'john');
+
+  await tick();
+
+  assert.equal(getValue(form.$isDirty), true);
+
+  // silent: the edit stands until the reload answers
+  invalidate($values, true);
+
+  setValue($values, { name: 'joan' });
+
+  await tick();
+
+  assert.equal(getValue($values.name), 'joan');
+  assert.equal(
+    getValue(form.$isDirty),
+    false,
+    'what the reload brought is the baseline'
+  );
+
+  await form.submit();
+
+  assert.deepEqual(changed, [[]]);
+
+  setValue($values.name, 'jack');
+
+  await tick();
+
+  assert.equal(getValue(form.$isDirty), true);
+
+  // loud: the value goes first, the reload brings the next one
+  invalidate($values);
+
+  await tick();
+
+  setValue($values, { name: 'jane' });
+
+  await tick();
+
+  assert.equal(getValue(form.$isDirty), false, 'a loud reload the same');
 });
 
 test('the paths are not collected for a submit that never asked', async () => {

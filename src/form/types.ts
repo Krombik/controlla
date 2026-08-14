@@ -83,7 +83,11 @@ export type FormState = {
   readonly $isValidating: ReadonlyControl<boolean>;
   /** `true` while no field holds an error — a field that never validated counts as valid. */
   readonly $isValid: ReadonlyControl<boolean>;
-  /** `true` while any field's value differs from its baseline. */
+  /**
+   * `true` while any field's value differs from its baseline - which a
+   * successful submit, a `reset` and, over an async control, every value a load
+   * brings back all move.
+   */
   readonly $isDirty: ReadonlyControl<boolean>;
   /**
    * Runs every validator and, if all passed, the
@@ -122,9 +126,9 @@ export type FieldState<C extends ReadonlyControl = ReadonlyControl, E = any> = {
   /** The current validation error, `undefined` while the field passes (or never ran). */
   readonly $error: ReadonlyControl<E | undefined>;
   /**
-   * Whether the value differs from the baseline - which a successful submit or
-   * a `reset` to a value of its own moves, so this clears on a save without
-   * the value having to move back.
+   * Whether the value differs from the baseline - which a successful submit, a
+   * `reset` to a value of its own, and a reload of the control it sits on all
+   * move, so this clears on a save without the value having to move back.
    */
   readonly $isDirty: ReadonlyControl<boolean>;
   /** Whether an async validation of this field is in flight. */

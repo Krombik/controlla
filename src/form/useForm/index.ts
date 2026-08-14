@@ -1,9 +1,10 @@
-import { useRef } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 
 import type { Control, SelectValue } from '#types';
 import type { FormOptions, FormState } from '#form/types';
 import type { FormInternals } from '#form/internal/types';
 import makeForm from '#form/internal/makeForm';
+import { attachForm } from '#form/internal/entry';
 
 /**
  * Creates a form over the {@link control}: a registry the `Field`s under its
@@ -17,8 +18,17 @@ import makeForm from '#form/internal/makeForm';
  *
  * The handle is created once and kept for the component's whole life, while
  * the {@link options} are re-read on every render. The baseline is taken when
- * the form is created, or - for an async {@link control} - when its value
- * first arrives, and moves to whatever a successful submit or a `reset` wrote.
+ * the form is created and moves to whatever a successful submit or a `reset`
+ * wrote - and, over an async {@link control}, to every value a load hands over:
+ * the first one it waited for, and whatever a reload replaces it with.
+ *
+ * So a form over a control that can reload underneath it (`invalidate`,
+ * `reloadOnFocus`, `reloadIfStale`, a poll) should not be editable while the
+ * reload is in flight: an edit committed during one is taken for what the load
+ * brought, and baselines itself. Nothing here prevents it - a reloading control
+ * still holds its value and its fields still write - so gate the fields on
+ * `selectLoading` if that can happen. A reload discards the edits along with the
+ * value they were made to either way.
  *
  * @example
  * ```tsx
@@ -53,6 +63,10 @@ const useForm = <C extends Control, E = any>(
   const form = (ref.current ||= makeForm(control, options));
 
   form._options = options;
+
+  // the async controls it baselines against outlive it, so what it holds on
+  // them goes when the form does
+  useLayoutEffect(() => attachForm(form), [form]);
 
   return form;
 };

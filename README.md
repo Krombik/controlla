@@ -1030,7 +1030,11 @@ Creates the form handle. Created once and kept for the component's life; `option
 
 **Returns**: a `FormState` - `$isSubmitting`, `$isValidating`, `$isValid`, `$isDirty`, `submit(event?)`, `validate()`, `reset(control?, value?)`, `setError(control, error)`.
 
-The **baseline** is taken when the form is created - or, for an async control, when its value first arrives - and moves to whatever a successful submit or a `reset` wrote. `$isDirty` and `changed` are both measured against it, so an autosaving form gets what moved since the *previous* submit.
+The **baseline** is taken when the form is created, and moves to whatever a successful submit or a `reset` wrote. `$isDirty` and `changed` are both measured against it, so an autosaving form gets what moved since the *previous* submit.
+
+Over an async control it is every value a load hands over: the first one the form waited for, and whatever a reload replaces it with - a reload discards the edits along with the value they were made to, so it starts again from what came back. Which is why a form over a control that reloads underneath it (`invalidate`, `reloadOnFocus`, `reloadIfStale`, a poll) should not be editable while the reload is in flight - an edit committed during one is taken for what the load brought and baselines itself. Nothing stops it: a reloading control still holds its value and its fields still write. Gate the fields on `selectLoading` if the control can reload while they are mounted.
+
+A **sync derived** control (`createDerivedControl`) over an async source has no load status of its own, so a form over it baselines whatever the sources had computed by then - use the async control itself, or `createAsyncDerivedControl`.
 
 ```tsx
 const $values = useControl({ email: '', tags: ['react'] });

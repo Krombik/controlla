@@ -36,7 +36,7 @@ import {
   errorAttachAsync,
   errorDetachAsync,
   triggerLoad,
-} from './utils';
+} from './utils.ts';
 import addToLevel from '#internal/addToLevel';
 import { attach, detach } from '#internal/syncLifecycle';
 import makeStatusInternals from '#internal/makeStatusInternals';

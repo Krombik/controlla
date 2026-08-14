@@ -1,6 +1,6 @@
 import type { Control } from '#types';
 import type { FieldEntry, FormInternals } from '#form/internal/types';
-import type { AsyncControlInternals } from '#internal/types';
+import type { AsyncControlInternals, ChangeListener } from '#internal/types';
 import type { FieldState } from '#form/types';
 import { INTERNALS } from '#internal/constants';
 import createDerivedControl from '#core/createDerivedControl';
@@ -8,10 +8,71 @@ import createPrimitiveControl from '#core/createPrimitiveControl';
 import getValue from '#core/getValue';
 import setValue from '#core/setValue';
 import watchValue from '#core/watchValue';
+import { addListener, removeListener } from '#internal/flushQueue';
 import reportError from '#internal/reportError';
 import isNotEqual from '#form/internal/isNotEqual';
 import identity from '#internal/identity';
 import noop from '#internal/noop';
+
+/**
+ * Every value a load hands over is a baseline: the first one the form waited
+ * for, and whatever a reload replaces it with. Left to the next read instead,
+ * the baseline would be taken from a value an edit had already moved.
+ *
+ * A plain listener - the form must not be what starts the load.
+ */
+const watchLoads = (form: FormInternals, root: AsyncControlInternals) => {
+  const armed = form._armedRoots;
+
+  if (!armed.has(root)) {
+    const listener: ChangeListener = (value) => {
+      // the loading status is written after this runs, so it still says who
+      // this value came from: the load in flight, or somebody editing it
+      if (value !== undefined && root._loadingControl[INTERNALS]._value) {
+        form._roots.set(root, value);
+
+        // the fields were notified on the way down, before this moved what they
+        // are compared against, so their dirtiness is a step behind
+        if (form._dirtyControl) {
+          const entries = form._entries;
+
+          const it = entries.values();
+
+          for (let i = entries.size; i--;) {
+            const entry = it.next().value!;
+
+            if (entry._control[INTERNALS]._root === root) {
+              setEntryDirty(
+                form,
+                entry,
+                isNotEqual(getValue(entry._control), snapshotOf(entry))
+              );
+            }
+          }
+        }
+      }
+    };
+
+    armed.set(root, listener);
+
+    addListener(root, listener);
+  }
+};
+
+/** Holds the load watches for as long as the form is mounted. */
+export const attachForm = (form: FormInternals) => {
+  const armed = form._armedRoots;
+
+  armed.forEach((listener, root) => {
+    addListener(root, listener);
+  });
+
+  return () => {
+    armed.forEach((listener, root) => {
+      removeListener(root, listener);
+    });
+  };
+};
 
 /**
  * A whole root is baselined the first time anything asks after it, so every
@@ -35,10 +96,13 @@ export const getBaseline = (form: FormInternals, control: Control) => {
   } else {
     value = root._value;
 
-    if (
-      value !== undefined ||
-      (root as Partial<AsyncControlInternals>)._errorControl === undefined
-    ) {
+    if ((root as Partial<AsyncControlInternals>)._errorControl) {
+      watchLoads(form, root as AsyncControlInternals);
+
+      if (value !== undefined) {
+        roots.set(root, value);
+      }
+    } else {
       roots.set(root, value);
     }
   }
@@ -322,6 +386,10 @@ export const getEntry = (form: FormInternals, control: Control) => {
 
   if (entry === undefined) {
     form._entries.set(control, (entry = makeEntry(control, form)));
+
+    // baselines this field's root, and starts watching its loads, before
+    // anything can be edited through the field
+    getBaseline(form, control);
 
     if (form._dirtyControl) {
       watchDirty(form, entry);
