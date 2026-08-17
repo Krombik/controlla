@@ -13,8 +13,9 @@ import { cleanupScope } from '#internal/cleanup';
  * per fresh closure would defeat reusing the control.
  */
 const useDerived = (
-  make: (params: any[]) => any,
+  make: (params: any[], once: boolean) => any,
   controls: any[],
+  once: boolean,
   combiner?: (...values: any[]) => any
 ) => {
   const ref = useRef<null | { _controls: Control[]; _item: Control }>(null);
@@ -51,7 +52,8 @@ const useDerived = (
           item._controls = controls;
 
           item._item = make(
-            combiner === undefined ? controls : append(controls, combiner)
+            combiner === undefined ? controls : append(controls, combiner),
+            once
           );
         } finally {
           cleanupScope._value = null;
@@ -67,7 +69,8 @@ const useDerived = (
       ref.current = item = {
         _controls: controls,
         _item: make(
-          combiner === undefined ? controls : append(controls, combiner)
+          combiner === undefined ? controls : append(controls, combiner),
+          once
         ),
       };
     } finally {

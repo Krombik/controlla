@@ -64,11 +64,11 @@ const initControl = <I extends PrimitiveControlInternals>(
                 value = resolvedInitial;
               }
 
-              self._enqueueSet(value, lane);
+              self._enqueueSet(value, lane, true);
             } else {
               (self as any as AsyncControlInternals)._errorControl[
                 INTERNALS
-              ]._enqueueSet(RELOAD, lane);
+              ]._enqueueSet(RELOAD, lane, true);
             }
 
             scheduleFlush(lane);

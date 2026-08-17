@@ -1,6 +1,6 @@
 import createAsyncControl from '#core/createAsyncControl';
-import invalidate from '#core/invalidate';
-import setValue from '#core/setValue';
+import scheduleSet from '#internal/scheduleSet';
+import { INTERNALS, RELOAD } from '#internal/constants';
 import type { ReadonlyAsyncControl } from '#types';
 
 const $online = createAsyncControl<true, never>({
@@ -10,11 +10,17 @@ const $online = createAsyncControl<true, never>({
 
 if (typeof window !== 'undefined') {
   window.addEventListener('online', () => {
-    setValue($online, true);
+    scheduleSet($online[INTERNALS]._root, true, true);
   });
 
   window.addEventListener('offline', () => {
-    invalidate($online);
+    // what `invalidate` does, but the connection dropping is not somebody
+    // asking for a reload
+    scheduleSet(
+      $online[INTERNALS]._root._errorControl[INTERNALS],
+      RELOAD,
+      true
+    );
   });
 }
 

@@ -49,6 +49,7 @@ import { AggregateControlError } from '#internal/AggregateControlError';
 import throwReadonlyError from '#internal/throwReadonlyError';
 import { commitErrorValue, commitStatusValue } from '#internal/commitStatus';
 import { gcRegistry } from '#internal/cleanup';
+import { sourceUpdate } from '#internal/sourceUpdate';
 import Ref from '#internal/Ref';
 
 type Undefinable<O extends {}> = {
@@ -60,6 +61,8 @@ interface BoundInternals
   _activeCount: number;
   _cleanup: () => void;
   _holdingPrev: boolean;
+  /** What the change was for the target - the commit here is a flush behind it. */
+  _fromSource: boolean;
   _target: ControlInternals | AsyncControlInternals | undefined;
   readonly _activeNodes: BoundInternalsChild[];
   readonly _changedNodes: BoundInternalsChild[];
@@ -87,12 +90,13 @@ function enqueueBoundSet(
   this: BoundInternals,
   value: any,
   lane: Lane,
+  fromSource: boolean,
   path: string[] | undefined
 ) {
   const target = this._target;
 
   if (target) {
-    target._enqueueSet(value, lane, path);
+    target._enqueueSet(value, lane, fromSource, path);
   } else if (process.env.NODE_ENV !== 'production') {
     console.warn(
       '[registry] setValue on bound control with unresolved keys was ignored. Wait for all key controls to be ready before writing.'
@@ -104,6 +108,7 @@ function enqueueBoundErrorSet(
   this: ErrorControlInternals<BoundInternals>,
   value: any,
   lane: Lane,
+  fromSource: boolean,
   path: string[] | undefined
 ) {
   if (value !== RELOAD && value !== SILENT_RELOAD) {
@@ -116,6 +121,7 @@ function enqueueBoundErrorSet(
     (target as AsyncControlInternals)._errorControl[INTERNALS]._enqueueSet(
       value,
       lane,
+      fromSource,
       path
     );
   } else if (process.env.NODE_ENV !== 'production') {
@@ -232,7 +238,7 @@ const detachBoundDependents = (control: Control) => {
   for (let i = dependents.length; i--;) {
     const notifier = dependents[i];
 
-    if (notifier._notify == addToQueue) {
+    if (notifier._notify == targetChangeNotify) {
       const bound: BoundInternals | undefined = notifier._ref.deref();
 
       if (bound && bound._target == targetInternals) {
@@ -242,6 +248,18 @@ const detachBoundDependents = (control: Control) => {
   }
 };
 
+/**
+ * The commit below runs a level later, when whatever moved the target is long
+ * done - so what that was is kept here, where it is still true. A key and the
+ * target can both move into one commit, and either of them being the source
+ * makes the value it lands on the source's; the commit clears it again.
+ */
+function targetChangeNotify(this: Notifier, lane: Lane, root: BoundInternals) {
+  root._fromSource ||= sourceUpdate._value;
+
+  addToQueue(lane, root);
+}
+
 function keyChangeNotify(
   this: Notifier,
   lane: Lane,
@@ -249,6 +267,8 @@ function keyChangeNotify(
   value: any,
   _: any
 ) {
+  root._fromSource ||= sourceUpdate._value;
+
   root._keys[this._index] = value;
 
   // (re)decide the hold on each change while a target is attached or a hold is
@@ -273,6 +293,8 @@ function keyErrorChangeNotify(
   value: any,
   _: any
 ) {
+  root._fromSource ||= sourceUpdate._value;
+
   root._errors![this._index] = value;
 
   addToQueue(lane, root);
@@ -328,6 +350,10 @@ const getNextTarget = (registry: Registry<any, any>, keys: any[]) => {
 
 function commitSet(this: BoundInternals, _: any, lane: Lane) {
   const root = this;
+
+  sourceUpdate._value = root._fromSource;
+
+  root._fromSource = false;
 
   const errors = root._errors;
 
@@ -560,6 +586,8 @@ function commitSet(this: BoundInternals, _: any, lane: Lane) {
 
     commitStatusValue(readyInternals, nextReadyValue, lane);
   }
+
+  sourceUpdate._value = false;
 }
 
 const attachNotifierToTargetNode = (
@@ -1001,6 +1029,7 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
           }
         },
         _holdingPrev: false,
+        _fromSource: false,
         _activeNodes: [],
         _changedNodes: [],
         _commitSet: commitSet,
@@ -1016,7 +1045,7 @@ function bind(this: Registry<any, any>, ...keys: any[]): any {
 
       const rootNotifier: Notifier = {
         _ref: weakRef,
-        _notify: addToQueue,
+        _notify: targetChangeNotify,
         _index: 0,
         _attachedTo: EMPTY_ARR,
         _source: undefined,

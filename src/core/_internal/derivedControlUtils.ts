@@ -103,6 +103,7 @@ export function enqueueSet(
   this: DerivedControlInternals,
   value: any,
   lane: Lane,
+  _fromSource: boolean,
   path: string[] | undefined
 ) {
   if (this._upToDate) {

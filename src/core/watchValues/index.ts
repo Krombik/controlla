@@ -11,6 +11,7 @@ import attachNotifier from '#internal/attachNotifier';
 import addToQueue from '#internal/addToQueue';
 import removeFromArray from '#internal/removeFromArray';
 import reportError from '#internal/reportError';
+import { sourceUpdate } from '#internal/sourceUpdate';
 
 const enum Status {
   NONE,
@@ -31,6 +32,8 @@ type Subscription = {
    */
   _loadable: ControlInternals[] | undefined;
   _status: Status;
+  /** Any one of them moving on its own makes the tuple the source's. */
+  _fromSource: boolean;
   _cleanup(): void;
   _commitSet(data: null, lane: Lane): void;
 };
@@ -47,10 +50,14 @@ function valuesNotify(
 ) {
   sub._values![this._index] = value;
 
+  sub._fromSource ||= sourceUpdate._value;
+
   addToQueue(lane, sub as any);
 }
 
 function plainNotify(this: Notifier, lane: Lane, sub: Subscription) {
+  sub._fromSource ||= sourceUpdate._value;
+
   addToQueue(lane, sub as any);
 }
 
@@ -86,6 +93,10 @@ function commitSet(this: Subscription) {
 
   const prevValues = self._prevValues;
 
+  const fromSource = self._fromSource;
+
+  self._fromSource = false;
+
   keepTuple(self);
 
   if (self._status) {
@@ -104,6 +115,10 @@ function commitSet(this: Subscription) {
     reportError(err);
   }
 
+  // the tuple is handed over a level after whatever moved it, so what that was
+  // is put back here
+  sourceUpdate._value = fromSource;
+
   try {
     self._cleanup = self._callback(values, prevValues || undefined) || noop;
   } catch (err) {
@@ -111,6 +126,8 @@ function commitSet(this: Subscription) {
 
     self._cleanup = noop;
   }
+
+  sourceUpdate._value = false;
 }
 
 const watchValues = ((
@@ -134,6 +151,7 @@ const watchValues = ((
     _prevValues: callbackArity > 1 ? Array(count) : false,
     _loadable: undefined,
     _status: Status.NONE,
+    _fromSource: false,
     _cleanup: noop,
     _commitSet: commitSet,
   };
@@ -163,10 +181,13 @@ const watchValues = ((
     }
 
     // a bound control carries the key with nothing in it while its target isn't
-    // async, so what's there is what says so
+    // async, so what's there is what says so - except for the loading control,
+    // which is what says there is nothing and so never holds nothing itself
     if (
       !withEmpty &&
       (root as Partial<AsyncControlInternals>)._errorControl &&
+      internals !==
+        (root as AsyncControlInternals)._loadingControl[INTERNALS] &&
       (sub._loadable ||= []).indexOf(root) < 0
     ) {
       sub._loadable.push(root);

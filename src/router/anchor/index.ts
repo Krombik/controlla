@@ -81,7 +81,7 @@ function anchorScrollTo(this: AnchorParam, id: string, instant?: boolean) {
 function activate(this: AnchorParam, lane: Lane, isHashRequested: boolean) {
   const self = this;
 
-  self._hash._set!('', lane);
+  self._hash._set!('', lane, true);
 
   if (isHashRequested) {
     armPending(self);

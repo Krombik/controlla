@@ -30,6 +30,7 @@ const setValue = <C extends Control>(
   internals._root._enqueueSet(
     typeof value != 'function' ? value : value(internals._get()),
     lane,
+    false,
     internals._path
   );
 

@@ -1,5 +1,6 @@
 import createPrimitiveControl from '#core/createPrimitiveControl';
-import setValue from '#core/setValue';
+import scheduleSet from '#internal/scheduleSet';
+import { INTERNALS } from '#internal/constants';
 import type { Control, ReadonlyControl } from '#types';
 
 const cache = new Map<string, Control<boolean>>();
@@ -25,7 +26,7 @@ const mediaQuery = (query: string): ReadonlyControl<boolean> => {
 
     if (mql) {
       mql.onchange = (e) => {
-        setValue($control!, e.matches);
+        scheduleSet($control![INTERNALS]._root, e.matches, true);
       };
     }
   }

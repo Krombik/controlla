@@ -26,11 +26,14 @@ const queuePatch = (
         _type: PatchType.UNSET,
         _patchedKeys: [],
         _value: undefined,
+        _fromSource: false,
       })
     );
 
     addToLevel(lane, internals);
   }
+
+  const rootNode = patchNode;
 
   if (path) {
     for (let i = 0, l = path.length; i < l; i++) {
@@ -45,6 +48,7 @@ const queuePatch = (
             _type: PatchType.UNSET,
             _patchedKeys: [(key = path![i])],
             _value: undefined,
+            _fromSource: false,
           });
         }
 
@@ -53,9 +57,10 @@ const queuePatch = (
           _type: PatchType.SET,
           _patchedKeys: [],
           _value: nextValue,
+          _fromSource: false,
         });
 
-        return;
+        return rootNode;
       }
 
       patchNode = children.get(key)!;
@@ -73,6 +78,8 @@ const queuePatch = (
   patchNode._value = nextValue;
 
   patchNode._type = PatchType.SET;
+
+  return rootNode;
 };
 
 export default queuePatch;

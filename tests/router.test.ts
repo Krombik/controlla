@@ -35,6 +35,8 @@ import selectRegisteredAnchors from '../build/router/selectRegisteredAnchors/ind
 import registerAnchor from '../build/router/registerAnchor/index.js';
 import trackScroll from '../build/router/trackScroll/index.js';
 import getValue from '../build/core/getValue/index.js';
+import isSourceUpdate from '../build/core/isSourceUpdate/index.js';
+import watchValues from '../build/core/watchValues/index.js';
 
 // ---------- router ----------
 
@@ -171,6 +173,22 @@ assert.deepEqual(
 );
 
 // 5. popstate back
+const paramsOrigin: Array<[number, boolean]> = [];
+const stopOrigin = watchValue(
+  selectParams(router.routes.user),
+  (params: any) => {
+    paramsOrigin.push([params.id, isSourceUpdate()]);
+  }
+);
+// what a listener writes while handling the pop is its own write
+const $echo = createControl(0);
+const echoOrigin: boolean[] = [];
+const stopEcho = watchValue(selectParams(router.routes.user), (params: any) => {
+  setValue($echo, params.id);
+});
+const stopEchoWatch = watchValue($echo, () => {
+  echoOrigin.push(isSourceUpdate());
+});
 history.go(-1);
 await tick();
 assert.equal(
@@ -208,6 +226,44 @@ assert.deepEqual(
   'pop2: params'
 );
 assert.equal(getValue(router.navigationState).action, 'pop', 'pop2: action');
+
+// the state the finalizer writes commits with it, so a watcher over both is
+// handed one tuple, and a consistent one
+const navTuples: Array<[string, number]> = [];
+const stopNavTuple = watchValues(
+  [router.navigationState, selectParams(router.routes.user)],
+  ([state, params]: any) => {
+    navTuples.push([state.action, params.id]);
+  }
+);
+
+// a pop moves the params on its own, a navigate is the app writing them
+navigate(router.navigation.user({ id: 8 }).profile(), true);
+await tick();
+assert.deepEqual(
+  navTuples,
+  [['replace', 8]],
+  'navigationState and the params it belongs to arrive together'
+);
+stopNavTuple();
+assert.deepEqual(
+  paramsOrigin,
+  [
+    [5, true],
+    [8, false],
+  ],
+  'params from history are the source, from a navigate are not'
+);
+assert.deepEqual(
+  echoOrigin,
+  [false, false],
+  'a write made from a source-driven listener is still a write'
+);
+stopOrigin();
+stopEcho();
+stopEchoWatch();
+navigate(router.navigation.user({ id: 5 }).profile(), true);
+await tick();
 
 // 7. blocked navigation + anchor target
 const disable = router.navigationBlocker.enable();

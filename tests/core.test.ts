@@ -12,6 +12,10 @@ const { default: createDerivedControl } =
   await import('../build/core/createDerivedControl/index.js');
 const { default: createAsyncDerivedControl } =
   await import('../build/core/createAsyncDerivedControl/index.js');
+const { default: createSnapshotControl } =
+  await import('../build/core/createSnapshotControl/index.js');
+const { default: isSourceUpdate } =
+  await import('../build/core/isSourceUpdate/index.js');
 const { default: createRegistry } =
   await import('../build/core/createRegistry/index.js');
 import setValue from '../build/core/setValue/index.js';
@@ -177,6 +181,25 @@ assert.equal(
 );
 relSame();
 
+// a status control carries a status, not the value the control is waiting for -
+// so watching one reports the stretch where there is no value, like any control
+const $statusSrc = createAsyncControl({
+  load(handle: any) {
+    handle.setValue(1);
+  },
+});
+const relStatus = retain($statusSrc);
+await tick();
+const loadingSeen: boolean[] = [];
+const stopLoading = watchValue(selectLoading($statusSrc), (v: boolean) => {
+  loadingSeen.push(v);
+});
+invalidate($statusSrc);
+await tick();
+assert.deepEqual(loadingSeen, [true, false], 'loading: both ends reported');
+stopLoading();
+relStatus();
+
 // unsubscribing twice must be a no-op, not remove somebody else: the swap-pop
 // helper used to drop the last entry whether or not it found the item
 const $shared = createPrimitiveControl('a');
@@ -203,9 +226,19 @@ assert.equal(reg.get(1), reg.get(1), 'cached');
 const $key = createPrimitiveControl(1);
 const $bound = reg.bind($key);
 assert.equal(getValue($bound), 'item-1', 'bound initial');
+const keySeen: boolean[] = [];
+const stopKeySeen = watchValue($bound, () => {
+  keySeen.push(isSourceUpdate());
+});
 setValue($key, 2);
 await tick();
 assert.equal(getValue($bound), 'item-2', 'bound retarget');
+assert.deepEqual(
+  keySeen,
+  [false],
+  'bound: a key somebody wrote retargets it, and that is a write'
+);
+stopKeySeen();
 setValue($bound, 'patched');
 await tick();
 assert.equal(getValue(reg.get(2)), 'patched', 'bound write forwards to target');
@@ -218,6 +251,111 @@ assert.equal(getValue($doubled), undefined);
 setValue($src, 21);
 await tick();
 assert.equal(getValue($doubled), 42, 'async derived');
+
+// isSourceUpdate: a write is an edit, a load or a recompute isn't
+const $server = createAsyncControl<number>();
+const $editable = createAsyncDerivedControl($server, (v: number) => v);
+const submitted: number[] = [];
+const stopSubmit = watchValue($editable, (v: number) => {
+  if (!isSourceUpdate()) {
+    submitted.push(v);
+  }
+});
+setValue($server, 1);
+await tick();
+setValue($editable, 5);
+await tick();
+assert.deepEqual(submitted, [5], 'a write is an edit');
+invalidate($server);
+await tick();
+setValue($server, 9); // what came back isn't what was submitted
+await tick();
+assert.deepEqual(submitted, [5], 'a source recompute is not an edit');
+assert.equal(getValue($editable), 9, 'the value did follow the source');
+stopSubmit();
+
+// the loader is what marks a value as the source's - a poll keeps handing them
+// over with the loading long done
+let poll: (value: number) => void;
+const $polled = createAsyncControl<number>({
+  isLoaded: () => true,
+  load(handle: any) {
+    poll = (value: number) => handle.setValue(value);
+  },
+});
+const relPolled = retain($polled);
+await tick();
+poll!(1); // the first one: an arrival, not a change
+await tick();
+const pollSeen: Array<[number, boolean]> = [];
+const stopPoll = watchValue($polled, (v: number) => {
+  pollSeen.push([v, isSourceUpdate()]);
+});
+poll!(2);
+await tick();
+assert.equal(
+  getValue(selectLoading($polled)),
+  false,
+  'the poll is not loading'
+);
+poll!(3);
+await tick();
+setValue($polled, 4);
+await tick();
+assert.deepEqual(
+  pollSeen,
+  [
+    [2, true],
+    [3, true],
+    [4, false],
+  ],
+  'every value the loader hands over is the source, a write is not'
+);
+stopPoll();
+relPolled();
+
+// async once: the first ready value, then the sources are let go
+const $onceSrc = createAsyncControl<number>();
+const $once = createSnapshotControl($onceSrc, (v: number) => v * 2);
+assert.equal(getValue($once), undefined, 'async once: loading');
+setValue($onceSrc, 3);
+await tick();
+assert.equal(getValue($once), 6, 'async once: first ready value');
+setValue($onceSrc, 100);
+await tick();
+assert.equal(getValue($once), 6, 'async once: no recompute');
+setValue($once, 7);
+await tick();
+assert.equal(getValue($once), 7, 'async once: settable after it computed');
+
+// a source that is ready at build time is never watched at all
+const $onceReady = createSnapshotControl($onceSrc, (v: number) => v + 1);
+assert.equal(getValue($onceReady), 101, 'async once: computed at build');
+setValue($onceSrc, 200);
+await tick();
+assert.equal(
+  getValue($onceReady),
+  101,
+  'async once: build-time compute is final'
+);
+
+// multi-source: waits for every one of them, then once
+const $onceA = createAsyncControl<number>();
+const $onceB = createAsyncControl<number>();
+const $onceSum = createSnapshotControl(
+  $onceA,
+  $onceB,
+  (a: number, b: number) => a + b
+);
+setValue($onceA, 1);
+await tick();
+assert.equal(getValue($onceSum), undefined, 'async once: one source short');
+setValue($onceB, 2);
+await tick();
+assert.equal(getValue($onceSum), 3, 'async once: multi-source');
+setValue($onceA, 10);
+await tick();
+assert.equal(getValue($onceSum), 3, 'async once: multi-source no recompute');
 
 // $never's status controls are valid derived-control sources (attach-safe)
 const { default: $never } = await import('../build/core/never/index.js');
@@ -305,6 +443,75 @@ assert.equal(
   5,
   'length under async parent: count once resolved'
 );
+
+// watchValues hands the tuple over a level later, and carries it too
+let pushWatched: (value: number) => void;
+const $watchedA = createAsyncControl<number>({
+  isLoaded: () => true,
+  load(handle: any) {
+    pushWatched = (value: number) => handle.setValue(value);
+  },
+});
+const $watchedB = createPrimitiveControl(0);
+const relTuple = retain($watchedA);
+await tick();
+pushWatched!(1);
+await tick();
+const tupleSeen: boolean[] = [];
+const stopTuple = watchValues([$watchedA, $watchedB], ([a]: any) => {
+  tupleSeen.push(isSourceUpdate());
+
+  return void a;
+});
+pushWatched!(2);
+await tick();
+setValue($watchedB, 5);
+await tick();
+assert.deepEqual(
+  tupleSeen,
+  [true, false],
+  'watchValues: the loader moved the tuple, then a write did'
+);
+stopTuple();
+relTuple();
+
+// a bound control reports what the change was for the target it mirrors
+const pushes: Record<number, (value: any) => void> = {};
+const originReg = createRegistry(createAsyncControl, {
+  isLoaded: () => true,
+  load(handle: any, keys: any) {
+    const key = keys[0] as number;
+
+    pushes[key] = (value: any) => handle.setValue(value);
+
+    handle.setValue({ n: key });
+  },
+});
+const $originKey = createPrimitiveControl(1);
+const $originBound = originReg.bind($originKey) as any;
+const relOrigin = retain($originBound);
+await tick();
+const boundSeen: Array<[number, boolean]> = [];
+const stopBound = watchValue($originBound, (v: any) => {
+  boundSeen.push([v.n, isSourceUpdate()]);
+});
+pushes[1]({ n: 11 }); // the target's loader
+await tick();
+setValue($originBound, { n: 12 }); // a write, forwarded to the target
+await tick();
+setValue($originKey, 2); // a retarget, and the new target loads
+await tick();
+assert.deepEqual(
+  boundSeen,
+  [
+    [11, true],
+    [12, false],
+    [2, true],
+  ],
+  'bound: the loader and the retarget are the source, the write is not'
+);
+stopBound();
+relOrigin();
 
 // a derived over a BOUND control's child must recompute: the derived has to
 // activate the source child on the bound target, not just retain its load

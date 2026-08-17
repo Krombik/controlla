@@ -19,6 +19,7 @@ const invalidate: {
   scheduleSet(
     control[INTERNALS]._root._errorControl[INTERNALS],
     isLoud ? RELOAD : SILENT_RELOAD,
+    false,
     isLoud ? schedulerOrKeepPrevValue || undefined : syncScheduler
   );
 };

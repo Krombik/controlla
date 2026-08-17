@@ -120,13 +120,15 @@ const handleRouter = (
 
         routes[i]._anchor?._hash._set!(
           undefined,
-          (clearLane ||= getSchedulerLane(syncScheduler))
+          (clearLane ||= getSchedulerLane(syncScheduler)),
+          true
         );
 
         do {
           (routes[i]._params as RouterControlRoot | null)?._set!(
             undefined,
-            (clearLane ||= getSchedulerLane(syncScheduler))
+            (clearLane ||= getSchedulerLane(syncScheduler)),
+            true
           );
         } while (i-- && !routes[i]._isMatched._value);
 

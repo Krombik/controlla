@@ -75,8 +75,13 @@ const watchValue: {
   };
 
   // a bound control carries the key with nothing in it while its target isn't
-  // async, so what's there is what says so
-  if (!withEmpty && (root as Partial<AsyncControlInternals>)._errorControl) {
+  // async, so what's there is what says so - except for the loading control,
+  // which is what says there is nothing and so never holds nothing itself
+  if (
+    !withEmpty &&
+    (root as Partial<AsyncControlInternals>)._errorControl &&
+    internals !== (root as AsyncControlInternals)._loadingControl[INTERNALS]
+  ) {
     /** The value it opens with is where it starts rather than a change to it. */
     const skipArrival = !immediate;
 

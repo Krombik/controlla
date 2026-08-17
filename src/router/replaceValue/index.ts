@@ -33,7 +33,7 @@ const replaceValue = <C extends Control>(
   replacing._value = true;
 
   try {
-    internals._root._enqueueSet(nextValue, lane, internals._path);
+    internals._root._enqueueSet(nextValue, lane, false, internals._path);
   } finally {
     replacing._value = false;
   }

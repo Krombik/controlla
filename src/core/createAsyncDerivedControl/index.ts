@@ -108,6 +108,6 @@ const createAsyncDerivedControl: {
       ]
     >
   >;
-} = (...params: any[]) => makeAsyncDerivedControl(params);
+} = (...params: any[]) => makeAsyncDerivedControl(params, false);
 
 export default createAsyncDerivedControl;

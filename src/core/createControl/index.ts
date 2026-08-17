@@ -9,14 +9,16 @@ import { EMPTY_ARR } from '#internal/constants';
 import queuePatch from '#internal/queuePatch';
 import { attach, detach } from '#internal/syncLifecycle';
 import { notify } from '#internal/flushQueue';
+import { sourceUpdate } from '#internal/sourceUpdate';
 
 function enqueueSet(
   this: ControlInternals,
   value: any,
   lane: Lane,
+  fromSource: boolean,
   path: string[] | undefined
 ) {
-  queuePatch(lane, this, value, path);
+  queuePatch(lane, this, value, path)._fromSource = fromSource;
 }
 
 function commitSet(
@@ -28,6 +30,8 @@ function commitSet(
 
   const prevValue = root._value;
 
+  sourceUpdate._value = patchNode._fromSource;
+
   const nextValue = commitRootPatch(root, patchNode, prevValue, lane);
 
   if (nextValue !== UNCHANGED) {
@@ -35,6 +39,8 @@ function commitSet(
 
     root._setExternal(nextValue);
   }
+
+  sourceUpdate._value = false;
 }
 
 /**

@@ -185,6 +185,8 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
     _setComponents: noop,
   };
 
+  let wasBooted = false;
+
   const historyEventScheduler = createManualScheduler();
 
   const historyLane = getLane(historyEventScheduler);
@@ -231,7 +233,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
   ) => {
     root._set = root._enqueueSet;
 
-    root._enqueueSet = (value, lane, path) => {
+    root._enqueueSet = (value, lane, _fromSource, path) => {
       if (!route._isMatched._value) {
         throwNotMatched();
       }
@@ -281,10 +283,15 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
           scheduleFlush(nextLane);
         };
 
-        pendingNavigationRoot._enqueueSet(true, lane);
+        // a history event is never parked here, so this is somebody navigating
+        pendingNavigationRoot._enqueueSet(true, lane, false);
 
         return;
       }
+
+      // the address bar moved on its own - a `pop`, or the url the app opened
+      // with - so the params below are not somebody's write
+      const fromSource = nav._isHistoryEvent;
 
       const methods = nav._methods;
 
@@ -331,11 +338,11 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
           if (currRoute !== nextRoute) {
             if (nextRoute) {
-              nextRoute._isMatched._enqueueSet(true, lane);
+              nextRoute._isMatched._enqueueSet(true, lane, fromSource);
             }
 
             if (currRoute) {
-              currRoute._isMatched._enqueueSet(false, lane);
+              currRoute._isMatched._enqueueSet(false, lane, fromSource);
             }
           }
         }
@@ -346,7 +353,11 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
           if (item && item._root == nextRoute._params) {
             u++;
 
-            (nextRoute._params as RouterControlRoot)._set!(item._params, lane);
+            (nextRoute._params as RouterControlRoot)._set!(
+              item._params,
+              lane,
+              fromSource
+            );
           }
         }
       }
@@ -358,7 +369,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
       if (u < updatesCount) {
         const item = updates[u];
 
-        item._root._set!(item._params, lane);
+        item._root._set!(item._params, lane, fromSource);
       }
     } else {
       removeFromArray(paramsHandler._lanes, lane);
@@ -366,7 +377,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
       for (let i = 0; i < updatesCount; i++) {
         const item = updates[i];
 
-        item._root._set!(item._params, lane, item._path);
+        item._root._set!(item._params, lane, false, item._path);
       }
     }
 
@@ -384,6 +395,19 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
   urlFinalizer._commitSet = (patch: RouterPatch, lane) => {
     const nav = patch._navigation;
+
+    if (nav) {
+      // the page swaps here rather than with the params, so it renders on the
+      // values every route already committed
+      nav._methods._setComponents();
+
+      // the address bar is where a `pop` came from, and the entry it landed on
+      // was written from here - nothing to sync, and it never scrolls either.
+      // The url the app booted on is the one that hasn't been through this yet
+      if (nav._isHistoryEvent && wasBooted) {
+        return;
+      }
+    }
 
     const routes = chains[currentChainIndex];
 
@@ -413,10 +437,6 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
     const anchorParam = route!._anchor;
 
-    if (nav) {
-      nav._methods._setComponents();
-    }
-
     if (patch._hashChanged || (nav && nav._isNewPage)) {
       if (anchorParam) {
         // unmatched reads as `undefined`, like a route's params do
@@ -442,7 +462,8 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
           if (!nav || !nav._isHistoryEvent) {
             navigationStateRoot._enqueueSet(
               { action: 'replace', delta: 0 },
-              lane
+              lane,
+              false
             );
           }
         } else {
@@ -487,7 +508,11 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
           // only once the entry exists, or the index outruns the real history
           currentHistoryIndex = nextHistoryIndex;
 
-          navigationStateRoot._enqueueSet({ action: 'push', delta: 1 }, lane);
+          navigationStateRoot._enqueueSet(
+            { action: 'push', delta: 1 },
+            lane,
+            false
+          );
         }
       } catch (err) {
         // the browser refused the write - safari throttles history to 100 calls
@@ -1011,7 +1036,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
       if (isBlockedPop) {
         isBlockedPop = false;
 
-        scheduleSet(pendingNavigationRoot, true);
+        scheduleSet(pendingNavigationRoot, true, true);
       } else {
         delta = nextHistoryIndex - currentHistoryIndex;
 
@@ -1069,15 +1094,22 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
       delta = 0;
     }
 
-    navigationStateRoot._enqueueSet({ action: 'pop', delta }, historyLane);
+    navigationStateRoot._enqueueSet(
+      { action: 'pop', delta },
+      historyLane,
+      true
+    );
 
     matchLocation(location.pathname, parseSearch(location.search), false);
   };
 
   buildRoutes(routes, navigations, paths, EMPTY_ARR, '', 0, false);
 
-  // the finalizer commits after every params control
-  urlFinalizer._level = ++maxParamControlLevel;
+  // the finalizer commits after every params control, and the state it writes
+  // sits with it - it is the routes' change, so whatever derives from it must
+  // commit after them rather than a level below
+  (navigationStateRoot as Mutable<typeof navigationStateRoot>)._level =
+    urlFinalizer._level = maxParamControlLevel + 1;
 
   if (pathname.length > 1 && pathname.at(-1) == '/') {
     pathname = pathname.slice(0, -1);
@@ -1183,6 +1215,8 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
   // something being returned to
   matchLocation(pathname, searchParams, restoreX === undefined);
 
+  wasBooted = true;
+
   if (currentChainIndex < 0) {
     throw new Error(`no path matched "${pathname}" - use withNotFound`);
   }
@@ -1252,14 +1286,14 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
       isPendingNavigation: {
         [INTERNALS]: pendingNavigationRoot,
         allow() {
-          scheduleSet(pendingNavigationRoot, false);
+          scheduleSet(pendingNavigationRoot, false, false);
 
           resumeNavigation();
 
           resumeNavigation = noop;
         },
         deny() {
-          scheduleSet(pendingNavigationRoot, false);
+          scheduleSet(pendingNavigationRoot, false, false);
 
           resumeNavigation = noop;
         },

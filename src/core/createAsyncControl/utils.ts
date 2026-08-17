@@ -29,6 +29,7 @@ const visibilityChangeListener = () => {
         scheduleSet(
           internals._errorControl[INTERNALS],
           SILENT_RELOAD,
+          true,
           syncScheduler
         );
       }
@@ -77,14 +78,16 @@ export const triggerLoad = (internals: AsyncControlInternals) => {
         endLoad(internals);
       }
 
-      scheduleSet(internals, value, scheduler);
+      // the loader is what says the value is one it brought in - a poll keeps
+      // handing them over long after the loading is done
+      scheduleSet(internals, value, true, scheduler);
 
       return isLoading;
     },
     setError(value, scheduler) {
       endLoad(internals);
 
-      scheduleSet(internals._errorControl[INTERNALS], value, scheduler);
+      scheduleSet(internals._errorControl[INTERNALS], value, true, scheduler);
     },
     stillLoading: () => !data._loadedAt,
     getValue: () => internals._value,
@@ -188,6 +191,7 @@ const attachLoad = (control: AsyncControlInternals) => {
       scheduleSet(
         control._errorControl[INTERNALS],
         SILENT_RELOAD,
+        true,
         syncScheduler
       );
     }

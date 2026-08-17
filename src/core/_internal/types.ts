@@ -36,6 +36,8 @@ export type PatchTreeNode = {
   _value: any;
   readonly _children: Map<string, PatchTreeNode>;
   readonly _patchedKeys: string[];
+  /** Root node only: a loader's value or the address bar's, not a write. */
+  _fromSource: boolean;
 };
 
 /** Invariant: `_indexMap` is null iff `_listeners` is the shared `EMPTY_ARR`. */
@@ -82,7 +84,13 @@ export interface RootBase {
 export type ReadonlyPrimitiveControlInternals = ControlInternalsBase & RootBase;
 
 interface Settable {
-  _enqueueSet(value: any, lane: Lane, path?: readonly string[]): void;
+  /** {@link fromSource} - the value comes from a loader or the address bar, not a write. */
+  _enqueueSet(
+    value: any,
+    lane: Lane,
+    fromSource: boolean,
+    path?: readonly string[]
+  ): void;
   _commitSet(value: any, lane: Lane): void;
 }
 

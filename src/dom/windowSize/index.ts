@@ -1,6 +1,6 @@
 import createControl from '#core/createControl';
-import setValue from '#core/setValue';
-import { PASSIVE } from '#internal/constants';
+import scheduleSet from '#internal/scheduleSet';
+import { INTERNALS, PASSIVE } from '#internal/constants';
 import type { ControlScope, ReadonlyControlScope } from '#types';
 
 type Size = { width: number; height: number };
@@ -16,7 +16,12 @@ const $windowSize: ControlScope<Size> = createControl<Size>(
 
 if (typeof window !== 'undefined') {
   const listener = () => {
-    setValue($windowSize, getSize(), requestAnimationFrame);
+    scheduleSet(
+      $windowSize[INTERNALS]._root,
+      getSize(),
+      true,
+      requestAnimationFrame
+    );
   };
 
   window.addEventListener('resize', listener, PASSIVE);

@@ -51,7 +51,12 @@ const CombinedControlsConsumer = ((
 ) =>
   ControlConsumer({
     ...(props as any),
-    control: useDerived(makeDerivedControl, props.controls, props.combiner),
+    control: useDerived(
+      makeDerivedControl,
+      props.controls,
+      false,
+      props.combiner
+    ),
   })) as {
   /**
    * Combines the {@link CombineProps.controls controls}' values through

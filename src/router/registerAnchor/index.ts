@@ -59,6 +59,7 @@ const registerAnchor = <A extends string>(
             root._enqueueSet(
               anchorParam._activeId == id ? 'active' : true,
               lane,
+              true,
               [id]
             );
 
@@ -78,7 +79,7 @@ const registerAnchor = <A extends string>(
 
             removeFromArray(anchorParam._entries, entry!);
 
-            root._enqueueSet(undefined, lane, [id]);
+            root._enqueueSet(undefined, lane, true, [id]);
           }
 
           scheduleFlush(lane);

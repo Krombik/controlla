@@ -24,7 +24,7 @@ const setActiveId = (anchorParam: AnchorParam, id: string | undefined) => {
 
       for (let i = 0; i < entries.length; i++) {
         if (entries[i]._id == prevId) {
-          root._enqueueSet(true, lane, [prevId]);
+          root._enqueueSet(true, lane, true, [prevId]);
 
           break;
         }
@@ -32,7 +32,7 @@ const setActiveId = (anchorParam: AnchorParam, id: string | undefined) => {
     }
 
     if (id !== undefined) {
-      root._enqueueSet('active', lane, [id]);
+      root._enqueueSet('active', lane, true, [id]);
     }
 
     scheduleFlush(lane);

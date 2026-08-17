@@ -1,5 +1,6 @@
 import createPrimitiveControl from '#core/createPrimitiveControl';
-import setValue from '#core/setValue';
+import scheduleSet from '#internal/scheduleSet';
+import { INTERNALS } from '#internal/constants';
 import type { Control, ReadonlyControl } from '#types';
 
 const isVisible = () => document.visibilityState === 'visible';
@@ -10,7 +11,8 @@ const $pageVisible: Control<boolean> = createPrimitiveControl(
 
 if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
-    setValue($pageVisible, isVisible());
+    // the tab being looked at or not is nobody's write
+    scheduleSet($pageVisible[INTERNALS]._root, isVisible(), true);
   });
 }
 

@@ -44,6 +44,7 @@ import settlePromise from '#internal/settlePromise';
 import armPromise from '#internal/armPromise';
 import { commitErrorValue, commitStatusValue } from '#internal/commitStatus';
 import { notify } from '#internal/flushQueue';
+import { sourceUpdate } from '#internal/sourceUpdate';
 
 const throwIfUndefined = () => {
   throw new Error('cannot be set to undefined, use invalidate to reload');
@@ -53,20 +54,21 @@ function asyncEnqueueSet(
   this: AsyncControlInternals,
   value: any,
   lane: Lane,
+  fromSource: boolean,
   path: string[] | undefined
 ) {
   if (path === undefined && value === undefined) {
     throwIfUndefined();
   }
 
-  queuePatch(lane, this, value, path);
+  queuePatch(lane, this, value, path)._fromSource = fromSource;
 }
 
 function errorEnqueueSet(
   this: ErrorControlInternals<AsyncControlInternals>,
   value: any,
   lane: Lane,
-  _: any
+  fromSource: boolean
 ) {
   if (value === undefined) {
     throwIfUndefined();
@@ -99,6 +101,8 @@ function errorEnqueueSet(
 
     patchNode._value = value;
 
+    patchNode._fromSource = fromSource;
+
     if (patchNode._patchedKeys.length) {
       patchNode._patchedKeys.length = 0;
 
@@ -112,6 +116,7 @@ function errorEnqueueSet(
       _type: type,
       _patchedKeys: [],
       _value: value,
+      _fromSource: fromSource,
     });
   }
 }
@@ -146,6 +151,8 @@ function commitAsyncSet(
   let nextReadyValue = prevReady;
 
   let nextLoadingValue = prevLoading;
+
+  sourceUpdate._value = patchNode._fromSource;
 
   if (patchType < PatchType.ERROR) {
     nextValue = commitRootPatch(internals, patchNode, prevValue, lane);
@@ -220,6 +227,8 @@ function commitAsyncSet(
   }
 
   commitStatusValue(readyControl, nextReadyValue, lane);
+
+  sourceUpdate._value = false;
 }
 
 const createAsyncControl: {

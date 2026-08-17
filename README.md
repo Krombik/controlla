@@ -118,14 +118,14 @@ For working code rather than snippets, [`examples/`](examples) has twelve standa
 
 ## Contents
 
-- **Controls**: [`createControl`](#createcontrol--usecontrol), [`createPrimitiveControl`](#createprimitivecontrol--useprimitivecontrol), [`createAsyncControl`](#createasynccontrol--useasynccontrol), [`createDerivedControl`](#createderivedcontrol--usederivedcontrol), [`createAsyncDerivedControl`](#createasyncderivedcontrol--useasyncderivedcontrol)
+- **Controls**: [`createControl`](#createcontrol--usecontrol), [`createPrimitiveControl`](#createprimitivecontrol--useprimitivecontrol), [`createAsyncControl`](#createasynccontrol--useasynccontrol), [`createDerivedControl`](#createderivedcontrol--usederivedcontrol), [`createAsyncDerivedControl`](#createasyncderivedcontrol--useasyncderivedcontrol), [`createSnapshotControl`](#createsnapshotcontrol--usesnapshotcontrol)
 - **Controls context**: [`createControlsContext`](#createcontrolscontextcreatecontrols-useparentcontrols)
 - **Reading values**: [`getValue`](#getvaluecontrol), [`useValue`](#usevaluecontrol), [`toPromise`](#topromisecontrol), [`useSuspenseValue`](#usesuspensevaluecontrol-safe), [`useSuspenseValues`](#usesuspensevaluescontrols-safe), [`useInfiniteValues`](#useinfinitevaluescontrols)
 - **Writing values**: [`setValue`](#setvaluecontrol-value-scheduler), [`invalidate`](#invalidatecontrol-silentorscheduler)
 - **Subscribing**: [`watchValue`](#watchvaluecontrol-callback-immediate-withempty), [`watchValues`](#watchvaluescontrols-callback-immediate-withempty), [`retain`](#retaincontrol), [`watchSlowLoading`](#watchslowloadingcontrol-callback)
 - **Async status**: [`selectLoading`](#selectloadingcontrol), [`selectReady`](#selectreadycontrol), [`selectError`](#selecterrorcontrol)
 - **Components**: [`ControlConsumer`](#controlconsumer), [`ControlsConsumer`](#controlsconsumer), [`CombinedControlsConsumer`](#combinedcontrolsconsumer), [`InfiniteControlsConsumer`](#infinitecontrolsconsumer), [`Suspense`](#suspense), [`SuspenseControlConsumer`](#suspensecontrolconsumer), [`SuspenseControlsConsumer`](#suspensecontrolsconsumer), [`wrapErrorBoundary`](#wraperrorboundaryboundarycomponent)
-- **Utils**: [`$never`](#never), [`isAggregateControlError`](#isaggregatecontrolerrorerr)
+- **Utils**: [`$never`](#never), [`isAggregateControlError`](#isaggregatecontrolerrorerr), [`isSourceUpdate`](#issourceupdate)
 - **Registry**: [`createRegistry`](#createregistrycreate-initarg-options)
 - **Loaders**: [`requestLoader`](#requestloaderfetch-options-scheduler), [`pollLoader`](#pollloaderfetch-options-scheduler)
 - **Persistence**: [`getPersistStorage`](#getpersiststorageoptions), [`safeLocalStorage`](#safelocalstorage), [`safeSessionStorage`](#safesessionstorage)
@@ -282,6 +282,27 @@ const $mirror = createAsyncDerivedControl($asyncSource);                  // mir
 const $fromSync = createAsyncDerivedControl($syncSource);                 // sync → async (ready once value !== undefined)
 const $userName = createAsyncDerivedControl($user, (user) => user.name);  // map one source
 const $total = createAsyncDerivedControl($cart, $rates, (cart, rates) => cart.total * rates.usd); // combine many
+```
+
+### `createSnapshotControl` / `useSnapshotControl`
+
+[`createAsyncDerivedControl`](#createasyncderivedcontrol--useasyncderivedcontrol) computed **once** - at the first moment every source is ready and error-free. The sources are dropped right after, so later source changes and reloads leave the value alone and it stays freely settable. Sources that are already ready are never even subscribed to.
+
+Until that moment it behaves like any async control: loading, or holding an [`AggregateControlError`](#isaggregatecontrolerrorerr). Using it still loads loadable sources and `invalidate` still reloads them - the value just no longer follows.
+
+```ts
+createSnapshotControl(...controls, mapper?)
+useSnapshotControl(...controls, mapper?)
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `...controls` | `ReadonlyControl[]` | One or more source controls (sync or async). |
+| `mapper?` | `(...values) => result` | Runs once, when all sources are ready. Returning `undefined` waits for the next value; throwing sets the error. |
+
+```ts
+// a draft to edit, seeded from the server once
+const $draft = createSnapshotControl($user, (user) => ({ ...user }));
 ```
 
 ---
@@ -723,6 +744,37 @@ if (isAggregateControlError(err)) {
 }
 ```
 
+### `isSourceUpdate()`
+
+Whether the change being handled right now came from **somewhere else** rather than from a `setValue`. Only meaningful inside a listener; `false` anywhere else.
+
+| The change came from | Reads as the source |
+|---|---|
+| a loader handing a value over - the first one and every one after it, a poll's included | yes |
+| a derived control recomputing because its sources moved | yes |
+| route params, and the routes' matched state, following a back/forward | yes |
+| a bound control whose target or key moved for any of the above | yes |
+| an external storage the control is backed by, written in another tab | yes |
+| the DOM ones - `$online`, `$pageVisible`, `$windowSize`, `mediaQuery` | yes |
+| `setValue`, `replaceValue`, `invalidate`, `navigate`, a `Link` | no |
+
+Mainly for submit-on-change: a reload that answers with values the server normalized must reach the inputs without being taken for an edit and submitted again.
+
+```ts
+const $form = createAsyncDerivedControl($server, (data) => ({ ...data }));
+
+watchValue($form, (values) => {
+  // the reload after a save updates the fields, it doesn't save again
+  if (!isSourceUpdate()) {
+    save(values).then(() => invalidate($server));
+  }
+});
+```
+
+[`watchValues`](#watchvaluescontrols-callback-immediate-withempty) answers once for the whole tuple, so a flush carrying both a load and an edit reads as the source's.
+
+An async control with no `load` that is fed by an outside `setValue` reads as an edit - the loader is the only origin the library can see. Move such a source into `load` if its values should count as the source's.
+
 ---
 
 ## Registry
@@ -875,6 +927,8 @@ A `sessionStorage`-backed storage (observable within browsing contexts sharing t
 ## DOM
 
 Ready-made controls bound to browser state - import and read, no setup. Safe to import on the server (default values, no listeners attached).
+
+They're readonly, and what they follow is nobody's write, so [`isSourceUpdate()`](#issourceupdate) is `true` in their listeners - going offline included.
 
 ### `mediaQuery(query)`
 

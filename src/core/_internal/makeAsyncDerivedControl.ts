@@ -36,6 +36,7 @@ import addToQueue from '#internal/addToQueue';
 import { AggregateControlError } from '#internal/AggregateControlError';
 import { notify } from '#internal/flushQueue';
 import { registerCleanup } from '#internal/cleanup';
+import { sourceUpdate } from '#internal/sourceUpdate';
 import removeFromArray from '#internal/removeFromArray';
 import Ref from '#internal/Ref';
 
@@ -44,6 +45,8 @@ interface AsyncDerivedControlInternals
     DerivedControlInternals,
     AsyncStatusControls<AsyncDerivedControlInternals> {
   readonly _errors: any[];
+  /** Drops the sources on the first ready value */
+  readonly _once: boolean;
 }
 
 function sourceErrorNotify(
@@ -64,6 +67,7 @@ function enqueueDerivedErrorSet(
   this: ErrorControlInternals<AsyncDerivedControlInternals>,
   value: any,
   lane: Lane,
+  fromSource: boolean,
   path: string[] | undefined
 ) {
   if (value !== RELOAD && value !== SILENT_RELOAD) {
@@ -78,6 +82,7 @@ function enqueueDerivedErrorSet(
         (load[i] as AsyncControlInternals)._errorControl[INTERNALS]._enqueueSet(
           value,
           lane,
+          fromSource,
           path
         );
       }
@@ -85,6 +90,7 @@ function enqueueDerivedErrorSet(
       (load as AsyncControlInternals)._errorControl[INTERNALS]._enqueueSet(
         value,
         lane,
+        fromSource,
         path
       );
     }
@@ -121,6 +127,8 @@ function commitSet(
   }
 
   root._upToDate = true;
+
+  sourceUpdate._value = true;
 
   const errors = root._errors;
 
@@ -233,9 +241,16 @@ function commitSet(
     status == Status.READY || undefined,
     lane
   );
+
+  sourceUpdate._value = false;
+
+  // the value it was after, so nothing is left listening for another one
+  if (root._once && status == Status.READY) {
+    root._cleanup();
+  }
 }
 
-const makeAsyncDerivedControl = (params: any[]) => {
+const makeAsyncDerivedControl = (params: any[], once: boolean) => {
   const controlCount = params.length - 1;
 
   const isSingle = controlCount < 2;
@@ -291,6 +306,7 @@ const makeAsyncDerivedControl = (params: any[]) => {
     _readyControl: undefined!,
     _promise: undefined,
     _errors: errors,
+    _once: !!once,
   };
 
   const weakRef = new Ref(derivedRoot);
@@ -388,6 +404,11 @@ const makeAsyncDerivedControl = (params: any[]) => {
 
       isReady = false;
     }
+  }
+
+  // everything was there already, so nothing has to be watched for
+  if (once && isReady) {
+    derivedRoot._cleanup();
   }
 
   applyLoadWiring(derivedRoot, loadableSources);

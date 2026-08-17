@@ -30,6 +30,7 @@ import {
 import { notify } from '#internal/flushQueue';
 import reportError from '#internal/reportError';
 import { registerCleanup } from '#internal/cleanup';
+import { sourceUpdate } from '#internal/sourceUpdate';
 import removeFromArray from '#internal/removeFromArray';
 import Ref from '#internal/Ref';
 
@@ -42,36 +43,44 @@ function commitSet(
 
   const prevValue = root._value;
 
-  let nextValue: any;
-
   if (root._upToDate) {
-    nextValue = commitRootPatch(root, patchNode, prevValue, lane);
-  } else {
-    let next;
+    const nextValue = commitRootPatch(root, patchNode, prevValue, lane);
 
-    root._upToDate = true;
-
-    try {
-      // single-dependency mode keeps the latest source value itself in _values
-      if (root._isSingleDependency) {
-        next = root._mapper(root._values);
-
-        root._values = undefined;
-      } else {
-        next = root._mapper(...root._values);
-      }
-    } catch (err) {
-      reportError(err);
-
-      return;
+    if (nextValue !== UNCHANGED) {
+      notify(root, lane, nextValue, prevValue);
     }
 
-    nextValue = commitRootValue(root, next, prevValue, lane);
+    return;
   }
+
+  let next;
+
+  root._upToDate = true;
+
+  try {
+    // single-dependency mode keeps the latest source value itself in _values
+    if (root._isSingleDependency) {
+      next = root._mapper(root._values);
+
+      root._values = undefined;
+    } else {
+      next = root._mapper(...root._values);
+    }
+  } catch (err) {
+    reportError(err);
+
+    return;
+  }
+
+  sourceUpdate._value = true;
+
+  const nextValue = commitRootValue(root, next, prevValue, lane);
 
   if (nextValue !== UNCHANGED) {
     notify(root, lane, nextValue, prevValue);
   }
+
+  sourceUpdate._value = false;
 }
 
 const makeDerivedControl = (params: any[]) => {
