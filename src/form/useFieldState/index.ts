@@ -6,12 +6,9 @@ import useEntry from '#form/internal/useEntry';
 import { getFieldState } from '#form/internal/entry';
 
 /**
- * Returns the state of the {@link control}'s field from anywhere under the
- * form - an error summary, a section header, a revert button next to a field
- * rendered by the layout rather than by its own `Field`.
- *
- * The field doesn't have to be mounted yet: the entry is created on first
- * access and the `Field` fills its validator in when it arrives.
+ * The state of the {@link control}'s field, from anywhere under the form - an
+ * error summary, a section header, a revert button beside a field the layout
+ * renders. The field itself doesn't have to be on screen yet.
  *
  * @example
  * ```tsx

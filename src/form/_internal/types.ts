@@ -68,8 +68,6 @@ export type FieldEntry = {
   _invalid: boolean;
   /** Set while an element is bound; `NativeField`'s hook for keeping aria in step with the error. */
   _syncAria: () => void;
-  /** Stops pushing the control's changes into the elements. */
-  _detachElement: (() => void) | undefined;
   _errorControl: Control<any> | undefined;
   _validatingControl: Control<boolean> | undefined;
   _dirtyControl: Control<boolean> | undefined;
@@ -90,6 +88,8 @@ export type FormInternals = FormState & {
   _errorCount: number;
   _pendingCount: number;
   _dirtyCount: number;
+  /** Whether the load watches of `_armedRoots` are subscribed. */
+  _attached: boolean;
   _isSubmitting: boolean;
   _submittingControl: Control<boolean> | undefined;
   _validatingControl: Control<boolean> | undefined;

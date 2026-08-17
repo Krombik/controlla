@@ -1,4 +1,4 @@
-import type { ReactNode, RefCallback, SubmitEvent } from 'react';
+import type { FocusEvent, ReactNode, RefCallback, SubmitEvent } from 'react';
 
 import type { Control, ReadonlyControl, Scheduler, SelectValue } from '#types';
 
@@ -43,34 +43,26 @@ type KeysOf<T, Prefix extends string = ''> =
 
 export type FormOptions<T = any, E = any> = {
   /**
-   * Runs once every registered validator passed, with the form control's
-   * value. What it was given becomes the new baseline once it resolves, so a
-   * saved form isn't dirty — and an edit made while it was in flight still is.
+   * Runs once every validator passed, with the form control's value. Once it
+   * resolves the form counts as saved, so it stops being dirty - though an
+   * edit made while it was still running stays.
    *
-   * {@link changed} carries the paths of the fields differing from that
-   * baseline, dot-joined and relative to the form control — what a `PATCH`
-   * would send. Since each submit rebaselines, an autosaving form gets what
-   * moved since the *previous* submit, not since the page loaded.
-   *
-   * Only fields under the form control are in it: a field over some other
-   * control isn't in {@link values} either, so there'd be nothing to patch.
-   * Nothing is collected for a handler that doesn't declare the parameter — so
-   * a rest signature gets an empty array.
+   * {@link changed} lists the fields that moved since the last save, as
+   * dot-joined paths relative to the form control - what a `PATCH` would send.
+   * Leave the parameter out and nothing is collected for it.
    */
   submit(values: T, changed: Array<KeysOf<T>>): void | Promise<void>;
   /**
-   * Runs instead of {@link FormOptions.submit submit} when the sweep found
-   * errors — after the first invalid field is focused, so it can scroll
-   * somewhere else or report the failure.
+   * Runs instead of {@link FormOptions.submit submit} when a validator failed,
+   * after the first invalid field is focused - to scroll somewhere, or report
+   * the failure.
    */
   submitFailed?(errors: Array<FieldError<E>>): void | Promise<void>;
   /** Default {@link ValidateOn trigger} of the fields under the form (default: `'submit'`). */
   validateOn?: ValidateOn;
   /**
-   * Where a `reset` with no value of its own goes, instead of the value the
-   * form started with — filters restored from the url start there and reset to
-   * empty, not back to the url. It becomes the new baseline, like any other
-   * `reset` to a given value.
+   * Where `reset` goes instead of the values the form started with - filters
+   * restored from the url reset to empty rather than back to the url.
    */
   resetValue?: T;
 };
@@ -83,11 +75,7 @@ export type FormState = {
   readonly $isValidating: ReadonlyControl<boolean>;
   /** `true` while no field holds an error — a field that never validated counts as valid. */
   readonly $isValid: ReadonlyControl<boolean>;
-  /**
-   * `true` while any field's value differs from its baseline - which a
-   * successful submit, a `reset` and, over an async control, every value a load
-   * brings back all move.
-   */
+  /** `true` while anything has been edited since it was last saved or reset. */
   readonly $isDirty: ReadonlyControl<boolean>;
   /**
    * Runs every validator and, if all passed, the
@@ -102,13 +90,10 @@ export type FormState = {
   /** Runs every validator, resolving to whether all of them passed. */
   validate(): Promise<boolean>;
   /**
-   * Without arguments, restores the whole form. Given a control, restores
-   * just it — any control the form has a baseline for, including a path no
-   * field is mounted on. Given a value as well, writes that instead, and it
-   * becomes the new baseline.
-   *
-   * What "restores" means is the baseline, or
-   * {@link FormOptions.resetValue resetValue} where the form was given one.
+   * Puts the values back to what they were saved as, or to
+   * {@link FormOptions.resetValue resetValue} if the form was given one.
+   * Restores everything, or one control - a path with no field on it included.
+   * Given a value as well, writes that and treats it as saved.
    */
   reset: {
     (): void;
@@ -121,14 +106,13 @@ export type FormState = {
 
 /** The reactive state of a single field, keyed by its control. */
 export type FieldState<C extends ReadonlyControl = ReadonlyControl, E = any> = {
-  /** The control this state belongs to, echoed back so `render` can stay closure-free. */
+  /** The control this state belongs to, so `render` needs no closure. */
   readonly $field: C;
   /** The current validation error, `undefined` while the field passes (or never ran). */
   readonly $error: ReadonlyControl<E | undefined>;
   /**
-   * Whether the value differs from the baseline - which a successful submit, a
-   * `reset` to a value of its own, and a reload of the control it sits on all
-   * move, so this clears on a save without the value having to move back.
+   * Whether this field has been edited since it was last saved or reset - a
+   * save clears it without the value having to change back.
    */
   readonly $isDirty: ReadonlyControl<boolean>;
   /** Whether an async validation of this field is in flight. */
@@ -191,12 +175,9 @@ export type FieldArray<T> = {
    */
   remove(index: number, count?: number): void;
   /**
-   * Drops the items at {@link indexes}, which need not be neighbours — what a
-   * multi-select gives you. In any order; duplicates and indexes past the end
-   * are ignored.
-   *
-   * Not `remove` in a loop: each of those shifts the items after it, so the
-   * second index would no longer mean the item it was read from.
+   * Drops the items at {@link indexes} - scattered, in any order, what a
+   * multi-select gives you. Duplicates and indexes past the end are ignored.
+   * Safer than `remove` in a loop, which shifts the indexes as it goes.
    */
   removeMany(indexes: readonly number[]): void;
   /**
@@ -216,7 +197,7 @@ export type FieldRenderProps = {
   /** Attach it for `submit` to focus this field when it's the first invalid one. */
   ref: RefCallback<HTMLElement>;
   /** Only there for a field that validates on blur — nothing listens otherwise. */
-  onBlur?(): void;
+  onBlur?(event: FocusEvent<HTMLElement>): void;
 };
 
 type FieldOptions<C extends Control, E> = {
@@ -299,7 +280,7 @@ type CommonNativeProps<T extends NativeFieldType> = {
    */
   ref: RefCallback<NativeElement<T>>;
   /** Only there for a field that validates on blur — nothing listens otherwise. */
-  onBlur?(): void;
+  onBlur?(event: FocusEvent<NativeElement<T>>): void;
 };
 
 export type NativeFieldRenderProps<T extends NativeFieldType> =
@@ -329,14 +310,9 @@ export type ExactControl<T extends NativeFieldType, C extends Control> =
     : { control: 'the control has to hold every value this field can write' };
 
 /**
- * Sits between the element and the control, in both directions — a
- * normalizing pass the field applies for you rather than one you bolt on with
- * a derived control.
- *
- * It does not amount to a mask. Reflowing separators as the value is typed
- * moves characters the caret is measured against, and only code that knows
- * which of them carry meaning can put the caret back — so that belongs in a
- * component of its own.
+ * Converts the value on its way between the element and the control, both
+ * ways. Not a mask - reflowing separators while someone types moves the caret
+ * about, which needs a component of its own.
  */
 export type NativeFieldConverters<
   T extends NativeFieldType,
@@ -345,9 +321,9 @@ export type NativeFieldConverters<
   /** Turns what the element holds into what the control holds. */
   parse(value: NativeValue<T>): SelectValue<C>;
   /**
-   * Turns it back, for the writes the element didn't cause — a `reset`, an
-   * async fill. Needed once {@link NativeFieldConverters.parse parse} changes
-   * the type; without it the control's value is written as it is.
+   * Turns it back for the writes the element didn't make - a `reset`, data
+   * arriving. Needed once {@link NativeFieldConverters.parse parse} changes
+   * the type.
    */
   format?(value: SelectValue<C>): NativeValue<T>;
 };
@@ -359,25 +335,17 @@ export type NativeFieldProps<
 > = FieldOptions<C, E> & {
   type: T;
   /**
-   * Commits what the element writes through this
-   * {@link Scheduler scheduler} rather than the default flush — a
-   * `createDebounceScheduler(300)` on a text filter and nothing on the
-   * checkbox beside it, so each applies at its own pace.
-   *
-   * The element keeps showing what was typed the whole time; only the commit
-   * waits. Anything downstream of the control — validation on change, dirty,
-   * a submit watching it — waits with it. A form with a submit button
-   * shouldn't use it: the button can be clicked while a write is still
-   * pending, and the submit would carry the value from before it.
+   * Applies what the element writes through this {@link Scheduler scheduler} -
+   * a `createDebounceScheduler(300)` on a search box, nothing on the checkbox
+   * beside it. Typing shows up instantly either way; only the value waits, and
+   * so does everything reading it. Don't use it with a submit button, which
+   * could be clicked while a write is still pending.
    */
   scheduler?: Scheduler;
   /**
-   * The id of the node rendering the error, pointed at while the field holds
-   * one.
-   *
-   * `aria-describedby` describes the field once it has focus; it doesn't
-   * announce. An error that should interrupt needs `role='alert'` on the node
-   * rendering it, which is yours.
+   * The id of the element showing the error, pointed at while there is one.
+   * That describes the field to a screen reader on focus - to have an error
+   * announced as it appears, put `role='alert'` on that element too.
    */
   errorId?: string;
   /**

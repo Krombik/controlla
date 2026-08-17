@@ -4,31 +4,27 @@ import type { Control, SelectValue } from '#types';
 import type { FormOptions, FormState } from '#form/types';
 import type { FormInternals } from '#form/internal/types';
 import makeForm from '#form/internal/makeForm';
-import { attachForm } from '#form/internal/entry';
+import { addListener, removeListener } from '#internal/flushQueue';
 
 /**
- * Creates a form over the {@link control}: a registry the `Field`s under its
- * `FormProvider` attach their validators to, plus the submit orchestration
- * over them.
+ * Makes a form over the {@link control}. The fields under its `FormProvider`
+ * register with it, and it validates them, submits and resets them together.
  *
- * The attachment is loose. The {@link control} is what gets submitted and
- * what `reset` restores - including paths no field is mounted on - while
- * validation, `$isValid` and the submit sweep come from whatever registered,
- * so a field over some other control still takes part.
+ * The {@link control} is what gets submitted and what `reset` restores, whole -
+ * paths no field is mounted on included. Validation and `$isValid` come from
+ * whatever registered, so a field over some other control still takes part.
  *
- * The handle is created once and kept for the component's whole life, while
- * the {@link options} are re-read on every render. The baseline is taken when
- * the form is created and moves to whatever a successful submit or a `reset`
- * wrote - and, over an async {@link control}, to every value a load hands over:
- * the first one it waited for, and whatever a reload replaces it with.
+ * The form itself lasts as long as the component; the {@link options} are read
+ * again on every render, so handlers can close over fresh values.
  *
- * So a form over a control that can reload underneath it (`invalidate`,
- * `reloadOnFocus`, `reloadIfStale`, a poll) should not be editable while the
- * reload is in flight: an edit committed during one is taken for what the load
- * brought, and baselines itself. Nothing here prevents it - a reloading control
- * still holds its value and its fields still write - so gate the fields on
- * `selectLoading` if that can happen. A reload discards the edits along with the
- * value they were made to either way.
+ * `$isDirty` compares against the last saved values: what the {@link control}
+ * held when the form appeared, then whatever a successful submit or a `reset`
+ * left. Over an async control it is every value loading brings in, so waiting
+ * for data is not an edit and a reload starts clean.
+ *
+ * Don't let people edit while a reload is on its way, though - an edit made
+ * then is taken for part of what arrived. Disable the fields on `selectLoading`
+ * if the control can reload while the form is open.
  *
  * @example
  * ```tsx
@@ -64,9 +60,34 @@ const useForm = <C extends Control, E = any>(
 
   form._options = options;
 
-  // the async controls it baselines against outlive it, so what it holds on
-  // them goes when the form does
-  useLayoutEffect(() => attachForm(form), [form]);
+  // the async controls it baselines against outlive it, so the load watches it
+  // holds on them go when the form does - and a render that never commits
+  // leaves nothing behind, since this is the only thing that subscribes them
+  useLayoutEffect(() => {
+    const armed = form._armedRoots;
+
+    form._attached = true;
+
+    const it = armed.entries();
+
+    for (let i = armed.size; i--;) {
+      const item = it.next().value!;
+
+      addListener(item[0], item[1]);
+    }
+
+    return () => {
+      form._attached = false;
+
+      const it = armed.entries();
+
+      for (let i = armed.size; i--;) {
+        const item = it.next().value!;
+
+        removeListener(item[0], item[1]);
+      }
+    };
+  }, [form]);
 
   return form;
 };

@@ -3,18 +3,18 @@ import { useLayoutEffect, useRef } from 'react';
 import type { Control } from '#types';
 import type { FieldEntry, FormInternals } from '#form/internal/types';
 import {
-  detachEntry,
   getEntry,
+  holdEntry,
   makeEntry,
-  removeEntry,
-  syncWatch,
+  releaseEntry,
 } from '#form/internal/entry';
 
-/**
- * Resolves the registry entry of the {@link control}, creating it on the way -
- * or, outside of a form, a standalone one living for this component only.
- */
-const useEntry = (form: FormInternals | undefined, control: Control) => {
+/** The registry entry, or a standalone one for this component outside a form. */
+const useEntry = (
+  form: FormInternals | undefined,
+  control: Control,
+  byRef?: boolean
+) => {
   const ref = useRef<FieldEntry>(null);
 
   let entry: FieldEntry;
@@ -30,26 +30,17 @@ const useEntry = (form: FormInternals | undefined, control: Control) => {
         : (ref.current = makeEntry(control, undefined));
   }
 
-  useLayoutEffect(() => {
-    // the validator and the trigger are written during the render that just
-    // finished, and a field holds the ones it was mounted with - so arming it
-    // once is enough, and an active error re-arms it through `setEntryError`
-    syncWatch(entry);
+  // a `NativeField` lives by its element, so its ref is what holds the entry -
+  // a branch settled for the component's life
+  if (!byRef) {
+    useLayoutEffect(() => {
+      holdEntry(entry);
 
-    if (!form) {
       return () => {
-        detachEntry(entry);
+        releaseEntry(entry);
       };
-    }
-
-    entry._refs++;
-
-    return () => {
-      if (!--entry._refs && !entry._keep) {
-        removeEntry(form, entry);
-      }
-    };
-  }, [entry]);
+    }, [entry]);
+  }
 
   return entry;
 };

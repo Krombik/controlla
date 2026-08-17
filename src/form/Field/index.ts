@@ -45,29 +45,19 @@ const Field = ((props: FieldProps) => {
   return props.render(renderProps, getFieldState(entry));
 }) as {
   /**
-   * Registers the {@link FieldProps.control control}'s validator with the
-   * enclosing form for as long as it stays mounted, and renders the field
-   * from its own state. Mount/unmount is the registration lifecycle, which is
-   * why this is a component and not a bare hook - a conditional field
-   * un-registers by disappearing.
+   * Validates one {@link FieldProps.control control} as part of the form
+   * around it, for as long as it is on screen - a field that disappears stops
+   * taking part in the submit. Outside a `FormProvider` it still validates on
+   * its own.
    *
-   * The value is yours to read and write: `render` gets the wiring
-   * ({@link FieldRenderProps.name name}, {@link FieldRenderProps.onBlur onBlur})
-   * and the field's {@link FieldState state}, not a `value`/`onChange` pair.
+   * The value stays yours to read and write: `render` gets the wiring to spread
+   * on your input and the field's {@link FieldState state}, not a
+   * `value`/`onChange` pair. Pass the {@link FieldRenderProps.ref ref} on and a
+   * failed submit will focus the first invalid field for you.
    *
-   * Outside of a `FormProvider` it still validates on its own - it just takes
-   * part in no submit.
-   *
-   * Attach {@link FieldRenderProps.ref ref}: a failed `submit` focuses the
-   * first invalid field through it.
-   *
-   * Everything but {@link FieldProps.control control} is read on the first
-   * render and never again - a field keeps the validator and the trigger it
-   * was mounted with, and the props it hands `render` are one object for its
-   * whole life. Change {@link FieldProps.control control} and the lot is read
-   * again, against the entry the new control resolves to. So a validator
-   * closing over something that moves should read it from a control rather
-   * than capture it.
+   * Everything but the {@link FieldProps.control control} is read once, so a
+   * validator that depends on something changing should read it from a control
+   * instead of closing over it.
    *
    * @example
    * ```tsx

@@ -85,5 +85,32 @@ export const renderHook = <T>(hook: () => T) => {
     return result;
   };
 
-  return { render, result: render() };
+  /** Runs every cleanup the last render left behind, and forgets the runs. */
+  const unmount = () => {
+    for (let i = 0; i < queued.length; i++) {
+      const slot = queued[i][0];
+
+      if (slot.current) {
+        if (slot.current._cleanup) {
+          slot.current._cleanup();
+        }
+
+        slot.current = undefined;
+      }
+    }
+  };
+
+  /**
+   * Mounts the effects again without rendering - which is what an `Activity`
+   * coming back does, since nothing about the tree changed while it was hidden.
+   */
+  const remount = () => {
+    for (let i = 0; i < queued.length; i++) {
+      const [slot, effect, deps] = queued[i];
+
+      slot.current = { _deps: deps, _cleanup: effect() };
+    }
+  };
+
+  return { render, unmount, remount, result: render() };
 };

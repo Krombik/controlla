@@ -6,7 +6,6 @@ import createPrimitiveControl from '#core/createPrimitiveControl';
 import getValue from '#core/getValue';
 import setValue from '#core/setValue';
 import {
-  focusFirstError,
   getBaseline,
   getEntry,
   isUnder,
@@ -65,45 +64,6 @@ const validateAll = async (form: FormInternals) => {
   return !form._errorCount;
 };
 
-/**
- * The paths under the form control whose fields no longer match their
- * baseline, relative to it - what a patch would carry.
- *
- * Only registered fields are in it: a path nothing is mounted on is covered by
- * the form control's own entry, which knows the subtree moved but not where.
- */
-const changedPaths = (form: FormInternals) => {
-  const control = form._control;
-
-  const path = control[INTERNALS]._path;
-
-  const start = path ? path.length : 0;
-
-  const changed: string[] = [];
-
-  const entries = form._entries;
-
-  const it = entries.values();
-
-  for (let i = entries.size; i--;) {
-    const entry = it.next().value!;
-
-    const entryPath = entry._control[INTERNALS]._path;
-
-    // a path no longer than the form control's own is the form control
-    if (
-      entryPath &&
-      entryPath.length > start &&
-      isUnder(control, entry._control) &&
-      isNotEqual(getValue(entry._control), snapshotOf(entry))
-    ) {
-      changed.push(entryPath.slice(start).join('.'));
-    }
-  }
-
-  return changed;
-};
-
 const setSubmitting = (form: FormInternals, isSubmitting: boolean) => {
   form._isSubmitting = isSubmitting;
 
@@ -113,12 +73,8 @@ const setSubmitting = (form: FormInternals, isSubmitting: boolean) => {
 };
 
 /**
- * Moves the baseline of the {@link target}'s subtree without touching a
- * value - a submit that went through, or a `reset` to a value of its own.
- *
- * Dirtiness is recomputed here rather than left to the change listeners:
- * nothing has to change for a field to stop being dirty, the thing it was
- * compared against did.
+ * Moves a subtree's baseline without touching a value. Dirtiness is recomputed
+ * here - nothing changed for the fields, what they compare against did.
  */
 const rebaseline = (form: FormInternals, target: Control, value: any) => {
   const internals = target[INTERNALS];
@@ -182,8 +138,7 @@ const restore = (form: FormInternals, target: Control) => {
 
   const control = form._control;
 
-  // a `resetValue` only covers the form control's own subtree; a field over
-  // anything else has nothing but its baseline
+  // a `resetValue` only covers the form control's subtree
   if (resetValue !== undefined && isUnder(control, target)) {
     const path = target[INTERNALS]._path;
 
@@ -203,7 +158,12 @@ const restore = (form: FormInternals, target: Control) => {
 
     writeReset(form, target, value);
   } else {
-    setValue(target, getBaseline(form, target));
+    // an unbaselined root is one whose data has never arrived - there is
+    // nothing to restore to, and writing `undefined` is what an async control
+    // refuses outright
+    if (form._roots.has(target[INTERNALS]._root)) {
+      setValue(target, getBaseline(form, target));
+    }
 
     clearErrorsUnder(form, target);
   }
@@ -221,6 +181,7 @@ const makeForm = (control: Control, options: FormOptions): FormInternals => {
     _errorCount: 0,
     _pendingCount: 0,
     _dirtyCount: 0,
+    _attached: false,
     _isSubmitting: false,
     _submittingControl: undefined,
     _validatingControl: undefined,
@@ -246,8 +207,7 @@ const makeForm = (control: Control, options: FormOptions): FormInternals => {
       return validateAll(form);
     },
     async submit(event) {
-      // only a form's own submit has a default worth stopping - a click
-      // handler's would take the button's behaviour with it
+      // a click handler's default is the button's own behaviour
       if (event && event.type === 'submit') {
         event.preventDefault();
       }
@@ -261,35 +221,81 @@ const makeForm = (control: Control, options: FormOptions): FormInternals => {
           if (await validateAll(form)) {
             const values = getValue(control);
 
-            // taken before the handler runs, so it describes what is being
-            // sent rather than whatever was typed while it was in flight - and
-            // not walked at all for a handler that never declared it
-            await submit(
-              values,
-              (submit.length > 1 ? changedPaths(form) : EMPTY_ARR) as any
-            );
+            // describes what is being sent, not what was typed while it was
+            // in flight - and not walked for a handler that never asked
+            let changed: readonly string[] = EMPTY_ARR;
 
-            // what was saved is the new baseline, so `$isDirty` means "changed
-            // since it was last committed" - and an edit made while the submit
-            // was in flight stays dirty
-            rebaseline(form, control, values);
-          } else {
-            focusFirstError(form);
+            if (submit.length > 1) {
+              const path = control[INTERNALS]._path;
 
-            if (submitFailed) {
-              const errors: FieldError[] = [];
+              const start = path ? path.length : 0;
+
+              const paths: string[] = [];
 
               const it = entries.values();
 
               for (let i = entries.size; i--;) {
                 const entry = it.next().value!;
 
-                if (entry._error !== undefined) {
-                  errors.push({ control: entry._control, error: entry._error });
+                const entryPath = entry._control[INTERNALS]._path;
+
+                // a path no longer than the form control's own is the form
+                // control, which knows the subtree moved but not where
+                if (
+                  entryPath &&
+                  entryPath.length > start &&
+                  isUnder(control, entry._control) &&
+                  isNotEqual(getValue(entry._control), snapshotOf(entry))
+                ) {
+                  paths.push(entryPath.slice(start).join('.'));
                 }
               }
 
-              await submitFailed(errors);
+              changed = paths;
+            }
+
+            await submit(values, changed as any);
+
+            // what was saved is the new baseline, so an edit made while the
+            // submit was in flight stays dirty
+            rebaseline(form, control, values);
+          } else {
+            const errors: FieldError[] | undefined = submitFailed
+              ? []
+              : undefined;
+
+            let target: HTMLElement | undefined;
+
+            const it = entries.values();
+
+            for (let i = entries.size; i--;) {
+              const entry = it.next().value!;
+
+              if (entry._error !== undefined) {
+                if (errors) {
+                  errors.push({ control: entry._control, error: entry._error });
+                }
+
+                const element = entry._element;
+
+                if (
+                  element &&
+                  // DOCUMENT_POSITION_PRECEDING - first in the document, not
+                  // in registration order
+                  (target === undefined ||
+                    target.compareDocumentPosition(element) & 2)
+                ) {
+                  target = element;
+                }
+              }
+            }
+
+            if (target) {
+              target.focus();
+            }
+
+            if (errors) {
+              await submitFailed!(errors);
             }
           }
         } finally {
@@ -298,15 +304,15 @@ const makeForm = (control: Control, options: FormOptions): FormInternals => {
       }
     },
     reset(target?: Control, value?: any) {
-      // `undefined` is a value someone can reset to, so only the count tells
-      // restoring apart from writing
+      // `undefined` is a value to reset to, so only the count tells restoring
+      // from writing
       if (arguments.length > 1) {
         writeReset(form, target!, value);
       } else if (target) {
         restore(form, target);
       } else {
-        // the form control covers every path under it, mounted or not; the
-        // fields outside it are only reachable one by one
+        // the form control covers every path under it; the fields outside are
+        // reachable one by one
         restore(form, control);
 
         const it = entries.values();
@@ -333,13 +339,9 @@ const makeForm = (control: Control, options: FormOptions): FormInternals => {
     },
   };
 
-  // the baseline has to be taken before anything can be edited - an async
-  // control that hasn't arrived is skipped and taken by the first later read
-  getBaseline(form, control);
-
-  // the form control is a field of its own: it holds no validator, but it
-  // baselines the whole subtree, so `$isDirty` sees paths nothing is mounted on
-  getEntry(form, control);
+  // a field of its own, so `$isDirty` sees paths nothing is mounted on - held
+  // by the form, so a field over the same control can't unmount it away
+  getEntry(form, control)._refs++;
 
   return form;
 };

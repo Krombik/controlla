@@ -8,11 +8,8 @@ const throwNoProvider = (): never => {
 };
 
 /**
- * Returns the enclosing form - the same handle `useForm` created, so
- * `$isSubmitting`, `$isValid`, `$isDirty` and `submit` are reachable from
- * anywhere under the provider instead of being threaded down as props.
- *
- * Throws outside of a `FormProvider`.
+ * The enclosing form, so `$isSubmitting`, `$isValid`, `$isDirty` and `submit`
+ * are there without passing them down. Throws outside a `FormProvider`.
  *
  * @example
  * ```tsx

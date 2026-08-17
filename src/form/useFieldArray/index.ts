@@ -323,20 +323,12 @@ const useFieldArray = ((control: Control, options?: FieldArrayOptions) => {
   return api;
 }) as {
   /**
-   * Gives an array {@link control} a key per item and the operations to
-   * restructure it, both at once - a key follows its item through an `insert`
-   * or a `remove` instead of belonging to the index.
+   * Gives an array {@link control} a `key` per item and the operations to
+   * reorder it. A key follows its item through an `insert` or a `remove`, so
+   * React keeps the right row - never reused, never the index.
    *
-   * A key is handed out once, from `0`, and never reused. A write from
-   * anywhere else keeps the keys of the indexes it kept and gives the tail of a
-   * longer array new ones - the methods here are what carries a key with its
-   * item instead.
-   *
-   * Calls compose within a flush - each one starts from what the last one
-   * wrote, not from what the control has committed - so `append` twice appends
-   * twice. Which is also why adding a list of items has its own
-   * `appendMany`/`prependMany`/`insertMany`: one call is one commit, where a
-   * loop is one per item.
+   * Adding several items at once has its own `appendMany`/`prependMany`/
+   * `insertMany`: one call is one update, where a loop is one per item.
    *
    * @example
    * ```tsx
@@ -366,11 +358,10 @@ const useFieldArray = ((control: Control, options?: FieldArrayOptions) => {
     control: C
   ): FieldArray<NonNullable<SelectValue<C>>[number]>;
   /**
-   * The same, and the array registers as a field of its own for as long as this
-   * is mounted: {@link FieldArrayOptions.validate validate} covers what no
-   * single item can answer - how many there are, whether two of them collide -
-   * and blocks the submit the way any field does. The items validate
-   * themselves, through whatever `Field` each row renders.
+   * The same, and the array validates as a field of its own -
+   * {@link FieldArrayOptions.validate validate} answers what no single item
+   * can, like how many there are or whether two collide, and blocks the submit
+   * like any field. The items still validate themselves.
    */
   <C extends Control<readonly any[] | undefined>, E = any>(
     control: C,
