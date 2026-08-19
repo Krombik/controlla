@@ -164,4 +164,108 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
   rel();
 }
 
+// An external write that already reads as loaded ends the load and runs the
+// poll's cleanup - but the request in flight is still the newest thing the
+// server said, so it commits. What must not survive is the dead clock: a value
+// that reads as loading again restarts the load, and only that new poll ticks.
+{
+  const resolvers: Array<(v: any) => void> = [];
+  const poll = pollLoader(
+    (_q: string) => new Promise((r) => resolvers.push(r)),
+    { interval: 20, isLoaded: (v: any) => v.isFinished }
+  );
+  const reg = createRegistry(createAsyncControl, poll);
+  const rel = retain(reg.bind(createPrimitiveControl('Q')));
+  await tick();
+
+  setValue(reg.get('Q'), { n: 'LOCAL', isFinished: true });
+  await tick();
+
+  resolvers.shift()!({ n: 'FINAL', isFinished: true });
+  await tick();
+
+  assert.deepEqual(
+    getValue(reg.get('Q')),
+    { n: 'FINAL', isFinished: true },
+    'solo: what the server answered lands even after an external write ended the load'
+  );
+
+  await sleep(40);
+  assert.equal(resolvers.length, 0, 'solo: a loaded answer stops the polling');
+  rel();
+}
+
+// same, but the answer reads as loading - the load restarts, once
+{
+  const resolvers: Array<(v: any) => void> = [];
+  const poll = pollLoader(
+    (_q: string) => new Promise((r) => resolvers.push(r)),
+    { interval: 20, isLoaded: (v: any) => v.isFinished }
+  );
+  const reg = createRegistry(createAsyncControl, poll);
+  const rel = retain(reg.bind(createPrimitiveControl('Q')));
+  await tick();
+
+  setValue(reg.get('Q'), { n: 'LOCAL', isFinished: true });
+  await tick();
+
+  resolvers.shift()!({ n: 'PENDING', isFinished: false });
+  await tick();
+
+  assert.deepEqual(
+    getValue(reg.get('Q')),
+    { n: 'PENDING', isFinished: false },
+    'solo: an unfinished answer lands too'
+  );
+
+  await sleep(60);
+  assert.equal(
+    resolvers.length,
+    1,
+    'solo: one clock polls after the restart, not the dead one as well'
+  );
+
+  // the poll that runs is the one the actions reach
+  poll.actions.pause('Q');
+  resolvers.shift()!({ n: 'STALE', isFinished: false });
+  await sleep(60);
+  assert.equal(
+    resolvers.length,
+    0,
+    'solo: the restarted poll is the one in storage'
+  );
+  rel();
+}
+
+{
+  const resolvers: Array<(v: any) => void> = [];
+  const poll = pollLoader(
+    (_q: string, _p: number) => new Promise((r) => resolvers.push(r)),
+    { interval: 20, isLoaded: (v: any) => v.isFinished, syncedKeysCount: 1 }
+  );
+  const reg = createRegistry(createAsyncControl, poll);
+  const rel = retain(reg.bind(createPrimitiveControl('Q'), 0));
+  await tick();
+
+  setValue(reg.get('Q', 0), { n: 'LOCAL', isFinished: true });
+  await tick();
+
+  resolvers.shift()!({ n: 'FINAL', isFinished: true });
+  await tick();
+
+  assert.deepEqual(
+    getValue(reg.get('Q', 0)),
+    { n: 'FINAL', isFinished: true },
+    'grouped: what the server answered lands even after an external write ended the load'
+  );
+
+  await sleep(40);
+  assert.equal(
+    resolvers.length,
+    0,
+    'grouped: a loaded answer stops the polling'
+  );
+  rel();
+}
+
 console.log('loader.test.ts: all assertions passed');

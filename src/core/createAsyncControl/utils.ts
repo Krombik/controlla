@@ -89,7 +89,6 @@ export const triggerLoad = (internals: AsyncControlInternals) => {
 
       scheduleSet(internals._errorControl[INTERNALS], value, true, scheduler);
     },
-    stillLoading: () => !data._loadedAt,
     getValue: () => internals._value,
   };
 

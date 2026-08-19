@@ -205,8 +205,6 @@ export type LoadHandle<T = any, E = any> = {
   getValue(): T | undefined;
   /** Commits a loading {@link error} (batched via the {@link scheduler}) and ends the loading. */
   setError(error: E, scheduler?: Scheduler): void;
-  /** Returns whether the control is still loading. */
-  stillLoading(): boolean;
 };
 
 export type AsyncControlOptions<

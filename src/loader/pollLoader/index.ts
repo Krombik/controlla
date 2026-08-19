@@ -13,6 +13,7 @@ type Clock = {
 
 type Solo = Clock & {
   _isIdle: boolean;
+  _isAlive: boolean;
   _request(): void;
 };
 
@@ -133,21 +134,24 @@ function groupLoad(
 
   const key = getKey(keys, self._groupSize, true);
 
+  let isAlive = true;
+
   const request = (group: Group) => {
     group._pendingCount++;
 
     fetch(...keys).then(
       (value) => {
         if (
-          handle.stillLoading() && group._isRunning
+          (group._isRunning
             ? handle.setValue(value, group._scheduler)
-            : true
+            : true) &&
+          isAlive
         ) {
           tickGroup(group, interval);
         }
       },
       (error) => {
-        if (group._isRunning && handle.stillLoading()) {
+        if (group._isRunning) {
           handle.setError(error, group._scheduler);
         }
       }
@@ -186,6 +190,8 @@ function groupLoad(
   request(group);
 
   return () => {
+    isAlive = false;
+
     const members = group._members;
 
     removeFromArray(members, request);
@@ -276,8 +282,8 @@ function load(
 
         if (
           item._isRunning &&
-          handle.stillLoading() &&
           handle.setValue(value, scheduler) &&
+          item._isAlive &&
           item._timerId == null
         ) {
           schedule();
@@ -286,7 +292,7 @@ function load(
       (error) => {
         item._isIdle = true;
 
-        if (item._isRunning && handle.stillLoading()) {
+        if (item._isRunning) {
           handle.setError(error, scheduler);
         }
       }
@@ -296,6 +302,7 @@ function load(
   const item: Solo = {
     _isRunning: true,
     _isIdle: true,
+    _isAlive: true,
     _timerId: undefined,
     _request: request,
   };
@@ -306,6 +313,8 @@ function load(
 
   return () => {
     item._isIdle = true;
+
+    item._isAlive = false;
 
     clearTimeout(item._timerId);
 

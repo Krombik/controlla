@@ -219,7 +219,6 @@ useAsyncControl(options?, externalStorage?)   // options or () => options
 | `setValue(value, scheduler?)` | `boolean` | Commit a value. `true` = still loading after (e.g. keep polling). |
 | `setError(error, scheduler?)` | `void` | Commit a loading error, end loading. |
 | `getValue()` | `T` or `undefined` | Current value. |
-| `stillLoading()` | `boolean` | Whether still loading. |
 
 ```ts
 // loadable: fetches on first use

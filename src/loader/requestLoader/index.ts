@@ -37,14 +37,10 @@ const requestLoader: <T, E = any, Keys extends PrimitiveOrNested[] = []>(
   load(handle, keys?: any[]) {
     (keys ? fetch(...keys) : fetch()).then(
       (value) => {
-        if (handle.stillLoading()) {
-          handle.setValue(value, scheduler);
-        }
+        handle.setValue(value, scheduler);
       },
       (error) => {
-        if (handle.stillLoading()) {
-          handle.setError(error, scheduler);
-        }
+        handle.setError(error, scheduler);
       }
     );
   },
