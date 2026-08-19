@@ -24,12 +24,14 @@ import { addListener, removeListener } from '#internal/flushQueue';
  * `$isDirty` compares against the baseline: what the {@link control} held when
  * the form appeared, then whatever a `reset` left. A submit doesn't move it -
  * `reset(control, values)` from the handler is what makes what was sent the new
- * one. Over an async control it is every value loading brings in, so waiting for
- * data is not an edit and a reload starts clean.
+ * one. Over an async control it is the first value a load hands over, so waiting
+ * for data is not an edit and the fields start clean.
  *
- * Don't let people edit while a reload is on its way, though - an edit made
- * then is taken for part of what arrived. Disable the fields on `selectLoading`
- * if the control can reload while the form is open.
+ * A reload after that is a value like any other: it overwrites what is being
+ * edited and the form reads as dirty against what it first got. Whoever asked
+ * for the reload is who knows whether what came back should replace the edits -
+ * `reset(control, values)` is how they say so. Disable the fields on
+ * `selectLoading` if the control can reload while the form is open.
  *
  * @example
  * ```tsx

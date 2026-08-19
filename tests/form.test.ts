@@ -5,6 +5,7 @@ import test from 'node:test';
 
 import createControl from '../src/core/createControl/index.ts';
 import createAsyncControl from '../src/core/createAsyncControl/index.ts';
+import createAsyncDerivedControl from '../src/core/createAsyncDerivedControl/index.ts';
 import getValue from '../src/core/getValue/index.ts';
 import setValue from '../src/core/setValue/index.ts';
 import invalidate from '../src/core/invalidate/index.ts';
@@ -774,7 +775,7 @@ test('a field is dirty against the baseline, not against its own last value', as
   assert.equal(getValue(note.$isDirty), false);
 
   // the value doesn't move here, only what it is compared against
-  form.reset($values, getValue($values));
+  form.reset($values, getValue($values)!);
 
   await tick();
 
@@ -875,7 +876,7 @@ test('an async control is baselined by the value it was waiting for', async () =
   assert.deepEqual(changed, [['name']]);
 });
 
-test('a reload takes the baseline with it, loud or silent', async () => {
+test('the first value a load brings is the baseline, the ones after it are not', async () => {
   const $values = createAsyncControl<{ name: string }>();
 
   const changed: string[][] = [];
@@ -892,13 +893,31 @@ test('a reload takes the baseline with it, loud or silent', async () => {
 
   await tick();
 
+  assert.equal(
+    getValue(form.$isDirty),
+    false,
+    'waiting for the data is not an edit'
+  );
+
+  await form.submit();
+
+  assert.deepEqual(changed, [[]], 'nothing changed against what arrived');
+
   setValue($values.name, 'john');
 
   await tick();
 
   assert.equal(getValue(form.$isDirty), true);
 
-  // silent: the edit stands until the reload answers
+  // the watch was for one value - nothing is left listening for the next
+  assert.equal(
+    (form as any)._armedRoots.size,
+    0,
+    'the first value is all the form waited for'
+  );
+
+  // a reload is not the form's business - resetting to what it brought is for
+  // whoever asked for it
   invalidate($values, true);
 
   setValue($values, { name: 'joan' });
@@ -908,30 +927,76 @@ test('a reload takes the baseline with it, loud or silent', async () => {
   assert.equal(getValue($values.name), 'joan');
   assert.equal(
     getValue(form.$isDirty),
-    false,
-    'what the reload brought is the baseline'
+    true,
+    'a silent reload does not move the baseline'
   );
 
-  await form.submit();
+  invalidate($values);
 
-  assert.deepEqual(changed, [[]]);
+  await tick();
 
-  setValue($values.name, 'jack');
+  setValue($values, { name: 'jean' });
+
+  await tick();
+
+  assert.equal(
+    getValue(form.$isDirty),
+    true,
+    'a loud one neither, value cleared and all'
+  );
+
+  form.reset($values, getValue($values)!);
+
+  await tick();
+
+  assert.equal(
+    getValue(form.$isDirty),
+    false,
+    'a reset to what it brought is what does'
+  );
+});
+
+test('a form over an async derived control baselines its first value too', async () => {
+  const $server = createAsyncControl<{ name: string; extra: number }>();
+
+  const $values = createAsyncDerivedControl($server, (info) => ({
+    name: info.name,
+  }));
+
+  const form = createForm($values, { submit: noop });
+
+  field(form, ($values as any).name);
+
+  setValue($server, { name: 'jane', extra: 1 });
+
+  await tick();
+
+  assert.equal(
+    getValue(form.$isDirty),
+    false,
+    'the first recompute is the baseline'
+  );
+
+  setValue(($values as any).name, 'john');
 
   await tick();
 
   assert.equal(getValue(form.$isDirty), true);
 
-  // loud: the value goes first, the reload brings the next one
-  invalidate($values);
+  // a recompute off its sources never loads, and would not move the baseline
+  // even if it did
+  invalidate($server, true);
+
+  setValue($server, { name: 'JOHN', extra: 2 });
 
   await tick();
 
-  setValue($values, { name: 'jane' });
-
-  await tick();
-
-  assert.equal(getValue(form.$isDirty), false, 'a loud reload the same');
+  assert.equal(getValue(($values as any).name), 'JOHN');
+  assert.equal(
+    getValue(form.$isDirty),
+    true,
+    'what its source reloaded is a value like any other'
+  );
 });
 
 test('the paths are not collected for a submit that never asked', async () => {

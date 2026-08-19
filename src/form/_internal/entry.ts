@@ -8,25 +8,33 @@ import createPrimitiveControl from '#core/createPrimitiveControl';
 import getValue from '#core/getValue';
 import setValue from '#core/setValue';
 import watchValue from '#core/watchValue';
-import { addListener } from '#internal/flushQueue';
+import { addListener, removeListener } from '#internal/flushQueue';
 import isNotEqual from '#form/internal/isNotEqual';
 import { dropEntry, seedEntry } from '#form/internal/validator';
 import identity from '#internal/identity';
 import noop from '#internal/noop';
 
 /**
- * Every value a load hands over is a baseline - the first one and every reload
- * after it. A plain listener: the form must not be what starts the load.
+ * The first value a load hands over is the baseline - before it there is
+ * nothing to compare against, and `undefined` would make every field of the
+ * root dirty the moment the data lands. What comes after it is not the form's
+ * business: whoever asked for a reload is who decides whether what it brought
+ * is the new baseline. A plain listener: the form must not be what starts the
+ * load.
  */
-const watchLoads = (form: FormInternals, root: AsyncControlInternals) => {
+const watchFirstLoad = (form: FormInternals, root: AsyncControlInternals) => {
   const armed = form._armedRoots;
 
   if (!armed.has(root)) {
     const listener: ChangeListener = (value) => {
-      // the loading status is written after this, so it still tells a load
-      // apart from an edit
-      if (value !== undefined && root._loadingControl[INTERNALS]._value) {
+      if (value !== undefined) {
         form._roots.set(root, value);
+
+        // one value is all it was waiting for - the removal is deferred until
+        // the notify it is running in is over
+        armed.delete(root);
+
+        removeListener(root, listener);
 
         // the fields were notified before this moved what they compare
         // against, so their dirtiness is a step behind
@@ -80,10 +88,10 @@ export const getBaseline = (form: FormInternals, control: Control) => {
     value = root._value;
 
     if ((root as Partial<AsyncControlInternals>)._errorControl) {
-      watchLoads(form, root as AsyncControlInternals);
-
       if (value !== undefined) {
         roots.set(root, value);
+      } else {
+        watchFirstLoad(form, root as AsyncControlInternals);
       }
     } else {
       roots.set(root, value);

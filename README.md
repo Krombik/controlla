@@ -1110,9 +1110,15 @@ const form = useForm($values, {
 
 A `reset` also takes the errors of what it restored with it. A rule watching more than what was reset keeps its own - it holds an error, so it is watching, and the restored value is what runs it again: what it reports is about that value, not about the one on its way out.
 
-Over an async control the baseline is every value a load hands over: the first one the form waited for, and whatever a reload replaces it with - a reload discards the edits along with the value they were made to, so it starts again from what came back. Which is why a form over a control that reloads underneath it (`invalidate`, `reloadOnFocus`, `reloadIfStale`, a poll) should not be editable while the reload is in flight - an edit committed during one is taken for what the load brought and baselines itself. Nothing stops it: a reloading control still holds its value and its fields still write. Gate the fields on `selectLoading` if the control can reload while they are mounted.
+Over an async control the baseline is the **first** value a load hands over - the one the form waited for, so waiting for data is not an edit and the fields start clean. Every value after it is a value like any other: a reload overwrites what is being edited and the form reads as dirty against what it first got. Nothing rebaselines it for you, because nothing but the caller knows whether what came back should replace the edits - `reset(control, values)` from wherever the reload was asked for is what says so:
 
-A **sync derived** control (`createDerivedControl`) over an async source has no load status of its own, so a form over it baselines whatever the sources had computed by then - use the async control itself, or `createAsyncDerivedControl`.
+```ts
+await api.save(values);
+
+form.reset($values, await invalidate($values, true));
+```
+
+A form over a control that reloads underneath it (`reloadOnFocus`, `reloadIfStale`, a poll) is worth gating on `selectLoading` all the same: nothing stops a reloading control from overwriting an edit, since it still holds its value and its fields still write.
 
 ### `<FormProvider form>`
 
