@@ -87,11 +87,11 @@ function errorEnqueueSet(
         ? PatchType.SILENT_RELOAD
         : PatchType.ERROR;
 
-  // the kept value is indistinguishable from a settled one once the reload is
-  // under way, so the promise is armed here rather than at the commit: a
-  // `toPromise` right after this must not read that value as settled, and the
-  // patch may well be committed by a flush already running
-  if (type == PatchType.SILENT_RELOAD && !internals._promise) {
+  // the value is indistinguishable from a settled one until the reload commits
+  // - kept outright by a silent one - so the promise is armed here rather than
+  // at the commit: a `toPromise` right after this must not read that value as
+  // settled, and the patch may well be committed by a flush already running
+  if (type != PatchType.ERROR && !internals._promise) {
     // nobody has to be awaiting it yet, and a failed reload rejects it
     armPromise(internals).catch(noop);
   }

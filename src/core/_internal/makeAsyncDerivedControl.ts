@@ -32,6 +32,7 @@ import { commitErrorValue, commitStatusValue } from '#internal/commitStatus';
 import makeStatusInternals from '#internal/makeStatusInternals';
 import throwReadonlyError from '#internal/throwReadonlyError';
 import settlePromise from '#internal/settlePromise';
+import armPromise from '#internal/armPromise';
 import addToQueue from '#internal/addToQueue';
 import { AggregateControlError } from '#internal/AggregateControlError';
 import { notify } from '#internal/flushQueue';
@@ -74,7 +75,14 @@ function enqueueDerivedErrorSet(
     throwReadonlyError();
   }
 
-  const load = this._parent._load;
+  const parent = this._parent;
+
+  if (!parent._promise) {
+    // nobody has to be awaiting it yet, and a failed reload rejects it
+    armPromise(parent).catch(noop);
+  }
+
+  const load = parent._load;
 
   if (load) {
     if (Array.isArray(load)) {
@@ -217,6 +225,10 @@ function commitSet(
     if (nextValue !== undefined) {
       settlePromise(root, true, nextValue);
     }
+  } else if (status == Status.READY) {
+    // a reload can answer with what it already had - what was awaited is the
+    // recompute, not a change
+    settlePromise(root, true, prevValue);
   }
 
   commitErrorValue(

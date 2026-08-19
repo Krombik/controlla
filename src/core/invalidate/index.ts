@@ -1,7 +1,7 @@
 import type { AsyncControl, Scheduler } from '#types';
 import { RELOAD, SILENT_RELOAD, INTERNALS } from '#internal/constants';
 import scheduleSet from '#internal/scheduleSet';
-import syncScheduler from '#scheduler/syncScheduler';
+import toPromise from '#core/toPromise';
 
 const invalidate: {
   /**
@@ -9,10 +9,21 @@ const invalidate: {
    * ready status — and triggers a reload if the control is in use. Pass
    * {@link silent} as `true` to keep the current value while reloading
    * (stale-while-revalidate).
+   *
+   * Returns a promise of the value the reload brings in, rejected with its
+   * error if it fails. Like `toPromise`, it does not start the loading itself:
+   * over a control nothing is using, it stays pending until something does.
+   *
+   * @example
+   * ```ts
+   * await api.save(values);
+   *
+   * const fresh = await invalidate($hotel, true);
+   * ```
    */
-  (control: AsyncControl, silent?: boolean): void;
+  <T>(control: AsyncControl<T>, silent?: boolean): Promise<T>;
   /** Resets the given async {@link control} using a custom {@link scheduler} to batch the flush. */
-  (control: AsyncControl, scheduler?: Scheduler): void;
+  <T>(control: AsyncControl<T>, scheduler?: Scheduler): Promise<T>;
 } = (control: AsyncControl, schedulerOrKeepPrevValue?: Scheduler | boolean) => {
   const isLoud = schedulerOrKeepPrevValue !== true;
 
@@ -20,8 +31,12 @@ const invalidate: {
     control[INTERNALS]._root._errorControl[INTERNALS],
     isLoud ? RELOAD : SILENT_RELOAD,
     false,
-    isLoud ? schedulerOrKeepPrevValue || undefined : syncScheduler
+    isLoud ? schedulerOrKeepPrevValue || undefined : undefined
   );
+
+  // the enqueue armed it, so this is the reload's own answer rather than the
+  // value still sitting there until the flush
+  return toPromise(control);
 };
 
 export default invalidate;

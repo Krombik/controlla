@@ -78,9 +78,13 @@ assert.equal(getValue($async), 100, 'async loaded');
 invalidate($async); // loud: clears value, reloads
 await tick();
 assert.equal(getValue($async), 200, 'loud invalidate reloads');
-invalidate($async, true); // silent: keeps value while reloading
-// a silent reload commits at the call site, so this loader has already answered
-assert.equal(fetchCount, 3, 'silent: reload started synchronously');
+// silent: keeps value while reloading, on the same lane as any other set
+const reloaded = invalidate($async, true);
+
+assert.equal(fetchCount, 2, 'silent: nothing reloads before the flush');
+
+assert.equal(await reloaded, 300, 'the promise is the reload own answer');
+assert.equal(fetchCount, 3, 'silent: reloaded on the flush');
 assert.equal(getValue($async), 300, 'silent invalidate reloaded');
 
 // silent keeps value mid-flight: async loader
@@ -99,16 +103,16 @@ resolveNext(1);
 await tick();
 assert.equal(getValue($async2), 1);
 invalidate($async2, true);
-assert.equal(count2, 2, 'silent: load started without waiting for a flush');
 await tick();
+assert.equal(count2, 2, 'silent: the reload started');
 assert.equal(getValue($async2), 1, 'silent: value kept while reloading');
 assert.equal(getValue(selectLoading($async2)), true, 'silent: loading again');
 resolveNext(2);
 await tick();
 assert.equal(getValue($async2), 2, 'silent: new value committed');
 
-// a silent reload keeps its value, but the promise must follow the reload - and
-// it commits at the call site, so no flush is needed in between
+// a silent reload keeps its value, but the promise must follow the reload - the
+// patch is what arms it, so a `toPromise` before the flush is the reload's too
 invalidate($async2, true);
 let isSettled = false;
 const reloading = toPromise($async2).then((v: any) => {
@@ -122,8 +126,8 @@ resolveNext(3);
 await tick();
 assert.equal(await reloading, 3, 'silent: promise resolves with the reload');
 
-// a silent reload from inside a flush joins that flush instead of committing at
-// the call site - which is why the promise is armed by the patch, not the commit
+// a silent reload from inside a flush joins that flush - which is why the
+// promise is armed by the patch, not the commit
 const $trigger = createPrimitiveControl(0);
 let seenInFlush: any = 'pending';
 const unwatchTrigger = watchValue($trigger, () => {
@@ -952,6 +956,61 @@ rel2();
   );
 
   assert.equal(getValue($nested.y), 1, 'the deferred lane did commit');
+}
+
+// what `invalidate` returns is the reload's answer, loud or silent: the value
+// still in hand until the flush is not it
+{
+  let n = 0;
+
+  const $counter = createAsyncControl({
+    load(handle: any) {
+      handle.setValue(++n);
+    },
+  });
+
+  const release = retain($counter);
+
+  await tick();
+
+  assert.equal(getValue($counter), 1, 'loaded');
+
+  assert.equal(await invalidate($counter), 2, 'loud: the reloaded value');
+  assert.equal(await invalidate($counter, true), 3, 'silent: the same');
+
+  // a derived control forwards the reload to its sources - what is awaited is
+  // its own recompute, even when the sources come back with what they had
+  const $doubled = createAsyncDerivedControl($counter, (v: any) => v * 2);
+
+  const releaseDoubled = retain($doubled);
+
+  await tick();
+
+  assert.equal(getValue($doubled), 6, 'derived computed');
+
+  assert.equal(
+    await invalidate($doubled, true),
+    8,
+    'derived: the promise follows the reload of its source'
+  );
+
+  const $constant = createAsyncDerivedControl($counter, () => 'same');
+
+  const releaseConstant = retain($constant);
+
+  await tick();
+
+  assert.equal(
+    await invalidate($constant, true),
+    'same',
+    'derived: a recompute landing on the value it had still settles'
+  );
+
+  release();
+
+  releaseDoubled();
+
+  releaseConstant();
 }
 
 console.log('core-smoke.test.ts: all assertions passed');

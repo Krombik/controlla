@@ -457,7 +457,7 @@ setValue($filter, value, requestAnimationFrame); // commit before next paint (an
 
 ### `invalidate(control, silentOrScheduler?)`
 
-Resets an async control (clears value, error and ready status) and reloads if it's in use.
+Resets an async control (clears value, error and ready status) and reloads if it's in use. Returns a promise of what the reload brings in, rejected with its error if it fails - the reload's own answer, not the value still in hand: the promise is armed by the call, so awaiting it right after is safe even for a silent reload that keeps its value. Like [`toPromise`](#topromisecontrol) it doesn't start the loading itself, so over a control nothing is using it stays pending until something does.
 
 | Parameter | Type | Description |
 |---|---|---|
@@ -466,7 +466,11 @@ Resets an async control (clears value, error and ready status) and reloads if it
 
 ```ts
 invalidate($user);
-invalidate($user, true);   // keep value while reloading
+invalidate($user, true);        // keep value while reloading
+
+await api.save(values);
+
+const fresh = await invalidate($user, true);   // what the server has now
 ```
 
 ---
