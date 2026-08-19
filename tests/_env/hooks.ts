@@ -2,8 +2,8 @@ import * as React from 'react';
 
 /**
  * Renders a hook repeatedly with its slots kept between calls — enough of a
- * renderer for the hooks here, which only ever ask for a ref, a context or a
- * layout effect.
+ * renderer for the hooks here, which only ever ask for a ref, a context, a
+ * reducer or a layout effect.
  *
  * It drives React's own dispatcher slot, so a hook reaching for anything else
  * fails loudly right here instead of being quietly stubbed.
@@ -30,7 +30,11 @@ const sameDeps = (a: unknown[] | undefined, b: unknown[] | undefined) => {
   return true;
 };
 
-export const renderHook = <T>(hook: () => T) => {
+export const renderHook = <T>(
+  hook: () => T,
+  /** Wraps every render, including the ones a dispatch drives - the provider. */
+  wrap?: (run: () => T) => T
+) => {
   const slots: Array<{ current: any }> = [];
 
   let index = 0;
@@ -47,9 +51,35 @@ export const renderHook = <T>(hook: () => T) => {
     useLayoutEffect(effect: () => (() => void) | void, deps?: unknown[]) {
       queued.push([(slots[index++] ||= { current: undefined }), effect, deps]);
     },
+    // what `useValue` rerenders through: dispatching renders again, right here
+    useReducer(reducer: (state: any, action: any) => any, initial: any) {
+      const at = index++;
+
+      let slot = slots[at];
+
+      if (slot === undefined) {
+        const created: { current: any } = { current: undefined };
+
+        created.current = [
+          initial,
+          (action: any) => {
+            created.current = [
+              reducer(created.current[0], action),
+              created.current[1],
+            ];
+
+            render();
+          },
+        ];
+
+        slots[at] = slot = created;
+      }
+
+      return slot.current;
+    },
   };
 
-  const render = () => {
+  const renderOnce = () => {
     index = 0;
 
     queued = [];
@@ -84,6 +114,8 @@ export const renderHook = <T>(hook: () => T) => {
 
     return result;
   };
+
+  const render = () => (wrap ? wrap(renderOnce) : renderOnce());
 
   /** Runs every cleanup the last render left behind, and forgets the runs. */
   const unmount = () => {

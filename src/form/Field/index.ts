@@ -2,83 +2,48 @@ import { useContext, type ReactNode } from 'react';
 
 import type { Control } from '#types';
 import type { FieldProps } from '#form/types';
-import { INTERNALS } from '#internal/constants';
-import FormContext from '#form/internal/FormContext';
+import useFieldProps from '#form/internal/useFieldProps';
+import { getFieldState } from '#form/internal/entry';
 import useEntry from '#form/internal/useEntry';
-import { getFieldState, triggerValidate } from '#form/internal/entry';
-import getValue from '#core/getValue';
+import FormContext from '#form/internal/FormContext';
 
 const Field = ((props: FieldProps) => {
+  const { control } = props;
+
   const form = useContext(FormContext);
 
-  const entry = useEntry(form, props.control);
+  const entry = useEntry(form, control, true);
 
-  let renderProps = entry._props;
-
-  // an entry with no render props has never been configured: this is the first
-  // render, or the control changed and this is a different entry
-  if (renderProps === undefined) {
-    entry._validate = props.validate;
-
-    const mode = (entry._mode =
-      props.validateOn || (form && form._options.validateOn) || 'submit');
-
-    entry._keep = !!props.keepValidator;
-
-    const path = entry._control[INTERNALS]._path;
-
-    entry._props = renderProps = {
-      name: path ? path.join('.') : undefined,
-      ref(element: HTMLElement | null) {
-        // nothing binds to it here - `submit` only needs somewhere to focus
-        entry._element = element || undefined;
-      },
-      onBlur:
-        mode == 'blur'
-          ? () => {
-              triggerValidate(entry, getValue(entry._control));
-            }
-          : undefined,
-    };
-  }
-
-  return props.render(renderProps, getFieldState(entry));
+  return props.render(
+    useFieldProps(control, form, entry),
+    getFieldState(entry)
+  );
 }) as {
   /**
-   * Validates one {@link FieldProps.control control} as part of the form
-   * around it, for as long as it is on screen - a field that disappears stops
-   * taking part in the submit. Outside a `FormProvider` it still validates on
-   * its own.
+   * `useField` as a component, for a component that owns its own rendering - a
+   * date picker, a combobox, anything taking a `value` and an `onChange`.
+   * Reading the value rerenders on every keystroke, and being a component is
+   * what keeps that rerender to this field instead of the section around it.
    *
-   * The value stays yours to read and write: `render` gets the wiring to spread
-   * on your input and the field's {@link FieldState state}, not a
-   * `value`/`onChange` pair. Pass the {@link FieldRenderProps.ref ref} on and a
-   * failed submit will focus the first invalid field for you.
+   * The wiring goes on your component; the {@link FieldState state} is there for
+   * `$isDirty` and the rest, and reading none of it subscribes to nothing. An
+   * `input`, `select` or `textarea` belongs to `NativeField`, which rerenders
+   * nothing at all.
    *
-   * Everything but the {@link FieldProps.control control} is read once, so a
-   * validator that depends on something changing should read it from a control
-   * instead of closing over it.
+   * Validation is `Validator`/`PathValidator`; this only reports whether some
+   * validator holds an error for the field.
    *
    * @example
    * ```tsx
    * <Field
-   *   control={$values.email}
-   *   validateOn='blur'
-   *   validate={(email) => (email.includes('@') ? undefined : 'invalid email')}
-   *   render={(props, { $field, $error }) => (
-   *     <label>
-   *       <input
-   *         {...props}
-   *         value={useValue($field)}
-   *         onChange={(e) => setValue($field, e.target.value)}
-   *       />
-   *       <ControlConsumer control={$error} />
-   *     </label>
+   *   control={$values.country}
+   *   render={({ value, onChange, isError, ...rest }) => (
+   *     <Select {...rest} value={value} onChange={onChange} error={isError} />
    *   )}
    * />
    * ```
    */
-  <C extends Control, E = any>(props: FieldProps<C, E>): ReactNode;
+  <C extends Control>(props: FieldProps<C>): ReactNode;
 };
 
 export default Field;

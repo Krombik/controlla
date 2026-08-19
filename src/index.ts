@@ -47,7 +47,13 @@ export { default as wrapErrorBoundary } from './core/wrapErrorBoundary';
 
 export { default as Field } from './form/Field';
 export { default as NativeField } from './form/NativeField';
+export { default as Validator } from './form/Validator';
+export { default as PathValidator } from './form/PathValidator';
 export { default as FormProvider } from './form/FormProvider';
+export { default as useField } from './form/useField';
+export { default as useNativeField } from './form/useNativeField';
+export { default as useValidator } from './form/useValidator';
+export { default as usePathValidator } from './form/usePathValidator';
 export { default as useFieldArray } from './form/useFieldArray';
 export { default as useFieldState } from './form/useFieldState';
 export { default as useForm } from './form/useForm';

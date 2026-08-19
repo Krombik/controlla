@@ -7,6 +7,8 @@ import createControl from '../src/core/createControl/index.ts';
 import getValue from '../src/core/getValue/index.ts';
 import setValue from '../src/core/setValue/index.ts';
 import useFieldArray from '../src/form/useFieldArray/index.ts';
+import usePathValidator from '../src/form/usePathValidator/index.ts';
+import type { ControlErrors } from '../src/form/types.ts';
 import makeForm from '../src/form/_internal/makeForm.ts';
 import FormContext from '../src/form/_internal/FormContext.ts';
 import noop from '../src/core/_internal/noop.ts';
@@ -14,33 +16,54 @@ import noop from '../src/core/_internal/noop.ts';
 const makeArray = (control: any) =>
   renderHook(() => useFieldArray(control)).result;
 
-test('the array validates as one thing and blocks the submit', async () => {
-  const $values = createControl({ tags: ['a', 'a'] });
+test('the rows that duplicate are the ones the validator marks', async () => {
+  const $values = createControl({ tags: ['a', 'b', 'a'] });
 
   const form = makeForm($values, { submit: noop });
 
   // stands in for the `FormProvider` the hook would read
   (FormContext as any)._currentValue = form;
 
-  const { result } = renderHook(() =>
-    useFieldArray($values.tags, {
-      validate: (tags) =>
-        new Set(tags).size < tags.length ? 'no duplicates' : undefined,
+  const { result } = renderHook(() => useFieldArray($values.tags));
+
+  const { result: errorOf } = renderHook(() =>
+    usePathValidator($values.tags, (tags: string[]) => {
+      const seen = new Map<string, number>();
+
+      const errors: ControlErrors<string> = [];
+
+      for (let i = 0; i < tags.length; i++) {
+        const at = seen.get(tags[i]);
+
+        if (at !== undefined) {
+          errors.push([$values.tags[at], 'duplicate']);
+
+          errors.push([$values.tags[i], 'duplicate']);
+        } else {
+          seen.set(tags[i], i);
+        }
+      }
+
+      return errors;
     })
   );
 
   (FormContext as any)._currentValue = undefined;
 
   assert.equal(await form.validate(), false);
-  assert.equal(getValue(result.$error), 'no duplicates');
   assert.equal(getValue(form.$isValid), false);
+  // the duplicating rows, not the array and not the row between them
+  assert.equal(getValue(errorOf($values.tags[0])), 'duplicate');
+  assert.equal(getValue(errorOf($values.tags[1])), undefined);
+  assert.equal(getValue(errorOf($values.tags[2])), 'duplicate');
 
   result.remove(0);
 
   await tick();
 
   assert.equal(await form.validate(), true);
-  assert.equal(getValue(result.$error), undefined);
+  assert.equal(getValue(errorOf($values.tags[0])), undefined);
+  assert.equal(getValue(errorOf($values.tags[2])), undefined);
 });
 
 test('keys start at 0, follow their items, and are never reused', async () => {
@@ -269,12 +292,6 @@ test('a removal through the method carries the keys, not the indexes', async () 
 export const typeChecks = () => {
   const $tags = createControl(['a']);
 
-  const plain = useFieldArray($tags);
-
-  // @ts-expect-error nothing is registered, so nothing could hold an error
-  plain.$error;
-
-  useFieldArray($tags, {
-    validate: (tags) => (tags.length ? undefined : 'required'),
-  }).$error;
+  // @ts-expect-error an array validates through a validator of its own now
+  useFieldArray($tags, { validate: (tags: string[]) => tags.length });
 };

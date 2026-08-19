@@ -1,30 +1,20 @@
-import { useContext, useRef } from 'react';
+import { useRef } from 'react';
 
 import type { Control, SelectValue } from '#types';
-import type {
-  FieldArray,
-  FieldArrayOptions,
-  ValidatedFieldArray,
-} from '#form/types';
-import type { FieldEntry } from '#form/internal/types';
+import type { FieldArray } from '#form/types';
 import type { Mutable } from '#internal/types';
 import { EMPTY_ARR } from '#internal/constants';
 import setValue from '#core/setValue';
 import useDerivedControl from '#core/useDerivedControl';
-import FormContext from '#form/internal/FormContext';
-import useEntry from '#form/internal/useEntry';
-import { getFieldState } from '#form/internal/entry';
 
 type State = {
   _control: Control;
-  /** The registered field the array itself is - what carries its validator. */
-  _entry: FieldEntry;
   /** The array `_keys` describes, so the next one can be told apart by length. */
   _items: readonly any[];
   _keys: number[];
   _nextKey: number;
   _derivedMapper(items: any[] | undefined): any[];
-  _api: Mutable<FieldArray<any> & ValidatedFieldArray>;
+  _api: Mutable<FieldArray<any>>;
 };
 
 /**
@@ -101,7 +91,7 @@ const splice = (
   write(state, items, keys);
 };
 
-const useFieldArray = ((control: Control, options?: FieldArrayOptions) => {
+const useFieldArray = ((control: Control) => {
   const ref = useRef<State>(null);
 
   let state = ref.current;
@@ -109,9 +99,6 @@ const useFieldArray = ((control: Control, options?: FieldArrayOptions) => {
   if (state === null) {
     const api: State['_api'] = {
       $keys: undefined!,
-      get $error() {
-        return getFieldState(self._entry).$error;
-      },
       // one item lands at a known index of an array of a known length, so both
       // arrays are filled and closed in the same pass
       append(value) {
@@ -259,7 +246,6 @@ const useFieldArray = ((control: Control, options?: FieldArrayOptions) => {
 
     const self: State = {
       _control: control,
-      _entry: undefined!,
       _items: EMPTY_ARR,
       _keys: EMPTY_ARR,
       _nextKey: 0,
@@ -294,28 +280,6 @@ const useFieldArray = ((control: Control, options?: FieldArrayOptions) => {
 
   state._control = control;
 
-  // no rule to break means no error to hold, so an unvalidated array registers
-  // nothing. The hooks below sit behind a branch that is settled for the
-  // component's life - `options` is either passed or it isn't
-  if (options) {
-    const form = useContext(FormContext);
-
-    // the array is a field of its own: registered while this is mounted, swept
-    // by the submit, counted in `$isValid`
-    const entry = useEntry(form, control);
-
-    // read once per entry, the way a `Field`'s props are: the array keeps the
-    // rule it was mounted with, and a changed control resolves to its own entry
-    if (state._entry !== entry) {
-      state._entry = entry;
-
-      entry._validate = options.validate;
-
-      entry._mode =
-        options.validateOn || (form && form._options.validateOn) || 'submit';
-    }
-  }
-
   const api = state._api;
 
   api.$keys = useDerivedControl(control, state._derivedMapper);
@@ -334,10 +298,10 @@ const useFieldArray = ((control: Control, options?: FieldArrayOptions) => {
    * ```tsx
    * const $values = useControl({ tags: ['react'] });
    *
-   * const { $keys, append, remove } = useFieldArray($values.tags, {
-   *   validate: (tags) =>
-   *     new Set(tags).size < tags.length ? 'no duplicates' : undefined,
-   * });
+   * const { $keys, append, remove } = useFieldArray($values.tags);
+   *
+   * // what no single item can answer is a validator over the array
+   * usePathValidator($values.tags, (tags) => duplicates(tags));
    *
    * return (
    *   <>
@@ -357,16 +321,6 @@ const useFieldArray = ((control: Control, options?: FieldArrayOptions) => {
   <C extends Control<readonly any[] | undefined>>(
     control: C
   ): FieldArray<NonNullable<SelectValue<C>>[number]>;
-  /**
-   * The same, and the array validates as a field of its own -
-   * {@link FieldArrayOptions.validate validate} answers what no single item
-   * can, like how many there are or whether two collide, and blocks the submit
-   * like any field. The items still validate themselves.
-   */
-  <C extends Control<readonly any[] | undefined>, E = any>(
-    control: C,
-    options: FieldArrayOptions<SelectValue<C>, E>
-  ): FieldArray<NonNullable<SelectValue<C>>[number]> & ValidatedFieldArray<E>;
 };
 
 export default useFieldArray;

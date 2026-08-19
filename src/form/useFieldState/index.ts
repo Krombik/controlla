@@ -12,12 +12,10 @@ import { getFieldState } from '#form/internal/entry';
  *
  * @example
  * ```tsx
- * const { $error, $isDirty } = useFieldState($values.email);
+ * const { $isError, $isDirty } = useFieldState($values.email);
  * ```
  */
-const useFieldState = <C extends Control, E = any>(
-  control: C
-): FieldState<C, E> =>
-  getFieldState(useEntry(useFormState() as FormInternals, control));
+const useFieldState = <C extends Control>(control: C): FieldState<C> =>
+  getFieldState(useEntry(useFormState() as FormInternals, control, true));
 
 export default useFieldState;

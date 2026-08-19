@@ -12,13 +12,26 @@ import watchValue from '../src/core/watchValue/index.ts';
 import useForm from '../src/form/useForm/index.ts';
 import Field from '../src/form/Field/index.ts';
 import NativeField from '../src/form/NativeField/index.ts';
+import Validator from '../src/form/Validator/index.ts';
+import PathValidator from '../src/form/PathValidator/index.ts';
+import useValidator from '../src/form/useValidator/index.ts';
+import usePathValidator from '../src/form/usePathValidator/index.ts';
+import useFieldState from '../src/form/useFieldState/index.ts';
+import useField from '../src/form/useField/index.ts';
+import useNativeField from '../src/form/useNativeField/index.ts';
 import FormContext from '../src/form/_internal/FormContext.ts';
 import { renderHook } from './_env/hooks.ts';
 import isNotEqual from '../src/form/_internal/isNotEqual.ts';
-import createDebounceScheduler from '../src/scheduler/createDebounceScheduler/index.ts';
 import noop from '../src/core/_internal/noop.ts';
-import type { FieldState, FormOptions, FormState } from '../src/form/types.ts';
-import type { Control } from '../src/core/types.ts';
+import { INTERNALS } from '../src/core/_internal/constants.ts';
+import type {
+  ControlError,
+  ControlErrors,
+  FieldState,
+  FormOptions,
+  FormState,
+} from '../src/form/types.ts';
+import type { Control, ReadonlyControl } from '../src/core/types.ts';
 
 /** Enough of an input for the element wiring — no DOM involved. */
 const fakeInput = (position = 0, type?: string) => {
@@ -69,35 +82,62 @@ const fakeInput = (position = 0, type?: string) => {
 };
 
 /** Renders a component of the module with the form in context, and mounts it. */
-const mount = <T>(form: FormState | undefined, render: () => T) => {
-  // stands in for the `FormProvider` the components read
-  (FormContext as any)._currentValue = form;
+const mount = <T>(form: FormState | undefined, render: () => T) =>
+  // stands in for the `FormProvider` the components read - around every render,
+  // since a value change drives its own
+  renderHook(render, (run) => {
+    (FormContext as any)._currentValue = form;
 
-  const rendered = renderHook(render);
-
-  (FormContext as any)._currentValue = undefined;
-
-  return rendered;
-};
+    try {
+      return run();
+    } finally {
+      (FormContext as any)._currentValue = undefined;
+    }
+  });
 
 const createForm = (control: any, options: Partial<FormOptions> = {}) =>
   renderHook(() => useForm(control, { submit: noop, ...options } as any))
     .result;
 
 /** A mounted `Field` - registration is the mount, and it ends at the unmount. */
-const field = (form: FormState, control: any, validate?: (value: any) => any) =>
+const field = (form: FormState, control: any) =>
   mount(
     form,
     () =>
       Field({
         control,
-        validate,
         render: ((props: any, state: any) => ({ props, state })) as any,
       }) as unknown as {
-        props: { ref(element: unknown): void };
+        props: {
+          ref(element: unknown): void;
+          onBlur?: () => void;
+          isError: boolean;
+          value: any;
+          onChange(value: any): void;
+        };
         state: FieldState;
       }
   );
+
+/** A mounted validator - one control or a tuple of them. */
+const validator = (
+  form: FormState,
+  target: any,
+  validate: (value: any) => any,
+  validateOn?: any
+) => mount(form, () => useValidator(target, validate, validateOn) as any);
+
+/** A mounted validator reporting errors by path under the control. */
+const pathValidator = (
+  form: FormState,
+  control: any,
+  validate: (value: any) => any,
+  validateOn?: any
+) => mount(form, () => usePathValidator(control, validate, validateOn) as any);
+
+/** The field state of a control, from outside any field of it. */
+const fieldState = (form: FormState, control: any) =>
+  mount(form, () => useFieldState(control));
 
 /** A mounted `NativeField` - `ref` binds an element, `null` lets one go again. */
 const nativeField = (form: FormState, props: any) => {
@@ -132,7 +172,9 @@ test('submit runs the handler only when every validator passed', async () => {
     },
   });
 
-  field(form, $values.email, (email: string) =>
+  field(form, $values.email);
+
+  validator(form, $values.email, (email: string) =>
     email.includes('@') ? undefined : 'invalid'
   );
 
@@ -192,11 +234,11 @@ test('a stale async validation never writes its error', async () => {
 
   const resolvers: Array<(error: string | undefined) => void> = [];
 
-  const name = field(
+  const $error = validator(
     form,
     $values.name,
     () => new Promise<string | undefined>((resolve) => resolvers.push(resolve))
-  ).result.state;
+  ).result;
 
   const { $isValidating } = form;
 
@@ -216,7 +258,7 @@ test('a stale async validation never writes its error', async () => {
   assert.equal(await stale, false);
   assert.equal(await fresh, false);
 
-  assert.equal(getValue(name.$error), 'taken');
+  assert.equal(getValue($error), 'taken');
 
   await tick();
 
@@ -292,9 +334,13 @@ test('a failed submit focuses the invalid field first in the document', async ()
   const invalid = () => 'bad';
 
   // registered last but standing first in the document
-  const later = field(form, $values.second, invalid);
+  const later = field(form, $values.second);
 
-  const earlier = field(form, $values.first, invalid);
+  const earlier = field(form, $values.first);
+
+  validator(form, $values.second, invalid);
+
+  validator(form, $values.first, invalid);
 
   const laterInput = fakeInput(5);
 
@@ -309,6 +355,28 @@ test('a failed submit focuses the invalid field first in the document', async ()
 
   assert.equal(earlierInput.focused, true);
   assert.equal(laterInput.focused, false);
+});
+
+test('focus answers whether the field had an element to focus', () => {
+  const $values = createControl({ email: '', name: '', hidden: '' });
+
+  const form = createForm($values);
+
+  const email = field(form, $values.email);
+
+  field(form, $values.name);
+
+  const input = fakeInput();
+
+  email.result.props.ref(input);
+
+  assert.equal(form.focus($values.email), true);
+  assert.equal(input.focused, true);
+
+  // registered, but its `ref` never reached an element
+  assert.equal(form.focus($values.name), false);
+  // no field on it at all
+  assert.equal(form.focus($values.hidden), false);
 });
 
 test('isNotEqual walks structurally without recursing', () => {
@@ -354,52 +422,6 @@ test('isNotEqual walks structurally without recursing', () => {
   equal(deep, other);
 
   notEqual(deep, { next: other });
-});
-
-test('a scheduler holds the element writes back without holding the typing', async () => {
-  const $filters = createControl({ name: '', cheap: false });
-
-  const form = createForm($filters);
-
-  const scheduler = createDebounceScheduler(50);
-
-  const input = fakeInput();
-
-  nativeField(form, {
-    type: 'text',
-    control: $filters.name,
-    scheduler,
-  }).ref(input);
-
-  const box = fakeInput(0, 'checkbox');
-
-  nativeField(form, { type: 'checkbox', control: $filters.cheap }).ref(box);
-
-  input.value = 'ph';
-
-  input.emit('input');
-
-  input.value = 'pho';
-
-  input.emit('input');
-
-  box.checked = true;
-
-  box.emit('input');
-
-  await tick();
-
-  // the checkbox beside it applies at its own pace
-  assert.equal(getValue($filters.cheap), true);
-  assert.equal(getValue($filters.name), '');
-  // what was typed is on the element the whole time, only the commit waits
-  assert.equal(input.value, 'pho');
-
-  scheduler.flush();
-
-  await tick();
-
-  assert.equal(getValue($filters.name), 'pho');
 });
 
 test('the element type picks how a value is written back', async () => {
@@ -700,17 +722,10 @@ test('reset tells restoring from writing undefined by the argument count', async
   assert.equal(getValue($values.note), undefined);
 });
 
-test('a submit that went through becomes the new baseline', async () => {
+test('a submit leaves the baseline where it is', async () => {
   const $values = createControl({ name: 'jane' });
 
-  let release: () => void;
-
-  const form = createForm($values, {
-    submit: () =>
-      new Promise<void>((resolve) => {
-        release = resolve;
-      }),
-  });
+  const form = createForm($values);
 
   field(form, $values.name);
 
@@ -720,30 +735,24 @@ test('a submit that went through becomes the new baseline', async () => {
 
   await tick();
 
-  assert.equal(getValue($isDirty), true);
-
-  const submitting = form.submit();
-
-  // let it get past the validator sweep and into the handler
-  await tick();
-
-  // an edit made while the submit is in flight isn't what was submitted
-  setValue($values.name, 'joan');
+  await form.submit();
 
   await tick();
 
-  release!();
-
-  await submitting;
-
+  // what was sent is a baseline only if the handler makes it one
   assert.equal(getValue($isDirty), true);
+
+  form.reset($values, { name: 'john' });
+
+  await tick();
+
+  assert.equal(getValue($isDirty), false);
 
   form.reset();
 
   await tick();
 
   assert.equal(getValue($values.name), 'john');
-  assert.equal(getValue($isDirty), false);
 });
 
 test('a field is dirty against the baseline, not against its own last value', async () => {
@@ -765,7 +774,7 @@ test('a field is dirty against the baseline, not against its own last value', as
   assert.equal(getValue(note.$isDirty), false);
 
   // the value doesn't move here, only what it is compared against
-  await form.submit();
+  form.reset($values, getValue($values));
 
   await tick();
 
@@ -791,8 +800,11 @@ test('submit says which of its own paths moved since the last one', async () => 
   const changed: string[][] = [];
 
   const form = createForm($data.settings, {
-    submit(_values: any, paths: string[]) {
+    submit(values: any, paths: string[]) {
       changed.push(paths);
+
+      // the handler is what moves the baseline
+      form.reset($data.settings, values);
     },
   });
 
@@ -820,7 +832,8 @@ test('submit says which of its own paths moved since the last one', async () => 
 
   await form.submit();
 
-  // the first submit rebaselined, so `alerts` is no longer something that moved
+  // the first submit's handler rebaselined, so `alerts` is no longer something
+  // that moved
   assert.deepEqual(changed[1], ['digest']);
 });
 
@@ -943,66 +956,34 @@ test('the paths are not collected for a submit that never asked', async () => {
   assert.deepEqual(passed, []);
 });
 
-test('resetValue is where a reset with no value of its own goes', async () => {
-  const $values = createControl({ query: 'from url', page: 2 });
-
-  const form = createForm($values, {
-    resetValue: { query: '', page: 1 },
-  });
-
-  field(form, $values.query);
-
-  const { $isDirty } = form;
-
-  // the url values are the baseline, so nothing starts dirty
-  assert.equal(getValue($isDirty), false);
-
-  form.reset($values.query);
-
-  await tick();
-
-  assert.equal(getValue($values.query), '');
-  // a single field's reset leaves the rest alone
-  assert.equal(getValue($values.page), 2);
-
-  form.reset();
-
-  await tick();
-
-  assert.deepEqual(getValue($values), { query: '', page: 1 });
-  // what a reset wrote is the new baseline, whichever tree it came from
-  assert.equal(getValue($isDirty), false);
-});
-
-test('submitFailed runs instead of submit, with the errors that stopped it', async () => {
+test('submitFailed runs instead of submit, and a reset clears what stopped it', async () => {
   const $values = createControl({ email: '', name: '' });
 
-  const failures: any[] = [];
+  let failures = 0;
 
   const form = createForm($values, {
     submit() {
       throw new Error('submitted an invalid form');
     },
-    submitFailed(errors) {
-      failures.push(errors);
+    submitFailed() {
+      failures++;
     },
   });
 
-  field(form, $values.email, () => 'invalid email');
+  field(form, $values.email);
 
-  field(form, $values.name);
+  const $error = validator(form, $values.email, () => 'invalid email').result;
 
   await form.submit();
 
-  assert.equal(failures.length, 1);
-  assert.deepEqual(failures[0], [
-    { control: $values.email, error: 'invalid email' },
-  ]);
+  assert.equal(failures, 1);
+  assert.equal(getValue($error), 'invalid email');
 
   form.reset();
 
   await tick();
 
+  assert.equal(getValue($error), undefined);
   assert.equal(getValue(form.$isValid), true);
 });
 
@@ -1028,10 +1009,11 @@ test('aria lands on the element without a rerender, and shares describedby', asy
   nativeField(form, {
     type: 'text',
     control: $values.email,
-    validate: () => error,
     errorId: 'email-error',
     describedBy: 'hint',
   }).ref(input);
+
+  validator(form, $values.email, () => error);
 
   assert.equal(attributes['aria-invalid'], undefined);
   assert.equal(attributes['aria-describedby'], 'hint');
@@ -1059,7 +1041,7 @@ test('isSubmitting flips even when nothing about the submit is async', async () 
     submit() {},
   });
 
-  field(form, $values.name, () => undefined);
+  field(form, $values.name);
 
   const seen: boolean[] = [];
 
@@ -1128,6 +1110,101 @@ export const typeChecks = () => {
     parse: (value: Date) => value,
     render: () => null,
   });
+
+  const $rules = createControl({
+    email: '',
+    dates: { from: 1, to: 2 },
+    rows: [''],
+    agreed: false,
+  });
+
+  const $error: ReadonlyControl<string | undefined> = useValidator(
+    $rules.email,
+    (email) => (email ? undefined : 'required')
+  );
+
+  $error;
+
+  // @ts-expect-error the value is what a rule is handed
+  useValidator($rules.email, (email: number) => (email ? undefined : 'x'));
+
+  const [, $toError] = useValidator(
+    [$rules.dates.from, $rules.dates.to],
+    ([from, to]) =>
+      from <= to ? undefined : [undefined, 'ends before it starts']
+  );
+
+  const toError: ReadonlyControl<string | undefined> = $toError;
+
+  toError;
+
+  // @ts-expect-error a tuple answers with a slot per control
+  useValidator([$rules.dates.from], () => 'not a slot');
+
+  const errorOf = usePathValidator($rules.rows, (rows) => {
+    const errors: ControlErrors<string> = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      errors.push([$rules.rows[i], 'nope']);
+    }
+
+    return errors;
+  });
+
+  const row: ReadonlyControl<string | undefined> = errorOf($rules.rows[0]);
+
+  row;
+
+  // a pair of its own shape per control, and each read keeps its own error
+  const mixed = usePathValidator($rules, ({ email, dates }) => [
+    ...(email
+      ? []
+      : [
+          [$rules.email, 'required'] as ControlError<
+            typeof $rules.email,
+            string
+          >,
+        ]),
+    ...(dates.from <= dates.to
+      ? []
+      : [
+          [$rules.dates.to, { code: 7 }] as ControlError<
+            typeof $rules.dates.to,
+            { code: number }
+          >,
+        ]),
+  ]);
+
+  const emailError: ReadonlyControl<string | undefined> = mixed($rules.email);
+
+  emailError;
+
+  const codeError: ReadonlyControl<{ code: number } | undefined> = mixed(
+    $rules.dates.to
+  );
+
+  codeError;
+
+  // @ts-expect-error nothing was ever paired with a control of booleans
+  mixed($rules.agreed);
+
+  const props = useField($rules.email);
+
+  const value: string = props.value;
+
+  value;
+
+  props.onChange('other');
+
+  // @ts-expect-error the field holds a string
+  props.onChange(1);
+
+  useNativeField($rules.agreed, { type: 'checkbox' }).name;
+
+  // @ts-expect-error a checkbox writes a boolean, this control holds a string
+  useNativeField($rules.email, { type: 'checkbox' });
+
+  useFieldState($rules.email).$isError;
 };
 
 test('converters sit between the element and the control, both ways', async () => {
@@ -1169,14 +1246,14 @@ test('converters sit between the element and the control, both ways', async () =
   assert.equal(input.value, 'OTHER@EXAMPLE.COM');
 });
 
-test('a validation still in flight when the field goes counts against nothing', async () => {
+test('a validation still in flight when its validator goes counts against nothing', async () => {
   const $values = createControl({ email: '' });
 
   const form = createForm($values);
 
   let settle!: (error: any) => void;
 
-  const email = field(
+  const email = validator(
     form,
     $values.email,
     () =>
@@ -1243,27 +1320,40 @@ test('an element bound to another control stops feeding the old one', async () =
   assert.equal(getValue($values.b), 'typed');
 });
 
-test('a field hidden by Activity registers again when it comes back', async () => {
+test('a field hidden by Activity is marked again when it comes back', async () => {
   const $values = createControl({ email: '' });
 
   const form = createForm($values);
 
-  const email = field(form, $values.email, (address: string) =>
+  const email = field(form, $values.email);
+
+  const { $isError } = email.result.state;
+
+  validator(form, $values.email, (address: string) =>
     address.includes('@') ? undefined : 'invalid'
   );
+
+  await form.validate();
+
+  assert.equal(getValue($isError), true);
 
   // hidden: the effects are unmounted, the state and the DOM are kept
   email.unmount();
 
-  assert.equal(await form.validate(), true);
+  await tick();
+
+  assert.equal(getValue($isError), false, 'nothing is left to mark');
 
   email.remount();
 
-  assert.equal(await form.validate(), false);
+  await tick();
+
+  // the validator still holds it, so coming back is enough
+  assert.equal(getValue($isError), true);
 });
 
-test('a blur validates what is typed, not what a scheduler still holds', async () => {
-  const $values = createControl({ email: '' });
+test('a blur runs the validators that validate on blur, and only those', async () => {
+  const $values = createControl({ email: '', name: '' });
 
   const form = createForm($values);
 
@@ -1274,12 +1364,21 @@ test('a blur validates what is typed, not what a scheduler still holds', async (
   const { ref, onBlur } = nativeField(form, {
     type: 'text',
     control: $values.email,
-    scheduler: createDebounceScheduler(50),
-    validateOn: 'blur',
-    validate: (email: string) => {
+  });
+
+  validator(
+    form,
+    $values.email,
+    (email: string) => {
       seen.push(email);
     },
-  });
+    'blur'
+  );
+
+  // a rule of another field, and a rule of this one that waits for the submit
+  validator(form, $values.name, () => seen.push('name'), 'blur');
+
+  validator(form, $values.email, () => seen.push('submit'));
 
   ref(input);
 
@@ -1289,7 +1388,8 @@ test('a blur validates what is typed, not what a scheduler still holds', async (
 
   await tick();
 
-  assert.equal(getValue($values.email), '');
+  // the element wrote it as it was typed, so this is what the rule reads
+  assert.equal(getValue($values.email), 'jane@example.com');
 
   onBlur!({ target: input });
 
@@ -1305,29 +1405,23 @@ test('a native field is registered by its element, and goes with the last', asyn
 
   const second = fakeInput(1, 'text');
 
-  const { ref } = nativeField(form, {
-    type: 'text',
-    control: $values.email,
-    validate: () => 'invalid',
-  });
+  const { ref } = nativeField(form, { type: 'text', control: $values.email });
 
-  // the entry belongs to the control, so it is there from the render - what
-  // the elements hold is its life
-  assert.equal(await form.validate(), false);
+  const registered = () => (form as any)._entries.has($values.email);
 
   const detachFirst = ref(first)!;
 
   const detachSecond = ref(second)!;
 
-  assert.equal(await form.validate(), false);
+  assert.equal(registered(), true);
 
   detachFirst();
 
-  assert.equal(await form.validate(), false, 'one element still holds it');
+  assert.equal(registered(), true, 'one element still holds it');
 
   detachSecond();
 
-  assert.equal(await form.validate(), true);
+  assert.equal(registered(), false);
 });
 
 test('a reset before the data lands leaves the control alone', async () => {
@@ -1349,4 +1443,656 @@ test('a reset before the data lands leaves the control alone', async () => {
 
   assert.deepEqual(getValue($values), { name: 'jane' });
   assert.equal(getValue(form.$isDirty), false);
+});
+
+test('a tuple validator answers per control', async () => {
+  const $values = createControl({ password: 'a', repeat: 'b' });
+
+  const form = createForm($values);
+
+  const password = field(form, $values.password).result.state;
+
+  const repeat = field(form, $values.repeat).result.state;
+
+  const [$passwordError, $repeatError] = validator(
+    form,
+    [$values.password, $values.repeat],
+    ([first, second]: string[]) =>
+      first === second ? undefined : [undefined, 'passwords differ']
+  ).result;
+
+  assert.equal(await form.validate(), false);
+
+  assert.equal(getValue($passwordError), undefined);
+  assert.equal(getValue($repeatError), 'passwords differ');
+  assert.equal(getValue(password.$isError), false);
+  assert.equal(getValue(repeat.$isError), true);
+
+  setValue($values.repeat, 'a');
+
+  await tick();
+
+  // an error revalidates live until it clears, whatever the trigger was
+  assert.equal(getValue($repeatError), undefined);
+  assert.equal(getValue(repeat.$isError), false);
+  assert.equal(getValue(form.$isValid), true);
+});
+
+test('an error lands on the control it names, and on nothing else', async () => {
+  const $values = createControl({ address: { street: '', city: 'york' } });
+
+  const form = createForm($values);
+
+  const address = field(form, $values.address).result.state;
+
+  const street = field(form, $values.address.street).result.state;
+
+  const city = field(form, $values.address.city).result.state;
+
+  let errors: ControlErrors<string> = [[$values.address.street, 'required']];
+
+  const errorOf = pathValidator(form, $values, () => errors).result;
+
+  assert.equal(await form.validate(), false);
+
+  assert.equal(getValue(errorOf($values.address.street)), 'required');
+  assert.equal(getValue(errorOf($values.address.city)), undefined);
+
+  assert.equal(getValue(street.$isError), true);
+  assert.equal(getValue(city.$isError), false);
+  // the branch above the one that failed is not what failed
+  assert.equal(getValue(address.$isError), false);
+
+  errors = [];
+
+  // no entries is no answer at all
+  assert.equal(await form.validate(), true);
+  assert.equal(getValue(errorOf($values.address.street)), undefined);
+  assert.equal(getValue(street.$isError), false);
+});
+
+test('two validators over one control, and isError is either of them', async () => {
+  const $values = createControl({ email: 'jane' });
+
+  const form = createForm($values);
+
+  const { $isError } = fieldState(form, $values.email).result;
+
+  const first = validator(form, $values.email, () => 'invalid');
+
+  validator(form, $values.email, () => undefined);
+
+  assert.equal(await form.validate(), false);
+  assert.equal(getValue($isError), true);
+
+  first.unmount();
+
+  await tick();
+
+  // the one that held it is gone; the other never did
+  assert.equal(getValue($isError), false);
+  assert.equal(getValue(form.$isValid), true);
+});
+
+test('an error written into the control marks the field like any other', async () => {
+  const $values = createControl({ email: 'jane@example.com' });
+
+  const form = createForm($values);
+
+  const email = field(form, $values.email).result.state;
+
+  const $error = validator(form, $values.email, () => undefined).result;
+
+  assert.equal(await form.validate(), true);
+
+  // what a rejection coming back from the server does
+  setValue($error, 'already taken');
+
+  await tick();
+
+  assert.equal(getValue(email.$isError), true);
+  assert.equal(getValue(form.$isValid), false);
+
+  setValue($values.email, 'other@example.com');
+
+  await tick();
+
+  // it revalidates like its own error, and this one passes
+  assert.equal(getValue(email.$isError), false);
+});
+
+test('a validator on change needs no submit', async () => {
+  const $values = createControl({ email: 'jane@example.com' });
+
+  const form = createForm($values);
+
+  const changing = validator(
+    form,
+    $values.email,
+    (email: string) => (email.includes('@') ? undefined : 'invalid'),
+    'change'
+  );
+
+  const $error = changing.result;
+
+  // nothing ran yet: a field that never validated counts as valid
+  assert.equal(getValue($error), undefined);
+
+  setValue($values.email, 'jane');
+
+  await tick();
+
+  assert.equal(getValue($error), 'invalid');
+
+  changing.unmount();
+
+  await tick();
+
+  // unmounted, so it has let its controls go along with its error
+  assert.equal(getValue($error), undefined);
+
+  setValue($values.email, 'nobody');
+
+  await tick();
+
+  assert.equal(getValue($error), undefined);
+});
+
+test('a failed submit focuses under an error holding no element of its own', async () => {
+  const $values = createControl({ rows: ['a', 'b'] });
+
+  const form = createForm($values, {
+    submit() {
+      throw new Error('submitted an invalid form');
+    },
+  });
+
+  const first = field(form, $values.rows[0]);
+
+  const second = field(form, $values.rows[1]);
+
+  const firstInput = fakeInput(1);
+
+  const secondInput = fakeInput(5);
+
+  first.result.props.ref(firstInput);
+
+  second.result.props.ref(secondInput);
+
+  validator(form, $values.rows, () => 'too many');
+
+  await form.submit();
+
+  // the array holds the error and no element, so the first field under it does
+  assert.equal(firstInput.focused, true);
+  assert.equal(secondInput.focused, false);
+});
+
+test('a validator of an unregistered path still blocks the submit', async () => {
+  const $values = createControl({ email: '', hidden: '' });
+
+  const form = createForm($values);
+
+  field(form, $values.email);
+
+  validator(form, $values.hidden, () => 'required');
+
+  assert.equal(await form.validate(), false);
+  assert.equal(getValue(form.$isValid), false);
+});
+
+test('the validator components mount the same rules the hooks do', async () => {
+  const $values = createControl({ email: '', dates: { from: 2, to: 1 } });
+
+  const form = createForm($values);
+
+  const errors: any[] = [];
+
+  mount(
+    form,
+    () =>
+      Validator({
+        control: $values.email,
+        validate: () => 'required',
+        render: ($error: any) => {
+          errors.push($error);
+
+          return null;
+        },
+      }) as any
+  );
+
+  const paths = mount(
+    form,
+    () =>
+      PathValidator({
+        control: $values.dates,
+        validate: ({ from, to }: any) =>
+          from <= to
+            ? undefined
+            : [[$values.dates.to, 'ends before it starts']],
+      } as any) as any
+  );
+
+  assert.equal(await form.validate(), false);
+
+  assert.equal(getValue(errors[0]), 'required');
+  // no `render` is nothing rendered
+  assert.equal(paths.result, null);
+
+  // the field state of a path nothing is mounted on picks the error up
+  const { $isError } = fieldState(form, $values.dates.to).result;
+
+  assert.equal(getValue($isError), true);
+  assert.equal(
+    getValue(fieldState(form, $values.dates.from).result.$isError),
+    false
+  );
+});
+
+test('a rule can watch a control it does not answer for', async () => {
+  const $values = createControl({ email: 'jane@example.com' });
+
+  // where a rejection coming back from the server is kept, and cleared from
+  const $rejected = createControl<string | undefined>(undefined);
+
+  const form = createForm($values);
+
+  const email = field(form, $values.email).result.state;
+
+  const [$emailError] = validator(
+    form,
+    [$values.email, $rejected],
+    ([address, rejected]: [string, string | undefined]) => [
+      rejected ?? (address.includes('@') ? undefined : 'invalid email'),
+    ],
+    'change'
+  ).result;
+
+  setValue($rejected, 'already taken');
+
+  await tick();
+
+  // the store moved, so the rule ran again
+  assert.equal(getValue($emailError), 'already taken');
+  assert.equal(getValue(email.$isError), true);
+  assert.equal(getValue(form.$isValid), false);
+
+  // the slot it never answered for is nobody's error
+  assert.equal(getValue(fieldState(form, $rejected).result.$isError), false);
+
+  setValue($rejected, undefined);
+
+  await tick();
+
+  assert.equal(getValue($emailError), undefined);
+  assert.equal(getValue(email.$isError), false);
+  assert.equal(getValue(form.$isValid), true);
+});
+
+test('a reset a rule only partly covers runs it again on what was restored', async () => {
+  const $values = createControl({ email: 'jane@example.com', name: 'jane' });
+
+  const form = createForm($values);
+
+  const email = field(form, $values.email).result.state;
+
+  // wider than what gets reset below, so its error is its own to keep
+  const errorOf = pathValidator(form, $values, ({ email: address }: any) =>
+    address.includes('@') ? [] : [[$values.email, 'invalid email']]
+  ).result;
+
+  setValue($values.email, 'nobody');
+
+  await tick();
+
+  assert.equal(await form.validate(), false);
+  assert.equal(getValue(errorOf($values.email)), 'invalid email');
+
+  form.reset($values.email);
+
+  await tick();
+
+  // the restored value is what re-ran it, so what it reports is about that
+  assert.equal(getValue($values.email), 'jane@example.com');
+  assert.equal(getValue(errorOf($values.email)), undefined);
+  assert.equal(getValue(email.$isError), false);
+  assert.equal(getValue(form.$isValid), true);
+});
+
+test('a field is validating while a rule covering it is in flight', async () => {
+  const $values = createControl({ email: '', name: '' });
+
+  const form = createForm($values);
+
+  const email = field(form, $values.email).result.state;
+
+  const name = field(form, $values.name).result.state;
+
+  let settle!: (error: string | undefined) => void;
+
+  validator(
+    form,
+    $values.email,
+    () =>
+      new Promise<string | undefined>((resolve) => {
+        settle = resolve;
+      })
+  );
+
+  const validating = form.validate();
+
+  await tick();
+
+  assert.equal(getValue(email.$isValidating), true);
+  assert.equal(getValue(name.$isValidating), false, 'no rule of its own');
+  assert.equal(getValue(form.$isValidating), true);
+
+  // a field arriving mid-flight is validating too
+  const late = fieldState(form, $values.email).result;
+
+  assert.equal(getValue(late.$isValidating), true);
+
+  settle(undefined);
+
+  await validating;
+
+  await tick();
+
+  assert.equal(getValue(email.$isValidating), false);
+  assert.equal(getValue(form.$isValidating), false);
+});
+
+test('a field hands out the value, writes it back, and reports its error', async () => {
+  const $values = createControl({ email: 'jane@example.com' });
+
+  const form = createForm($values);
+
+  const email = field(form, $values.email);
+
+  assert.equal(email.result.props.value, 'jane@example.com');
+  assert.equal(email.result.props.isError, false);
+
+  email.result.props.onChange('nobody');
+
+  await tick();
+
+  assert.equal(getValue($values.email), 'nobody');
+  // reading the value is what rerenders it, so the next render carries it
+  assert.equal(email.render().props.value, 'nobody');
+
+  validator(form, $values.email, (address: string) =>
+    address.includes('@') ? undefined : 'invalid email'
+  );
+
+  await form.validate();
+
+  await tick();
+
+  assert.equal(email.render().props.isError, true);
+});
+
+test('a changed control is a different rule, and takes its error with it', async () => {
+  const $values = createControl({ rows: ['', 'b'] });
+
+  const form = createForm($values);
+
+  let index = 0;
+
+  const rule = mount(form, () =>
+    useValidator($values.rows[index], (value: string) =>
+      value ? undefined : 'required'
+    )
+  );
+
+  assert.equal(await form.validate(), false);
+  assert.equal(getValue(rule.result), 'required');
+
+  const first = rule.result;
+
+  index = 1;
+
+  const second = rule.render();
+
+  await tick();
+
+  // the rule of the old control is gone, and so is what it held
+  assert.notEqual(second, first);
+  assert.equal(getValue(first), undefined);
+  assert.equal(getValue(form.$isValid), true);
+
+  assert.equal(await form.validate(), true, 'the row it moved to passes');
+});
+
+test('a bare reset clears the rules of the fields outside the form control', async () => {
+  const $values = createControl({ email: 'jane@example.com' });
+
+  const $foreign = createControl({ note: 'kept' });
+
+  const form = createForm($values);
+
+  const note = field(form, $foreign.note).result.state;
+
+  const $error = validator(form, $foreign.note, (value: string) =>
+    value === 'kept' ? undefined : 'not what it was'
+  ).result;
+
+  setValue($foreign.note, 'edited');
+
+  await tick();
+
+  assert.equal(await form.validate(), false);
+  assert.equal(getValue($error), 'not what it was');
+
+  form.reset();
+
+  await tick();
+
+  assert.equal(getValue($foreign.note), 'kept');
+  assert.equal(getValue($error), undefined);
+  assert.equal(getValue(note.$isError), false);
+  assert.equal(getValue(form.$isValid), true);
+});
+
+test('a rule may report a control outside what it validates', async () => {
+  const $values = createControl({ from: 5, to: 1 });
+
+  const $summary = createControl({ dates: '' });
+
+  const form = createForm($values);
+
+  const summary = field(form, $summary.dates).result.state;
+
+  const errorOf = pathValidator(form, $values, ({ from, to }: any) =>
+    from <= to ? [] : [[$summary.dates, 'the range is backwards']]
+  ).result;
+
+  assert.equal(await form.validate(), false);
+
+  // marked, and reachable, though it sits in another tree entirely
+  assert.equal(getValue(errorOf($summary.dates)), 'the range is backwards');
+  assert.equal(getValue(summary.$isError), true);
+
+  // and a field of it arriving afterwards is marked the same way
+  const $other = createControl({ note: '' });
+
+  const late = pathValidator(form, $values, () => [
+    [$other.note, 'reported before anything was mounted on it'],
+  ]);
+
+  assert.equal(await form.validate(), false);
+
+  assert.equal(getValue(fieldState(form, $other.note).result.$isError), true);
+
+  late.unmount();
+});
+
+test('two runs of one rule are two answers, and one of them is not both', async () => {
+  const $values = createControl({ email: '' });
+
+  const form = createForm($values);
+
+  const resolvers: Array<(error: string | undefined) => void> = [];
+
+  validator(
+    form,
+    $values.email,
+    () => new Promise<string | undefined>((resolve) => resolvers.push(resolve))
+  );
+
+  const first = form.validate();
+
+  const second = form.validate();
+
+  await tick();
+
+  assert.equal(getValue(form.$isValidating), true);
+
+  resolvers[0](undefined);
+
+  await first;
+
+  await tick();
+
+  // the second is still out there
+  assert.equal(getValue(form.$isValidating), true);
+
+  resolvers[1](undefined);
+
+  await second;
+
+  await tick();
+
+  assert.equal(getValue(form.$isValidating), false);
+});
+
+test('an unmounted form lets go of the control it was over', async () => {
+  const $values = createControl({ name: 'jane' });
+
+  const rendered = renderHook(() => useForm($values, { submit: noop } as any));
+
+  const form = rendered.result;
+
+  // starts dirty tracking, which is what subscribes the entries
+  const { $isDirty } = form;
+
+  setValue($values.name, 'john');
+
+  await tick();
+
+  assert.equal(getValue($isDirty), true);
+
+  const listeners = () => ($values[INTERNALS] as any)._root._listeners.length;
+
+  assert.equal(listeners() > 0, true);
+
+  rendered.unmount();
+
+  // the entry of its own control is the form's to release, no field holds it
+  assert.equal(listeners(), 0);
+  assert.equal((form as any)._entries.size, 0);
+
+  setValue($values.name, 'jack');
+
+  await tick();
+
+  assert.equal((form as any)._dirtyCount, 0, 'nothing of it is still watching');
+});
+
+test('a field lets go of its own element, not of another field of the control', () => {
+  const $values = createControl({ email: '' });
+
+  const form = createForm($values);
+
+  const first = field(form, $values.email);
+
+  const second = field(form, $values.email);
+
+  const firstInput = fakeInput(0);
+
+  const secondInput = fakeInput(1);
+
+  first.result.props.ref(firstInput);
+
+  second.result.props.ref(secondInput);
+
+  // whichever bound last is what focus reaches
+  assert.equal(form.focus($values.email), true);
+  assert.equal(secondInput.focused, true);
+
+  // the other one going takes nothing with it
+  first.result.props.ref(null);
+
+  assert.equal(form.focus($values.email), true);
+
+  second.result.props.ref(null);
+
+  assert.equal(form.focus($values.email), false);
+});
+
+test('a field of a changed control registers as the field it became', async () => {
+  const $values = createControl({ rows: ['a', 'b'] });
+
+  const form = createForm($values);
+
+  let index = 0;
+
+  const row = mount(
+    form,
+    () =>
+      Field({
+        control: $values.rows[index],
+        render: ((props: any) => props) as any,
+      }) as unknown as { value: string }
+  );
+
+  const registered = (control: any) => (form as any)._entries.has(control);
+
+  assert.equal(row.result.value, 'a');
+  assert.equal(registered($values.rows[0]), true);
+
+  index = 1;
+
+  assert.equal(row.render().value, 'b');
+
+  assert.equal(registered($values.rows[1]), true);
+  assert.equal(registered($values.rows[0]), false, 'the one it left is gone');
+});
+
+test('the form is where a rule with no trigger of its own gets one', async () => {
+  const $values = createControl({ email: 'jane@example.com' });
+
+  const form = createForm($values, { validateOn: 'change' });
+
+  const $error = validator(form, $values.email, (email: string) =>
+    email.includes('@') ? undefined : 'invalid'
+  ).result;
+
+  setValue($values.email, 'nobody');
+
+  await tick();
+
+  // no mode of its own, so it took the form's
+  assert.equal(getValue($error), 'invalid');
+});
+
+test('a submit handler that throws is the handler`s to answer for', async () => {
+  const $values = createControl({ email: 'jane@example.com' });
+
+  const form = createForm($values, {
+    submit() {
+      throw new Error('the server said no');
+    },
+  });
+
+  field(form, $values.email);
+
+  await assert.rejects(form.submit(), /the server said no/);
+
+  // whatever it threw, the form is not left submitting
+  assert.equal(getValue(form.$isSubmitting), false);
+  assert.equal(getValue(form.$isValid), true);
+
+  // and it submits again when asked again
+  await assert.rejects(form.submit(), /the server said no/);
 });

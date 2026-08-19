@@ -131,7 +131,7 @@ For working code rather than snippets, [`examples/`](examples) has twelve standa
 - **Persistence**: [`getPersistStorage`](#getpersiststorageoptions), [`safeLocalStorage`](#safelocalstorage), [`safeSessionStorage`](#safesessionstorage)
 - **DOM**: [`mediaQuery`](#mediaqueryquery), [`$online`](#online), [`$pageVisible`](#pagevisible), [`$windowSize`](#windowsize)
 - **Schedulers**: [`batch`](#batchcallback-scheduler), [`createManualScheduler`](#createmanualscheduler), [`createThrottleScheduler`](#createthrottleschedulerms), [`createDebounceScheduler`](#createdebounceschedulerms)
-- **Forms**: [`useForm`](#useformcontrol-options), [`FormProvider`](#formprovider-form), [`Field`](#field), [`NativeField`](#nativefield), [`useFieldArray`](#usefieldarraycontrol-options), [`useFieldState`](#usefieldstatecontrol), [`useFormState`](#useformstate)
+- **Forms**: [`useForm`](#useformcontrol-options), [`FormProvider`](#formprovider-form), [`useValidator`](#usevalidatorcontrol-validate-validateon--validator), [`usePathValidator`](#usepathvalidatorcontrol-validate-validateon--pathvalidator), [`useNativeField`](#usenativefieldcontrol-options--nativefield), [`useField`](#usefieldcontrol--field), [`useFieldArray`](#usefieldarraycontrol), [`useFieldState`](#usefieldstatecontrol), [`useFormState`](#useformstate)
 - **Router**: [`createRouter`](#createrouterpaths), [`createPath`](#createpathpath), [`createAsyncPath`](#createasyncpathsource), [`param`](#paramoptions), [`query`](#queryoptions), [`oneOf`](#oneofoptions), [`arrayParam`](#arrayparamoptions), [`createRouterView`](#createrouterviewroutes), [`Link` / `useLink`](#link--uselink), [`navigate`](#navigateto-replace-ignoreblock-scrolltotop-scrollrestoration), [params as controls](#route-params-are-controls), [`replaceValue`](#replacevaluecontrol-value-scheduler), [anchors](#anchors), [`registerAnchorOffset`](#registeranchoroffsetroute), [`selectRegisteredAnchors`](#selectregisteredanchorsroute), [`trackScroll`](#trackscrollanchor), [`navigationBlocker`](#blocking-navigation), [`repairHistory`](#repairhistory)
 - **[Troubleshooting](#troubleshooting)**: [param value type + `stringify`](#paramquery-value-type-breaks-when-stringify-is-present), [named import suggestions in VS Code](#get-named-controlla-import-suggestions-in-vs-code)
 
@@ -1066,9 +1066,17 @@ setValue($search, value, debounce);   // commits 300ms after the last change
 
 ## Forms
 
-Validation, submit orchestration and dirty tracking over controls you already have. The form **doesn't own the values**: `useForm` takes a control, fields register against controls, and reading and writing stay what they are everywhere else - `useValue`, `setValue`, granular per-path re-renders.
+Validation, submit orchestration and dirty tracking over controls you already have. The form **doesn't own the values**: `useForm` takes a control, and reading and writing stay what they are everywhere else - `useValue`, `setValue`, granular per-path re-renders.
 
-Fields register by being mounted, so a conditional field un-registers by disappearing. Registration is loose in both directions: the form control is what gets submitted and reset, including paths no field sits on, while validation and `$isValid` come from whatever registered - a field over some unrelated control still takes part in the sweep.
+Three separate things, each mountable on its own:
+
+| | What it is | Mounted as |
+|---|---|---|
+| **Fields** | the wiring between a control and an element - `ref`, `name`, `onBlur`, and whether it holds an error | `useNativeField` / `useField`, or `NativeField` / `Field` |
+| **Validators** | the rules, each owning the error it wrote as a control of its own | `useValidator` / `usePathValidator`, or `Validator` / `PathValidator` |
+| **The form** | the sweep, the submit, the baseline, the focus | `useForm` + `FormProvider` |
+
+A field validates nothing and a validator renders nothing, so a rule can cover controls no field is mounted on, several rules can cover one field, and both un-register by disappearing.
 
 ### `useForm(control, options)`
 
@@ -1078,107 +1086,218 @@ Creates the form handle. Created once and kept for the component's life; `option
 |---|---|---|
 | `control` | `Control` | What gets submitted, reset and baselined. |
 | `options.submit` | `(values, changed) => void \| Promise<void>` | Runs once every registered validator passed. `changed` is the dot paths differing from the baseline - what a `PATCH` would send. |
-| `options.submitFailed?` | `(errors: FieldError[]) => void \| Promise<void>` | Runs instead, after the first invalid field is focused. |
-| `options.validateOn?` | `'submit' \| 'change' \| 'blur'` | Default trigger for the fields under it (default: `'submit'`). |
-| `options.resetValue?` | `T` | Where a bare `reset()` goes instead of the starting value. |
+| `options.submitFailed?` | `() => void \| Promise<void>` | Runs instead, after the first invalid field is focused. What failed is in the error controls the validators returned. |
+| `options.validateOn?` | `'submit' \| 'change' \| 'blur'` | Default trigger for the validators under it (default: `'submit'`). |
 
-**Returns**: a `FormState` - `$isSubmitting`, `$isValidating`, `$isValid`, `$isDirty`, `submit(event?)`, `validate()`, `reset(control?, value?)`, `setError(control, error)`.
+**Returns**: a `FormState` - `$isSubmitting`, `$isValidating`, `$isValid`, `$isDirty`, `submit(event?)`, `validate()`, `reset(control?, value?)`, `focus(control)`.
 
-The **baseline** is taken when the form is created, and moves to whatever a successful submit or a `reset` wrote. `$isDirty` and `changed` are both measured against it, so an autosaving form gets what moved since the *previous* submit.
+`$isValid` is every mounted validator holding no error - one that never ran counts as valid. `focus(control)` focuses that field's element and returns whether there was one; a field is focusable once it's mounted and passed its `ref` on. A failed `submit` focuses the first invalid field in the *document*, and for an error that marks no field of its own (an array rule, a group rule) the first field under what it validates.
 
-Over an async control it is every value a load hands over: the first one the form waited for, and whatever a reload replaces it with - a reload discards the edits along with the value they were made to, so it starts again from what came back. Which is why a form over a control that reloads underneath it (`invalidate`, `reloadOnFocus`, `reloadIfStale`, a poll) should not be editable while the reload is in flight - an edit committed during one is taken for what the load brought and baselines itself. Nothing stops it: a reloading control still holds its value and its fields still write. Gate the fields on `selectLoading` if the control can reload while they are mounted.
+The **baseline** is taken when the form is created, and moves to whatever a `reset` wrote. `$isDirty` and `changed` are both measured against it. A submit leaves it alone - `reset(control, values)` from the handler is what makes what was sent the new baseline, so an autosaving form gets what moved since the *previous* submit:
 
-A **sync derived** control (`createDerivedControl`) over an async source has no load status of its own, so a form over it baselines whatever the sources had computed by then - use the async control itself, or `createAsyncDerivedControl`.
-
-```tsx
-const $values = useControl({ email: '', tags: ['react'] });
-
+```ts
 const form = useForm($values, {
-  validateOn: 'blur',
-  submit: (values, changed) => api.save(values, changed),
+  submit: async (values, changed) => {
+    await api.save(values, changed);
+
+    form.reset($values, values);   // an edit made while it was in flight stays dirty
+  },
 });
 ```
 
+A `reset` also takes the errors of what it restored with it. A rule watching more than what was reset keeps its own - it holds an error, so it is watching, and the restored value is what runs it again: what it reports is about that value, not about the one on its way out.
+
+Over an async control the baseline is every value a load hands over: the first one the form waited for, and whatever a reload replaces it with - a reload discards the edits along with the value they were made to, so it starts again from what came back. Which is why a form over a control that reloads underneath it (`invalidate`, `reloadOnFocus`, `reloadIfStale`, a poll) should not be editable while the reload is in flight - an edit committed during one is taken for what the load brought and baselines itself. Nothing stops it: a reloading control still holds its value and its fields still write. Gate the fields on `selectLoading` if the control can reload while they are mounted.
+
+A **sync derived** control (`createDerivedControl`) over an async source has no load status of its own, so a form over it baselines whatever the sources had computed by then - use the async control itself, or `createAsyncDerivedControl`.
+
 ### `<FormProvider form>`
 
-Exposes the form to the `Field`s and `useFieldState`/`useFormState` calls under it. A `Field` outside any provider still works - it just validates on its own and takes part in no submit.
+Exposes the form to the fields, validators and `useFieldState`/`useFormState` calls under it. Outside any provider a field is still wired to its control and a rule still validates - they just have no form to meet in, so nothing is swept, nothing is marked (`isError` stays `false`), and the error is only what its own control holds.
 
-### `<Field>`
+### Errors
 
-Registers a control's validator for as long as it stays mounted, and renders it from its own state. `render` gets the wiring and the field's state, **not** a `value`/`onChange` pair - the value is yours to read and write.
-
-| Prop | Type | Description |
-|---|---|---|
-| `control` | `Control` | The field's control. |
-| `validate?` | `(value) => E \| undefined \| Promise<E \| undefined>` | Returns the error, or `undefined` when it passes. |
-| `validateOn?` | `'submit' \| 'change' \| 'blur'` | Overrides the form's trigger. |
-| `keepValidator?` | `boolean` | Stays registered after unmount - a wizard step that shouldn't un-validate. |
-| `render` | `(props, state) => ReactNode` | `props`: `name`, `ref`, `onBlur?`. `state`: `$field`, `$error`, `$isDirty`, `$isValidating`. |
-
-Attach `ref`: a failed `submit` focuses the first invalid field through it. Everything but `control` is read on the first render and never again.
+A validator hands back the error as a **control**, so the shape is yours - a message, or the props of whatever renders one, read per part:
 
 ```tsx
-<Field
-  control={$values.email}
-  validate={(email) => (email.includes('@') ? undefined : 'invalid email')}
-  render={(props, { $field, $error }) => (
-    <label>
-      <ControlConsumer
-        control={$field}
-        render={(value) => (
-          <input
-            {...props}
-            value={value}
-            onChange={(e) => setValue($field, e.target.value)}
-          />
-        )}
-      />
-      <ControlConsumer control={$error} />
-    </label>
-  )}
+const $error = useValidator($values.email, (email) =>
+  email.includes('@') ? undefined : 'invalid email');
+
+<ControlConsumer control={$error} />;
+```
+
+`undefined` is passing; anything else is failing. A field never carries the error itself - it only knows **that** it has one, since several validators can cover it:
+
+```tsx
+const { isError } = useField($values.email);          // in the wiring
+const { $isError } = useFieldState($values.email);    // or on its own
+```
+
+An error belongs to **one control** and goes nowhere else - not down to the fields under it, not up to the ones above. `useValidator` reports for the controls it was given; `usePathValidator` reports for whichever controls its rule names.
+
+A `useValidator` error is also writable, so a rejection coming back from the server can be put straight on the field - and it revalidates like any other:
+
+```ts
+setValue($error, 'already taken');
+```
+
+Whatever the trigger, an error revalidates live until it clears. Which is why the next run of that rule overwrites what you wrote: to keep a server error until *you* clear it, give the rule a control to read it from. A rule watches every control it is given, and only answers for the slots it fills:
+
+```tsx
+const $rejected = useControl<string | undefined>(undefined);   // yours to clear
+
+const [$emailError] = useValidator(
+  [$values.email, $rejected],
+  ([email, rejected]) => [rejected ?? (email.includes('@') ? undefined : 'invalid email')],
+  'change'
+);
+```
+
+Writing `$rejected` re-runs the rule, and `$rejected` itself is never marked - it carries no slot of its own. A rule left on `'submit'` won't see the write until the next sweep, so call `form.validate()` after the response, or watch it on `'change'` like above.
+
+A validator must not throw: catch what can fail and return an error instead (`'could not check right now'`). An exception is reported rather than shown - through `reportError` from a change run, out of the promise from `submit()`/`validate()` - and nothing about the form says what went wrong.
+
+### `useValidator(control, validate, validateOn?)` / `<Validator>`
+
+The rule for one control, or for a tuple of them.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `control` \| `controls` | `Control` \| `Control[]` | What it validates. A tuple gets every value and answers per control. |
+| `validate` | `(value) => E \| undefined \| Promise<…>` | The error, or `undefined`. For a tuple: one slot per control. |
+| `validateOn?` | `'submit' \| 'change' \| 'blur'` | Overrides the form's trigger. Any of a tuple's controls blurring is enough for `'blur'`. |
+
+**Returns**: the error control - one per slot for the tuple form. `validate` is read every render, so closing over props is safe.
+
+```tsx
+// the error lands on the field that should show it, not on both
+const [, $repeatError] = useValidator(
+  [$values.password, $values.repeat],
+  ([password, repeat]) =>
+    password === repeat ? undefined : [undefined, 'passwords differ']
+);
+```
+
+The component form takes the same three as props and hands the error control(s) to `render`, which is optional - leave it out when only `isError` matters and it renders nothing. It's also how a rule that only applies sometimes is mounted, since a hook can't be called conditionally:
+
+```tsx
+{required && (
+  <Validator
+    control={$values.email}
+    validate={(email) => (email ? undefined : 'required')}
+    render={($error) => <ControlConsumer control={$error} />}
+  />
+)}
+```
+
+### `usePathValidator(control, validate, validateOn?)` / `<PathValidator>`
+
+The rule over a subtree that reports the errors of the fields **under** it - which rows duplicate, which of two dates is the wrong one. `validate` answers with one entry per control that failed:
+
+```tsx
+const errorOf = usePathValidator($values.emails, (emails) => {
+  const seen = new Map<string, number>();
+
+  const errors: ControlErrors<string> = [];
+
+  for (let i = 0; i < emails.length; i++) {
+    const at = seen.get(emails[i]);
+
+    if (at !== undefined) {
+      errors.push([$values.emails[at], 'duplicate']);
+
+      errors.push([$values.emails[i], 'duplicate']);
+    } else {
+      seen.set(emails[i], i);
+    }
+  }
+
+  return errors;
+});
+
+<ControlConsumer control={errorOf($values.emails[index])} />;
+```
+
+**Returns**: `errorOf(control)` - that control's error as a control of its own, `undefined` while it has none. The control is made the first time it's asked for and kept, so a field whose error nothing renders allocates nothing. Targets are controls, not strings, so a rename follows and there's nothing to parse.
+
+Nothing to report is `undefined` or no entries at all. The error belongs to the control it was reported for and to nothing else - neither the fields under it nor the ones above turn red with it, so report those too when they should be. An error that belongs to the whole thing is `useValidator` on it.
+
+The `ControlErrors<E>` annotation is only needed for an accumulator like the one above - an array literal is inferred from the call. Each pair is inferred on its own, so a rule that answers with a different error for a different kind of control keeps them apart: `errorOf` reads as one signature per pair, and asking about a control nothing was paired with doesn't compile. Pairs of their own shapes are `ControlError<typeof $control, E>[]` rather than `ControlErrors<E>`.
+
+The component form is the same rule, mountable with the subtree it belongs to, and hands `errorOf` to `render`:
+
+```tsx
+<PathValidator
+  control={$values.dates}
+  validate={({ from, to }) =>
+    from <= to ? undefined : [[$values.dates.to, 'ends before it starts']]}
+  render={(errorOf) => <ControlConsumer control={errorOf($values.dates.to)} />}
 />
 ```
 
-### `<NativeField>`
+### `useNativeField(control, options)` / `<NativeField>`
 
-A field the **element itself owns**: read on every `input`/`change`, written back only when the control moves elsewhere (a `reset`, an async fill). Typing re-renders nothing.
+A field the **element itself owns**: read on every `input`/`change`, written back only when the control moves elsewhere (a `reset`, an async fill). Typing re-renders nothing, and neither does an error appearing - `aria-invalid` and `aria-describedby` land on the element directly.
 
-Takes everything `Field` does, plus:
-
-| Prop | Type | Description |
+| Option | Type | Description |
 |---|---|---|
 | `type` | `NativeFieldType` | What the field *is*, not which element renders it - see below. |
 | `parse?` / `format?` | `(value) => …` | Converts on the way to the control and back. |
-| `scheduler?` | `Scheduler` | Commits what the element writes through it - a `createDebounceScheduler(300)` on a text filter. |
 | `errorId?` / `describedBy?` | `string` | Composed into the element's `aria-describedby`. |
+
+**Returns**: `name`, `ref`, `onBlur` and the attributes the type implies - spread them onto your `input`, `select` or `textarea`. Everything but `control` is read once.
+
+The element writes on every `input`/`change`, with nothing in between: what the validators read is always what was typed. To have readers of the control settle instead, debounce on their side - a `createDebounceScheduler` on the write that feeds them, or a derived control they watch.
 
 `type` covers `text`, `search`, `url`, `tel`, `password`, `color`, `hidden`, `email`, `numeric`, `decimal`, `range`, `checkbox`, `radio`, `file`, `date`, `month`, `week`, `time`, `datetime-local`, `textarea`, `select`, `multiselect`. The value type follows from it (`checkbox` → `boolean`, `numeric` → `number`, `file` → `FileList | null`, `multiselect` → `string[]`), and a control that can't hold everything the field may write is a compile error. `numeric`/`decimal`/`email` render as `text` with an `inputmode`: the native types have no text cursor to restore a caret in, and run validation of their own before yours.
 
 ```tsx
+const amount = useNativeField($values.amount, {
+  type: 'decimal',
+  errorId: 'amount-error',
+});
+
+return <input {...amount} />;
+```
+
+The component form takes the same options as props, and hands `render` the wiring plus the field's state - for a field mounted inline, in a list, or conditionally:
+
+```tsx
 <NativeField
-  type='decimal'
-  control={$values.amount}
-  errorId='amount-error'
-  validate={(amount) => (amount ? undefined : 'required')}
-  render={(props, { $error }) => (
-    <>
-      <input {...props} />
-      <ControlConsumer
-        control={$error}
-        render={(error) => <span id='amount-error'>{error}</span>}
-      />
-    </>
+  type='text'
+  control={$values.tags[index]}
+  render={(props, { $isError }) => (
+    <input {...props} className={useValue($isError) ? 'invalid' : undefined} />
   )}
 />
 ```
 
-### `useFieldArray(control, options?)`
+The same props can go on several elements - a radio group, one field shown twice - on React 19. Below that, one element per field.
+
+### `useField(control)` / `<Field>`
+
+The wiring for a component that owns its own rendering - a date picker, a combobox, anything taking `value`/`onChange`.
+
+**Returns**: `name`, `ref`, `onBlur`, plus `value`, `onChange(value)` and `isError`.
+
+Reading the value means re-rendering on every keystroke, which a component taking a `value` prop makes unavoidable - `Field` is this hook as a component, so that re-render stops there instead of taking the section with it. For a native element, `useNativeField` re-renders nothing at all.
+
+```tsx
+<Field
+  control={$values.country}
+  render={({ value, onChange, isError, ...rest }) => (
+    <Select {...rest} value={value} onChange={onChange} error={isError} />
+  )}
+/>
+```
+
+`onChange` takes the value itself, not an event, and writes straight through - a delayed write with a controlled input freezes what's typed.
+
+### `useFieldArray(control)`
 
 Gives an array control **a key per item** and the operations to restructure it. A key follows its item through an insert or a remove instead of belonging to the index, so rows keep their identity - and their DOM state - as the array moves under them.
 
-Pass `options` (`validate`, `validateOn`) to register the array as a field of its own: for what no single item can answer - how many there are, whether two of them collide.
-
-**Returns**: `$keys` plus the operations below (and `$error`, when validated).
+**Returns**: `$keys` plus the operations below.
 
 | Method | Description |
 |---|---|
@@ -1192,10 +1311,12 @@ Pass `options` (`validate`, `validateOn`) to register the array as a field of it
 
 A key is handed out once, from `0`, and never reused. A write from anywhere else (a `reset`, a server fill) keeps the keys of the indexes it kept and gives the tail of a longer array new ones. Calls compose within a flush - each starts from what the last one wrote - so `append` twice appends twice.
 
+What no single item can answer - how many there are, whether two collide - is a validator over the array: `useValidator` for the array's own error, `usePathValidator` for the rows'.
+
 ```tsx
-const { $keys, append, removeMany } = useFieldArray($values.tags, {
-  validate: (tags) => (new Set(tags).size < tags.length ? 'no duplicates' : undefined),
-});
+const { $keys, append, removeMany } = useFieldArray($values.tags);
+
+useValidator($values.tags, (tags) => (tags.length > 10 ? 'too many' : undefined));
 
 <ControlConsumer
   control={$keys}
@@ -1210,10 +1331,10 @@ const { $keys, append, removeMany } = useFieldArray($values.tags, {
 
 ### `useFieldState(control)`
 
-The state of one field - `$field`, `$error`, `$isDirty`, `$isValidating` - from anywhere under the form. The field doesn't have to be mounted yet: the entry is created on first access and its `Field` fills the validator in when it arrives.
+The state of one field - `$field`, `$isError`, `$isDirty`, `$isValidating` - from anywhere under the form. The field doesn't have to be mounted yet: the entry is created on first access and picks up whatever the mounted validators already hold for it.
 
 ```tsx
-const { $error, $isDirty } = useFieldState($values.email);
+const { $isError, $isDirty } = useFieldState($values.email);
 ```
 
 ### `useFormState()`

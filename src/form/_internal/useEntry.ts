@@ -13,7 +13,7 @@ import {
 const useEntry = (
   form: FormInternals | undefined,
   control: Control,
-  byRef?: boolean
+  byEffect: boolean
 ) => {
   const ref = useRef<FieldEntry>(null);
 
@@ -32,7 +32,7 @@ const useEntry = (
 
   // a `NativeField` lives by its element, so its ref is what holds the entry -
   // a branch settled for the component's life
-  if (!byRef) {
+  if (byEffect) {
     useLayoutEffect(() => {
       holdEntry(entry);
 

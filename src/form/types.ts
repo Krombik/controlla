@@ -1,31 +1,31 @@
-import type { FocusEvent, ReactNode, RefCallback, SubmitEvent } from 'react';
+import type { ReactNode, RefCallback, SubmitEvent } from 'react';
 
-import type { Control, ReadonlyControl, Scheduler, SelectValue } from '#types';
+import type {
+  Control,
+  ControlScope,
+  ReadonlyControl,
+  ReadonlyControlScope,
+  SelectValue,
+} from '#types';
 
-/** When a field's validator runs on its own, outside of a submit sweep. */
+/** When a validator runs on its own, outside of a submit sweep. */
 export type ValidateOn = 'submit' | 'change' | 'blur';
-
-/** A field holding an error when a submit gave up. */
-export type FieldError<E = any> = {
-  control: Control;
-  error: E;
-};
 
 type Combine<
   Item extends string | number,
   Prefix extends string,
 > = Prefix extends '' ? `${Item}` : `${Prefix}.${Item}`;
 
-/** Whatever keys these carry, a field over one holds the whole thing. */
+/** Whatever keys these carry, an error over one belongs to the whole thing. */
 type Leaf =
   Function | Date | RegExp | File | FileList | Map<any, any> | Set<any>;
 
 /**
- * Every dot path under {@link T}, the branches as well as the leaves — a field
- * sits on either. An array indexes as `${number}`, since which index a patch
- * carries isn't known here.
+ * Every dot path under {@link T}, the branches as well as the leaves — what a
+ * `PATCH` names and what a path validator keys its errors by. An array indexes
+ * as `${number}`, since which index is meant isn't known here.
  */
-type KeysOf<T, Prefix extends string = ''> =
+export type KeysOf<T, Prefix extends string = ''> =
   // `any` takes both sides of every branch below, which never stops recursing
   0 extends 1 & T
     ? string
@@ -41,13 +41,75 @@ type KeysOf<T, Prefix extends string = ''> =
             }[keyof T & (string | number)]
           : never;
 
-export type FormOptions<T = any, E = any> = {
+/** What a validator answers with — `undefined` while the value passes. */
+export type Validate<V, E> = (
+  value: V
+) => E | undefined | Promise<E | undefined>;
+
+/** One slot per control, each holding that control's own error. */
+export type ErrorsOf<C extends readonly Control[], E> = {
+  -readonly [Key in keyof C]: E | undefined;
+};
+
+/** The tuple form: it gets every value, and answers for every control. */
+export type ValidateAll<C extends readonly Control[], E> = (values: {
+  -readonly [Key in keyof C]: SelectValue<C[Key]>;
+}) => ErrorsOf<C, E> | undefined | Promise<ErrorsOf<C, E> | undefined>;
+
+/**
+ * One control and what is wrong with it - what a rule reports for each control
+ * it names. Both halves are inferred per pair, so a rule answering with a
+ * different error for a different kind of control keeps the two apart.
+ */
+export type ControlError<
+  C extends ReadonlyControl = ReadonlyControl,
+  E = any,
+> = [control: C, error: E];
+
+/**
+ * One error per control, all of them the same shape - the annotation an
+ * accumulator needs, since an array literal built by pushing widens away from a
+ * tuple. Pairs of their own shapes are an array of {@link ControlError}s.
+ *
+ * @example
+ * ```ts
+ * const errors: ControlErrors<string> = [];
+ *
+ * errors.push([$values.emails[i], 'duplicate']);
+ * ```
+ */
+export type ControlErrors<E = any> = Array<ControlError<Control, E>>;
+
+export type ValidateControls<V, E extends ControlError> = (
+  value: V
+) => E[] | undefined | Promise<E[] | undefined>;
+
+/** Every pair of a rule as a signature of its own, the way overloads read. */
+type UnionToIntersection<U> = (U extends any ? (x: U) => void : never) extends (
+  x: infer I
+) => void
+  ? I
+  : never;
+
+/**
+ * Reads the error a validator reported for one control - `undefined` while it
+ * reported none, typed to whatever that control was paired with. The control is
+ * created on first ask and kept, so nothing is allocated for a field whose
+ * error nothing renders.
+ */
+export type ErrorOf<E extends ControlError> = UnionToIntersection<
+  E extends any
+    ? (control: E[0]) => ReadonlyControlScope<E[1] | undefined>
+    : never
+>;
+
+export type FormOptions<T = any> = {
   /**
-   * Runs once every validator passed, with the form control's value. Once it
-   * resolves the form counts as saved, so it stops being dirty - though an
-   * edit made while it was still running stays.
+   * Runs once every validator passed, with the form control's value. A submit
+   * leaves the baseline where it is - call `reset(control, values)` from here
+   * to make what was sent the new one.
    *
-   * {@link changed} lists the fields that moved since the last save, as
+   * {@link changed} lists the fields that moved since the baseline, as
    * dot-joined paths relative to the form control - what a `PATCH` would send.
    * Leave the parameter out and nothing is collected for it.
    */
@@ -55,27 +117,22 @@ export type FormOptions<T = any, E = any> = {
   /**
    * Runs instead of {@link FormOptions.submit submit} when a validator failed,
    * after the first invalid field is focused - to scroll somewhere, or report
-   * the failure.
+   * the failure. What failed is in the error controls the validators returned.
    */
-  submitFailed?(errors: Array<FieldError<E>>): void | Promise<void>;
-  /** Default {@link ValidateOn trigger} of the fields under the form (default: `'submit'`). */
+  submitFailed?(): void | Promise<void>;
+  /** Default {@link ValidateOn trigger} of the validators under the form (default: `'submit'`). */
   validateOn?: ValidateOn;
-  /**
-   * Where `reset` goes instead of the values the form started with - filters
-   * restored from the url reset to empty rather than back to the url.
-   */
-  resetValue?: T;
 };
 
 /** The form handle — what `useForm` creates and `useFormState` reads back. */
 export type FormState = {
   /** `true` while a submit is in flight, across the validator sweep and the submit handler. */
   readonly $isSubmitting: ReadonlyControl<boolean>;
-  /** `true` while any field has an async validation in flight. */
+  /** `true` while any validator has an async check in flight. */
   readonly $isValidating: ReadonlyControl<boolean>;
-  /** `true` while no field holds an error — a field that never validated counts as valid. */
+  /** `true` while no validator holds an error — one that never ran counts as valid. */
   readonly $isValid: ReadonlyControl<boolean>;
-  /** `true` while anything has been edited since it was last saved or reset. */
+  /** `true` while anything has been edited since it was last reset. */
   readonly $isDirty: ReadonlyControl<boolean>;
   /**
    * Runs every validator and, if all passed, the
@@ -90,61 +147,38 @@ export type FormState = {
   /** Runs every validator, resolving to whether all of them passed. */
   validate(): Promise<boolean>;
   /**
-   * Puts the values back to what they were saved as, or to
-   * {@link FormOptions.resetValue resetValue} if the form was given one.
-   * Restores everything, or one control - a path with no field on it included.
-   * Given a value as well, writes that and treats it as saved.
+   * Puts the values back to the baseline - everything, or one control, a path
+   * with no field on it included. Given a value as well, writes that and makes
+   * it the baseline instead. Either way the validators it covers forget what
+   * they held.
    */
   reset: {
     (): void;
     (control: Control): void;
     <C extends Control>(control: C, value: SelectValue<C>): void;
   };
-  /** Sets an error on a field from outside its validator — a rejection coming back from the server. */
-  setError(control: Control, error: any): void;
+  /**
+   * Focuses the field's element - the one a server error named, the first one
+   * of a step. Answers whether there was anything to focus: a field is only
+   * focusable once it's mounted and its `ref` was passed on to an element.
+   */
+  focus(control: Control): boolean;
 };
 
 /** The reactive state of a single field, keyed by its control. */
-export type FieldState<C extends ReadonlyControl = ReadonlyControl, E = any> = {
+export type FieldState<C extends ReadonlyControl = ReadonlyControl> = {
   /** The control this state belongs to, so `render` needs no closure. */
   readonly $field: C;
-  /** The current validation error, `undefined` while the field passes (or never ran). */
-  readonly $error: ReadonlyControl<E | undefined>;
   /**
-   * Whether this field has been edited since it was last saved or reset - a
-   * save clears it without the value having to change back.
+   * Whether a validator holds an error for this exact control. What the error
+   * *is* lives in the control its validator returned - an error goes neither
+   * up nor down the tree, so a field is red for its own path only.
    */
+  readonly $isError: ReadonlyControl<boolean>;
+  /** Whether this field has been edited since it was last reset. */
   readonly $isDirty: ReadonlyControl<boolean>;
-  /** Whether an async validation of this field is in flight. */
+  /** Whether an async validator covering this field is in flight. */
   readonly $isValidating: ReadonlyControl<boolean>;
-};
-
-export type FieldArrayOptions<V = any, E = any> = {
-  /**
-   * Validates the array as one thing — its length, or its items against each
-   * other. What no field of a single item can answer.
-   */
-  validate?(items: V): E | undefined | Promise<E | undefined>;
-  /**
-   * Overrides the form's {@link ValidateOn trigger}. `'blur'` has nothing to
-   * fire it here — an array holds no element to leave.
-   */
-  validateOn?: ValidateOn;
-};
-
-/**
- * What an array validated by {@link FieldArrayOptions options} carries on top
- * of the structure — an array left unvalidated registers no field, so there is
- * nothing that could hold an error.
- */
-export type ValidatedFieldArray<E = any> = {
-  /**
-   * The error from {@link FieldArrayOptions.validate validate}, `undefined`
-   * while the array passes. The rest of the array's field state — its
-   * dirtiness, an async validation in flight — is `useFieldState` over the same
-   * control, since it's an ordinary registered field.
-   */
-  readonly $error: ReadonlyControl<E | undefined>;
 };
 
 /** The keys and the operations `useFieldArray` gives an array control. */
@@ -191,30 +225,26 @@ export type FieldArray<T> = {
   move(from: number, to: number): void;
 };
 
-export type FieldRenderProps = {
+/** The wiring a field hands to whatever renders it. */
+export type FieldRenderProps<V = any> = {
   /** The control's path, dot-joined — `undefined` for a root control. */
   name: string | undefined;
-  /** Attach it for `submit` to focus this field when it's the first invalid one. */
+  /** Attach it for `focus` and for a failed submit to reach this field. */
   ref: RefCallback<HTMLElement>;
-  /** Only there for a field that validates on blur — nothing listens otherwise. */
-  onBlur?(event: FocusEvent<HTMLElement>): void;
+  onBlur?(): void;
+  value: V;
+  /** Writes the value - a plain value, not an event. */
+  onChange(value: V): void;
+  /** Whether a validator holds an error for this field. */
+  isError: boolean;
 };
 
-type FieldOptions<C extends Control, E> = {
+export type FieldProps<C extends Control = Control> = {
   control: C;
-  /** Returns the error for an invalid {@link value}, or `undefined` — a promise for an async check. */
-  validate?(value: SelectValue<C>): E | undefined | Promise<E | undefined>;
-  /** Overrides the form's {@link ValidateOn trigger} for this field. */
-  validateOn?: ValidateOn;
-  /** Keeps the field registered after unmount — for a step of a wizard that shouldn't un-validate. */
-  keepValidator?: boolean;
-};
-
-export type FieldProps<C extends Control = Control, E = any> = FieldOptions<
-  C,
-  E
-> & {
-  render(props: FieldRenderProps, state: FieldState<C, E>): ReactNode;
+  render(
+    props: FieldRenderProps<SelectValue<C>>,
+    state: FieldState<C>
+  ): ReactNode;
 };
 
 /**
@@ -279,8 +309,7 @@ type CommonNativeProps<T extends NativeFieldType> = {
    * doesn't compile.
    */
   ref: RefCallback<NativeElement<T>>;
-  /** Only there for a field that validates on blur — nothing listens otherwise. */
-  onBlur?(event: FocusEvent<NativeElement<T>>): void;
+  onBlur?(): void;
 };
 
 export type NativeFieldRenderProps<T extends NativeFieldType> =
@@ -328,20 +357,11 @@ export type NativeFieldConverters<
   format?(value: SelectValue<C>): NativeValue<T>;
 };
 
-export type NativeFieldProps<
+export type NativeFieldOptions<
   T extends NativeFieldType = NativeFieldType,
   C extends Control = Control,
-  E = any,
-> = FieldOptions<C, E> & {
+> = {
   type: T;
-  /**
-   * Applies what the element writes through this {@link Scheduler scheduler} -
-   * a `createDebounceScheduler(300)` on a search box, nothing on the checkbox
-   * beside it. Typing shows up instantly either way; only the value waits, and
-   * so does everything reading it. Don't use it with a submit button, which
-   * could be clicked while a write is still pending.
-   */
-  scheduler?: Scheduler;
   /**
    * The id of the element showing the error, pointed at while there is one.
    * That describes the field to a screen reader on focus - to have an error
@@ -351,9 +371,43 @@ export type NativeFieldProps<
   /**
    * Whatever else describes the field — a hint, a format note — as one or more
    * ids. The field owns the element's `aria-describedby` and composes this
-   * with {@link NativeFieldProps.errorId errorId}, so pass ids here rather
+   * with {@link NativeFieldOptions.errorId errorId}, so pass ids here rather
    * than setting the attribute yourself: React would overwrite it.
    */
   describedBy?: string;
-  render(props: NativeFieldRenderProps<T>, state: FieldState<C, E>): ReactNode;
+} & Partial<NativeFieldConverters<T, C>>;
+
+export type NativeFieldProps<
+  T extends NativeFieldType = NativeFieldType,
+  C extends Control = Control,
+> = NativeFieldOptions<T, C> & {
+  control: C;
+  render(props: NativeFieldRenderProps<T>, state: FieldState<C>): ReactNode;
+};
+
+export type ValidatorProps<C extends Control = Control, E = any> = {
+  control: C;
+  validate: Validate<SelectValue<C>, E>;
+  validateOn?: ValidateOn;
+  render?(error: ControlScope<E | undefined>): ReactNode;
+};
+
+export type ValidatorAllProps<
+  C extends readonly Control[] = readonly Control[],
+  E = any,
+> = {
+  controls: C;
+  validate: ValidateAll<C, E>;
+  validateOn?: ValidateOn;
+  render?(errors: { [Key in keyof C]: ControlScope<E | undefined> }): ReactNode;
+};
+
+export type PathValidatorProps<
+  C extends Control,
+  E extends ControlError = ControlError,
+> = {
+  control: C;
+  validate: ValidateControls<SelectValue<C>, E>;
+  validateOn?: ValidateOn;
+  render?(errorOf: ErrorOf<E>): ReactNode;
 };

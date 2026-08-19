@@ -9,8 +9,8 @@ import getValue from '#core/getValue';
 import setValue from '#core/setValue';
 import watchValue from '#core/watchValue';
 import { addListener } from '#internal/flushQueue';
-import reportError from '#internal/reportError';
 import isNotEqual from '#form/internal/isNotEqual';
+import { dropEntry, seedEntry } from '#form/internal/validator';
 import identity from '#internal/identity';
 import noop from '#internal/noop';
 
@@ -142,20 +142,14 @@ export const makeEntry = (
 ): FieldEntry => ({
   _control: control,
   _form: form,
-  _validate: undefined,
-  _mode: 'submit',
-  _keep: false,
   _snapshot: form ? undefined : getValue(control),
   _dirty: false,
-  _error: undefined,
-  _pending: 0,
-  _attempt: 0,
+  _errorCount: 0,
+  _pendingCount: 0,
   _refs: 0,
-  _unwatch: undefined,
   _unwatchDirty: undefined,
   _element: undefined,
   _native: undefined,
-  _scheduler: undefined,
   _parse: identity,
   _format: identity,
   _errorId: undefined,
@@ -167,7 +161,6 @@ export const makeEntry = (
   _validatingControl: undefined,
   _dirtyControl: undefined,
   _state: undefined,
-  _props: undefined,
 });
 
 export const setEntryDirty = (
@@ -183,6 +176,32 @@ export const setEntryDirty = (
     }
 
     setValue(form._dirtyControl!, !!(form._dirtyCount += dirty ? 1 : -1));
+  }
+};
+
+/** One validator started or stopped marking this field. */
+export const markEntry = (entry: FieldEntry, delta: number) => {
+  const prev = entry._errorCount;
+
+  const count = (entry._errorCount = prev + delta);
+
+  if (!prev != !count) {
+    if (entry._errorControl) {
+      setValue(entry._errorControl, !!count);
+    }
+
+    entry._syncAria();
+  }
+};
+
+/** One validator covering this field went in or out of flight. */
+export const setEntryPending = (entry: FieldEntry, delta: number) => {
+  const prev = entry._pendingCount;
+
+  const count = (entry._pendingCount = prev + delta);
+
+  if (!prev != !count && entry._validatingControl) {
+    setValue(entry._validatingControl, !!count);
   }
 };
 
@@ -217,121 +236,6 @@ export const startDirtyTracking = (form: FormInternals) => {
   return (form._dirtyControl = createPrimitiveControl(!!count));
 };
 
-const setPending = (entry: FieldEntry, delta: number) => {
-  const prevPending = entry._pending;
-
-  const pending = (entry._pending = prevPending + delta);
-
-  if (entry._validatingControl) {
-    setValue(entry._validatingControl, !!pending);
-  }
-
-  const form = entry._form;
-
-  if (form && !prevPending != !pending) {
-    const count = (form._pendingCount += pending ? 1 : -1);
-
-    if (form._validatingControl) {
-      setValue(form._validatingControl, !!count);
-    }
-  }
-};
-
-export const setEntryError = (entry: FieldEntry, error: any) => {
-  const prevError = entry._error;
-
-  if (prevError !== error) {
-    entry._error = error;
-
-    if (entry._errorControl) {
-      setValue(entry._errorControl, error);
-    }
-
-    const form = entry._form;
-
-    if (form && (prevError === undefined) !== (error === undefined)) {
-      const count = (form._errorCount += error === undefined ? -1 : 1);
-
-      if (form._validControl) {
-        setValue(form._validControl, !count);
-      }
-    }
-
-    syncWatch(entry);
-
-    entry._syncAria();
-  }
-};
-
-export const runValidate = (entry: FieldEntry, value: any) => {
-  const validate = entry._validate;
-
-  if (!validate) {
-    return;
-  }
-
-  const attempt = ++entry._attempt;
-
-  const result = validate(value);
-
-  if (!result || typeof result.then != 'function') {
-    setEntryError(entry, result);
-
-    return;
-  }
-
-  setPending(entry, 1);
-
-  return (result as Promise<any>).then(
-    (error) => {
-      setPending(entry, -1);
-
-      if (attempt == entry._attempt) {
-        setEntryError(entry, error);
-      }
-    },
-    (err) => {
-      setPending(entry, -1);
-
-      throw err;
-    }
-  );
-};
-
-/** Runs a validation nobody awaits - a rejection surfaces instead of vanishing. */
-export const triggerValidate = (entry: FieldEntry, value: any) => {
-  const promise = runValidate(entry, value);
-
-  if (promise) {
-    promise.catch(reportError);
-  }
-};
-
-/** An active error revalidates live until it clears, whatever the trigger. */
-const syncWatch = (entry: FieldEntry) => {
-  const shouldWatch =
-    entry._validate !== undefined &&
-    (entry._mode == 'change' || entry._error !== undefined);
-
-  if (shouldWatch != (entry._unwatch !== undefined)) {
-    if (shouldWatch) {
-      entry._unwatch = watchValue(entry._control, (value) => {
-        triggerValidate(entry, value);
-      });
-    } else {
-      detachEntry(entry);
-    }
-  }
-};
-
-const detachEntry = (entry: FieldEntry) => {
-  if (entry._unwatch) {
-    entry._unwatch();
-
-    entry._unwatch = undefined;
-  }
-};
-
 /** Also the way back from an `Activity`, whose cleanup unregistered it. */
 const attachEntry = (form: FormInternals, entry: FieldEntry) => {
   const control = entry._control;
@@ -347,14 +251,13 @@ const attachEntry = (form: FormInternals, entry: FieldEntry) => {
       isNotEqual(getValue(control), snapshotOf(entry))
     );
   }
+
+  // whatever the mounted validators already hold for it
+  seedEntry(form, entry);
 };
 
 /** A mounted consumer: `Field` from its effect, `NativeField` from its ref. */
 export const holdEntry = (entry: FieldEntry) => {
-  // a field holds the validator it was mounted with, so once is enough - an
-  // active error re-arms it through `setEntryError`
-  syncWatch(entry);
-
   const form = entry._form;
 
   if (form) {
@@ -370,18 +273,11 @@ export const holdEntry = (entry: FieldEntry) => {
 export const releaseEntry = (entry: FieldEntry) => {
   const form = entry._form;
 
-  if (!form) {
-    detachEntry(entry);
-  } else if (!--entry._refs && !entry._keep) {
+  if (form && !--entry._refs) {
     form._entries.delete(entry._control);
 
-    // an unregistered entry has nothing left to clear an error, so a
-    // validation in flight is dropped instead of counting forever
-    entry._attempt++;
-
-    setEntryError(entry, undefined);
-
-    detachEntry(entry);
+    // an unregistered field is nothing to mark, and nothing to keep counting
+    dropEntry(form, entry);
 
     if (entry._unwatchDirty) {
       entry._unwatchDirty();
@@ -411,12 +307,14 @@ export const getEntry = (form: FormInternals, control: Control) => {
 export const getFieldState = (entry: FieldEntry): FieldState<any> =>
   (entry._state ||= {
     $field: entry._control,
-    get $error() {
-      return (entry._errorControl ||= createPrimitiveControl(entry._error));
+    get $isError() {
+      return (entry._errorControl ||= createPrimitiveControl(
+        !!entry._errorCount
+      ));
     },
     get $isValidating() {
       return (entry._validatingControl ||= createPrimitiveControl(
-        !!entry._pending
+        !!entry._pendingCount
       ));
     },
     get $isDirty() {
