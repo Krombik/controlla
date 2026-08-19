@@ -1013,4 +1013,55 @@ rel2();
   releaseConstant();
 }
 
+// a bound control is what the reload is awaited on, and its target is what
+// answers - a real request answers after the flush, so until the fresh value
+// commits the one still in hand must not read as settled
+{
+  const answers: any[] = [{ n: 1 }, { n: 2 }, { n: 2 }];
+
+  let call = 0;
+
+  const registry = createRegistry(createAsyncControl, {
+    load(handle: any) {
+      const answer = answers[call++];
+
+      new Promise((r) => setTimeout(r, 5)).then(() => {
+        handle.setValue(answer);
+      });
+    },
+  });
+
+  const $key = createPrimitiveControl(1);
+
+  const $bound = (registry as any).bind($key);
+
+  const release = retain($bound);
+
+  await new Promise((r) => setTimeout(r, 20));
+
+  assert.deepEqual(getValue($bound), { n: 1 }, 'bound: loaded');
+
+  assert.deepEqual(
+    await invalidate($bound, true),
+    { n: 2 },
+    'bound: the reload own answer, not the value kept while it ran'
+  );
+
+  assert.deepEqual(
+    await invalidate($bound, true),
+    { n: 2 },
+    'bound: an answer equal to what it had still settles'
+  );
+
+  answers.push({ n: 3 });
+
+  assert.equal(
+    await invalidate(($bound as any).n, true),
+    3,
+    'bound: a path of it follows the same reload'
+  );
+
+  release();
+}
+
 console.log('core-smoke.test.ts: all assertions passed');

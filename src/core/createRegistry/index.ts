@@ -45,6 +45,7 @@ import getStorageKey from '#internal/getStorageKey';
 import getObjectKey from '#internal/getObjectKey';
 import makeStatusInternals from '#internal/makeStatusInternals';
 import settlePromise from '#internal/settlePromise';
+import armPromise from '#internal/armPromise';
 import { AggregateControlError } from '#internal/AggregateControlError';
 import throwReadonlyError from '#internal/throwReadonlyError';
 import { commitErrorValue, commitStatusValue } from '#internal/commitStatus';
@@ -115,15 +116,35 @@ function enqueueBoundErrorSet(
     throwReadonlyError();
   }
 
-  const target = this._parent._target;
+  const parent = this._parent;
+
+  const target = parent._target;
 
   if (target && '_errorControl' in target) {
-    (target as AsyncControlInternals)._errorControl[INTERNALS]._enqueueSet(
+    const targetInternals = target as AsyncControlInternals;
+
+    targetInternals._errorControl[INTERNALS]._enqueueSet(
       value,
       lane,
       fromSource,
       path
     );
+
+    const targetPromise = targetInternals._promise;
+
+    if (targetPromise && !parent._promise) {
+      // nobody has to be awaiting it yet, and a failed reload rejects it
+      armPromise(parent).catch(noop);
+
+      targetPromise._promise.then(
+        (settled) => {
+          settlePromise(parent, true, settled);
+        },
+        (error) => {
+          settlePromise(parent, false, error);
+        }
+      );
+    }
   } else if (process.env.NODE_ENV !== 'production') {
     console.warn(
       '[registry] invalidate on bound control with unresolved or non-async target was ignored.'
