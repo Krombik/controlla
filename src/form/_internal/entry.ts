@@ -15,12 +15,10 @@ import identity from '#internal/identity';
 import noop from '#internal/noop';
 
 /**
- * The first value a load hands over is the baseline - before it there is
- * nothing to compare against, and `undefined` would make every field of the
- * root dirty the moment the data lands. What comes after it is not the form's
- * business: whoever asked for a reload is who decides whether what it brought
- * is the new baseline. A plain listener: the form must not be what starts the
- * load.
+ * The first value a load hands over is the baseline. What comes after it is
+ * not the form's business: whoever asked for a reload is who decides whether
+ * what it brought is the new baseline. A plain listener: the form must not be
+ * what starts the load.
  */
 const watchFirstLoad = (form: FormInternals, root: AsyncControlInternals) => {
   const armed = form._armedRoots;
@@ -28,33 +26,11 @@ const watchFirstLoad = (form: FormInternals, root: AsyncControlInternals) => {
   if (!armed.has(root)) {
     const listener: ChangeListener = (value) => {
       if (value !== undefined) {
-        form._roots.set(root, value);
-
-        // one value is all it was waiting for - the removal is deferred until
-        // the notify it is running in is over
-        armed.delete(root);
-
         removeListener(root, listener);
 
-        // the fields were notified before this moved what they compare
-        // against, so their dirtiness is a step behind
-        if (form._dirtyControl) {
-          const entries = form._entries;
+        armed.delete(root);
 
-          const it = entries.values();
-
-          for (let i = entries.size; i--;) {
-            const entry = it.next().value!;
-
-            if (entry._control[INTERNALS]._root === root) {
-              setEntryDirty(
-                form,
-                entry,
-                isNotEqual(getValue(entry._control), snapshotOf(entry))
-              );
-            }
-          }
-        }
+        form._roots.set(root, value);
       }
     };
 
@@ -69,9 +45,37 @@ const watchFirstLoad = (form: FormInternals, root: AsyncControlInternals) => {
 };
 
 /**
+ * The load watches of every root armed so far, subscribed by the mount. A
+ * value that landed between the render that armed one and this is already its
+ * baseline: the notify it came with had nobody to hear it, and the next one is
+ * an edit.
+ */
+export const watchArmedLoads = (form: FormInternals) => {
+  const armed = form._armedRoots;
+
+  const it = armed.entries();
+
+  for (let i = armed.size; i--;) {
+    const item = it.next().value!;
+
+    const root = item[0];
+
+    const value = root._value;
+
+    if (value !== undefined) {
+      armed.delete(root);
+
+      form._roots.set(root, value);
+    } else {
+      addListener(root, item[1]);
+    }
+  }
+};
+
+/**
  * The whole root at once, so every field of it compares against the same
- * moment. An async root that hasn't arrived is left alone - `undefined` would
- * make every field of it dirty when the data lands.
+ * moment. An async root that hasn't arrived is left alone: every path of it
+ * reads `undefined`, which is what it compares against anyway.
  */
 export const getBaseline = (form: FormInternals, control: Control) => {
   const internals = control[INTERNALS];

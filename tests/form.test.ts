@@ -999,6 +999,58 @@ test('a form over an async derived control baselines its first value too', async
   );
 });
 
+test('a value that landed with nobody listening is still the baseline', async () => {
+  const $values = createAsyncControl<{ name: string }>();
+
+  const rendered = renderHook(() => useForm($values, { submit: noop } as any));
+
+  const form = rendered.result;
+
+  field(form, $values.name);
+
+  // the mount is what subscribes the load watch, so unmounted it is not there
+  // for the value - and the next notify is an edit
+  rendered.unmount();
+
+  setValue($values, { name: 'jane' });
+
+  await tick();
+
+  rendered.remount();
+
+  assert.equal(
+    (form as any)._armedRoots.size,
+    0,
+    'the value it was waiting for is already there'
+  );
+  assert.equal(getValue(form.$isDirty), false);
+
+  setValue($values.name, 'john');
+
+  await tick();
+
+  assert.equal(getValue(form.$isDirty), true);
+
+  form.reset($values.name);
+
+  await tick();
+
+  assert.equal(getValue($values.name), 'jane', 'what arrived, not the edit');
+
+  // the watch it was subscribed with is gone with the value it waited for
+  invalidate($values, true);
+
+  setValue($values, { name: 'joan' });
+
+  await tick();
+
+  assert.equal(
+    getValue(form.$isDirty),
+    true,
+    'a reload after it is not a rebaseline'
+  );
+});
+
 test('the paths are not collected for a submit that never asked', async () => {
   const $data = createControl({ alerts: false });
 

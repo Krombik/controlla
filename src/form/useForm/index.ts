@@ -4,8 +4,13 @@ import type { Control, SelectValue } from '#types';
 import type { FormOptions, FormState } from '#form/types';
 import type { FormInternals } from '#form/internal/types';
 import makeForm from '#form/internal/makeForm';
-import { getEntry, holdEntry, releaseEntry } from '#form/internal/entry';
-import { addListener, removeListener } from '#internal/flushQueue';
+import {
+  getEntry,
+  holdEntry,
+  releaseEntry,
+  watchArmedLoads,
+} from '#form/internal/entry';
+import { removeListener } from '#internal/flushQueue';
 
 /**
  * Makes a form over the {@link control}. The fields and validators under its
@@ -72,26 +77,20 @@ const useForm = <C extends Control>(
   // render that never commits leaves nothing behind, since this is the only
   // thing that subscribes them
   useLayoutEffect(() => {
-    const armed = form._armedRoots;
-
     const entry = getEntry(form, form._control);
 
     form._attached = true;
 
     holdEntry(entry);
 
-    const it = armed.entries();
-
-    for (let i = armed.size; i--;) {
-      const item = it.next().value!;
-
-      addListener(item[0], item[1]);
-    }
+    watchArmedLoads(form);
 
     return () => {
       form._attached = false;
 
       releaseEntry(entry);
+
+      const armed = form._armedRoots;
 
       const it = armed.entries();
 
