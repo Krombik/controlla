@@ -1,11 +1,10 @@
 import type { INTERNALS } from '#internal/constants';
-import type { ComponentType, ContextType, JSX, PropsWithChildren } from 'react';
+import type { ComponentType, JSX, PropsWithChildren } from 'react';
 import type {
   AsyncControlOptions,
   ReadonlyAsyncControl,
   Scheduler,
 } from '#types';
-import type SuspenseContext from '#internal/SuspenseContext';
 import type { PatchType } from '#internal/constants';
 
 export type PendingItem = Pick<ControlInternals, '_commitSet' | '_level'>;
@@ -212,13 +211,5 @@ export type PartialTuple<T extends unknown[]> = T extends [
 
 export type ContainerComponent =
   ComponentType<PropsWithChildren> | keyof JSX.IntrinsicElements;
-
-/** @internal */
-export type NeverControl = {
-  /** Settles only when the suspense boundary cleans up, letting React drop the tree. */
-  _fakeSuspense(
-    suspenseCtx: NonNullable<ContextType<typeof SuspenseContext>>
-  ): Promise<any>;
-} & AsyncControlInternals;
 
 export type RenderablePrimitives = string | number | null | undefined | boolean;

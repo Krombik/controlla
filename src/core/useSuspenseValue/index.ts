@@ -1,8 +1,7 @@
-import { useContext, useLayoutEffect } from 'react';
+import { useLayoutEffect } from 'react';
 import type { Falsy } from '#internal/types';
-import ErrorBoundaryContext from '#internal/ErrorBoundaryContext';
-import SuspenseContext from '#internal/SuspenseContext';
 import suspendOnControl from '#internal/suspendOnControl';
+import { releaseLoad } from '#internal/suspenseHolds';
 import { INTERNALS } from '#internal/constants';
 import type { ReadonlyAsyncControl } from '#types';
 import useForceRerender from '#internal/useForceRerender';
@@ -11,9 +10,8 @@ import useNoopLayoutEffect from '#internal/useNoopLayoutEffect';
 const useSuspenseValue: {
   /**
    * Returns the value of the given async {@link control}, suspending while it
-   * loads — requires this library's `Suspense` boundary above (not
-   * `React.Suspense`). Using it starts the control's loading and subscribes
-   * to changes.
+   * loads — needs a `Suspense` boundary above. Using it starts the control's
+   * loading and subscribes to changes.
    *
    * By default an errored control throws its error to the nearest error
    * boundary; pass {@link safeReturn} as `true` to get a `[value, error]`
@@ -36,10 +34,6 @@ const useSuspenseValue: {
       ? undefined
       : Readonly<[value: undefined, error: undefined]>;
 } = (control, safeReturn) => {
-  const errorBoundaryCtx = useContext(ErrorBoundaryContext);
-
-  const suspenseCtx = useContext(SuspenseContext);
-
   const forceRerender = useForceRerender();
 
   if (control) {
@@ -63,6 +57,9 @@ const useSuspenseValue: {
       useLayoutEffect(() => {
         root._attach(internals, forceRerender, true);
 
+        // the mount is the hold from now on, so the suspended render's one goes
+        releaseLoad(root);
+
         errInternals._attach(errInternals, forceRerender, false);
 
         // the value may have changed between render and subscription
@@ -80,7 +77,7 @@ const useSuspenseValue: {
       return safeReturn ? [value, err] : value;
     }
 
-    throw suspendOnControl(root, errorBoundaryCtx, suspenseCtx);
+    throw suspendOnControl(root);
   }
 
   useNoopLayoutEffect();

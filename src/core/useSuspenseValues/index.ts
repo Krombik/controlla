@@ -1,13 +1,12 @@
-import { useContext, useLayoutEffect } from 'react';
+import { useLayoutEffect } from 'react';
 import type {
   Falsy,
   ExtractValues,
   ExtractErrors,
   AsyncControlInternals,
 } from '#internal/types';
-import ErrorBoundaryContext from '#internal/ErrorBoundaryContext';
 import suspendOnControl from '#internal/suspendOnControl';
-import SuspenseContext from '#internal/SuspenseContext';
+import { releaseLoad } from '#internal/suspenseHolds';
 import { INTERNALS } from '#internal/constants';
 import type { ReadonlyAsyncControl } from '#types';
 import useForceRerender from '#internal/useForceRerender';
@@ -15,9 +14,8 @@ import useNoopLayoutEffect from '#internal/useNoopLayoutEffect';
 
 /**
  * Returns the values of multiple async {@link controls}, suspending until all
- * of them are ready — requires this library's `Suspense` boundary above (not
- * `React.Suspense`). Using it starts the controls' loading and subscribes to
- * changes.
+ * of them are ready — needs a `Suspense` boundary above. Using it starts the
+ * controls' loading and subscribes to changes.
  *
  * By default an errored control throws its error to the nearest error
  * boundary; pass {@link safeReturn} as `true` to get a `[values, errors]`
@@ -54,10 +52,6 @@ const useSuspenseValues = <
 
   const errors = safeReturn && Array(l);
 
-  const errorBoundaryCtx = useContext(ErrorBoundaryContext);
-
-  const suspenseCtx = useContext(SuspenseContext);
-
   const forceRerender = useForceRerender();
 
   for (let i = 0; i < l; i++) {
@@ -83,6 +77,9 @@ const useSuspenseValues = <
 
         useLayoutEffect(() => {
           root._attach(internals, forceRerender, true);
+
+          // the mount is the hold from now on, so the suspended render's one goes
+          releaseLoad(root);
 
           errInternals._attach(errInternals, forceRerender, false);
 
@@ -141,11 +138,7 @@ const useSuspenseValues = <
           const rej = safeReturn ? onResolve : res;
 
           for (let i = 0; i < l; i++) {
-            suspendOnControl(
-              unloadedControls[i],
-              errorBoundaryCtx,
-              suspenseCtx
-            ).then(onResolve, rej);
+            suspendOnControl(unloadedControls[i]).then(onResolve, rej);
           }
         });
       }

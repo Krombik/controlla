@@ -23,8 +23,8 @@ const watchSlowLoading = (control: AsyncControl, cb: () => void) => {
   const slowLoadMonitor = root._load && root._load._slowLoadMonitor;
 
   if (!slowLoadMonitor) {
-    // $never never loads, so there's nothing to watch — a no-op, not an error
-    if ('_fakeSuspense' in root) {
+    // $never never loads, so there's nothing to watch - a no-op, not an error
+    if (root._attach === noop) {
       return noop;
     }
 

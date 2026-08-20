@@ -1,7 +1,12 @@
-import type { FC, JSX, ReactNode, SuspenseProps } from 'react';
+import {
+  Suspense,
+  type FC,
+  type JSX,
+  type ReactNode,
+  type SuspenseProps,
+} from 'react';
 import type { ContainerComponent, RenderablePrimitives } from '#internal/types';
 import useSuspenseValue from '#core/useSuspenseValue';
-import Suspense from '#core/Suspense';
 import { jsx } from 'react/jsx-runtime';
 import wrapWithContainer from '#internal/wrapWithContainer';
 import type { ReadonlyAsyncControl } from '#types';
@@ -71,7 +76,7 @@ const SuspenseControlConsumer: {
    * Renders the async {@link RenderProps.control control}'s value via the
    * {@link RenderProps.render render} prop, showing the
    * {@link Props.fallback fallback} while it loads. Includes its own
-   * {@link Suspense} boundary — no outer one is needed. Using it starts the
+   * `Suspense` boundary — no outer one is needed. Using it starts the
    * control's loading.
    *
    * An error throws to the nearest error boundary. To render it instead,

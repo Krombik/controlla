@@ -1,6 +1,5 @@
 import noop from '#internal/noop';
 import type {
-  NeverControl,
   Mutable,
   AsyncControlInternals,
   ErrorControlInternals,
@@ -9,10 +8,6 @@ import type {
 import { INTERNALS, EMPTY_ARR } from '#internal/constants';
 import type { AsyncControlScope } from '#types';
 import alwaysTrue from '#internal/alwaysTrue';
-
-function alwaysThis(this: any) {
-  return this;
-}
 
 // $never never emits, so a derived control attaching to it must register
 // nothing: this sink swallows push/pop, leaving $never's _dependents untouched
@@ -23,7 +18,9 @@ const inertDependents = {
 } as unknown as Notifier[];
 
 const NOOP_PROMISE_DESCRIPTOR: PropertyDescriptor = {
-  value: alwaysThis,
+  value(this: any) {
+    return this;
+  },
 };
 
 const errorControl = {
@@ -39,18 +36,19 @@ const errorControl = {
   ErrorControlInternals<AsyncControlInternals>
 > as ErrorControlInternals<AsyncControlInternals>;
 
+const NOOP_PROMISE_DESCRIPTORS: PropertyDescriptorMap = {
+  then: NOOP_PROMISE_DESCRIPTOR,
+  catch: NOOP_PROMISE_DESCRIPTOR,
+  finally: NOOP_PROMISE_DESCRIPTOR,
+};
+
 const internals = {
-  _fakeSuspense(suspenseCtx) {
-    return new Promise<any>((res) => {
-      suspenseCtx.push({ _detach: res });
-    });
-  },
   _promise: {
-    _promise: Object.create(Promise.prototype, {
-      then: NOOP_PROMISE_DESCRIPTOR,
-      catch: NOOP_PROMISE_DESCRIPTOR,
-      finally: NOOP_PROMISE_DESCRIPTOR,
-    }),
+    // fresh every read: React keeps its own bookkeeping on a thrown thenable,
+    // and two suspensions must not share it
+    get _promise() {
+      return Object.create(Promise.prototype, NOOP_PROMISE_DESCRIPTORS);
+    },
   } as AsyncControlInternals['_promise'],
   _attach: noop,
   _detach: noop,
@@ -65,7 +63,7 @@ const internals = {
   },
   _loadingControl: undefined!,
   _readyControl: undefined!,
-} as Partial<NeverControl> as NeverControl;
+} as Partial<AsyncControlInternals> as AsyncControlInternals;
 
 (internals as Mutable<typeof internals>)._root = internals;
 

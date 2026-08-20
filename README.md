@@ -124,7 +124,7 @@ For working code rather than snippets, [`examples/`](examples) has twelve standa
 - **Writing values**: [`setValue`](#setvaluecontrol-value-scheduler), [`invalidate`](#invalidatecontrol-silentorscheduler)
 - **Subscribing**: [`watchValue`](#watchvaluecontrol-callback-immediate-withempty), [`watchValues`](#watchvaluescontrols-callback-immediate-withempty), [`retain`](#retaincontrol), [`watchSlowLoading`](#watchslowloadingcontrol-callback)
 - **Async status**: [`selectLoading`](#selectloadingcontrol), [`selectReady`](#selectreadycontrol), [`selectError`](#selecterrorcontrol)
-- **Components**: [`ControlConsumer`](#controlconsumer), [`ControlsConsumer`](#controlsconsumer), [`CombinedControlsConsumer`](#combinedcontrolsconsumer), [`InfiniteControlsConsumer`](#infinitecontrolsconsumer), [`Suspense`](#suspense), [`SuspenseControlConsumer`](#suspensecontrolconsumer), [`SuspenseControlsConsumer`](#suspensecontrolsconsumer), [`wrapErrorBoundary`](#wraperrorboundaryboundarycomponent)
+- **Components**: [`ControlConsumer`](#controlconsumer), [`ControlsConsumer`](#controlsconsumer), [`CombinedControlsConsumer`](#combinedcontrolsconsumer), [`InfiniteControlsConsumer`](#infinitecontrolsconsumer), [`SuspenseControlConsumer`](#suspensecontrolconsumer), [`SuspenseControlsConsumer`](#suspensecontrolsconsumer)
 - **Utils**: [`$never`](#never), [`isAggregateControlError`](#isaggregatecontrolerrorerr), [`isSourceUpdate`](#issourceupdate)
 - **Registry**: [`createRegistry`](#createregistrycreate-initarg-options)
 - **Loaders**: [`requestLoader`](#requestloaderfetch-options-scheduler), [`pollLoader`](#pollloaderfetch-options-scheduler)
@@ -397,7 +397,7 @@ const user = await toPromise($user);
 
 ### `useSuspenseValue(control, safe?)`
 
-The value of an async control, **suspending** while it loads. Requires the [`Suspense`](#suspense) boundary above.
+The value of an async control, **suspending** while it loads. Needs a `React.Suspense` boundary above.
 
 | Parameter | Type | Description |
 |---|---|---|
@@ -641,26 +641,6 @@ Render-prop over a **dynamic-length** list of same-typed controls (component for
 | `controls` | `ReadonlyControl[]` | Same-typed; length may change between renders. |
 | `render` | `(values) => ReactNode` | Renders the values array. |
 
-### `<Suspense>`
-
-Drop-in replacement for `React.Suspense`, **required** around components that use the suspense **hooks** ([`useSuspenseValue`](#usesuspensevaluecontrol-safe) / [`useSuspenseValues`](#usesuspensevaluescontrols-safe)): it tracks the loadings suspended components start and releases them when they resolve or unmount. The `Suspense*Consumer` components include their own boundary, so they don't need it.
-
-| Prop | Type | Description |
-|---|---|---|
-| `fallback` | `ReactNode` | Shown while suspended. |
-| `children` | `ReactNode` | The subtree. |
-
-```jsx
-const User = () => {
-  const user = useSuspenseValue($user);
-  return <h2>{user.name}</h2>;
-};
-
-<Suspense fallback={<p>Loading…</p>}>
-  <User />
-</Suspense>
-```
-
 ### `<SuspenseControlConsumer>`
 
 Renders an async control with **its own** `Suspense` boundary (no outer one needed); using it starts loading.
@@ -703,18 +683,6 @@ Multi-control `SuspenseControlConsumer`: suspends until all are ready.
 | `fallback` | `ReactNode` | Shown while loading. |
 | `renderIfError?` | render fn, `ReactNode`, or `true` | Render on any error. |
 | `container?` | `ContainerComponent` | Wraps content/fallback when non-empty. |
-
-### `wrapErrorBoundary(BoundaryComponent)`
-
-Wraps a class error boundary so that, when it catches an error, the loadings started by components suspended beneath it are **released** (otherwise they leak - a thrown component never commits, so React can't clean them up).
-
-| Parameter | Type | Description |
-|---|---|---|
-| `BoundaryComponent` | `ComponentClass` | The error-boundary class to wrap. |
-
-```tsx
-export default wrapErrorBoundary(ErrorBoundary);
-```
 
 ---
 

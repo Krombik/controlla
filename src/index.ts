@@ -7,7 +7,6 @@ export { default as ControlConsumer } from './core/ControlConsumer';
 export { default as ControlsConsumer } from './core/ControlsConsumer';
 export { default as CombinedControlsConsumer } from './core/CombinedControlsConsumer';
 export { default as InfiniteControlsConsumer } from './core/InfiniteControlsConsumer';
-export { default as Suspense } from './core/Suspense';
 export { default as SuspenseControlConsumer } from './core/SuspenseControlConsumer';
 export { default as SuspenseControlsConsumer } from './core/SuspenseControlsConsumer';
 export { default as batch } from './core/batch';
@@ -43,7 +42,6 @@ export { default as useValue } from './core/useValue';
 export { default as watchSlowLoading } from './core/watchSlowLoading';
 export { default as watchValue } from './core/watchValue';
 export { default as watchValues } from './core/watchValues';
-export { default as wrapErrorBoundary } from './core/wrapErrorBoundary';
 
 export { default as Field } from './form/Field';
 export { default as NativeField } from './form/NativeField';

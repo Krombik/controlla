@@ -1,11 +1,10 @@
-import type { FC, ReactNode, SuspenseProps } from 'react';
+import { Suspense, type FC, type ReactNode, type SuspenseProps } from 'react';
 import type {
   ContainerComponent,
   ExtractErrors,
   ExtractValues,
   Falsy,
 } from '#internal/types';
-import Suspense from '#core/Suspense';
 import useSuspenseValues from '#core/useSuspenseValues';
 import { jsx } from 'react/jsx-runtime';
 import wrapWithContainer from '#internal/wrapWithContainer';
@@ -52,7 +51,7 @@ const SuspendingControlsConsumer: FC<Props<any[]>> = ({
  * Renders the values of multiple async {@link Props.controls controls} via
  * the {@link Props.render render} prop, showing the
  * {@link Props.fallback fallback} until all of them are ready. Includes its
- * own {@link Suspense} boundary — no outer one is needed. Using it starts the
+ * own `Suspense` boundary — no outer one is needed. Using it starts the
  * controls' loading; an entry may be falsy (its value is `undefined`).
  *
  * An error throws to the nearest error boundary. To render it instead, pass
