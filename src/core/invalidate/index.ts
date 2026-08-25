@@ -6,7 +6,8 @@ import toPromise from '#core/toPromise';
 const invalidate: {
   /**
    * Resets the given async {@link control} — clears its value, error and
-   * ready status — and triggers a reload if the control is in use. Pass
+   * ready status — and triggers a reload if the control is in use, unless one
+   * is already running, which it is left to. Pass
    * {@link silent} as `true` to keep the current value while reloading
    * (stale-while-revalidate).
    *

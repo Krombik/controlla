@@ -22,7 +22,8 @@ export type LinkOptions = {
   /**
    * Computes {@link LinkHandle.isMatched isMatched}, subscribing to changes:
    * `true` whether the target route is matched; `'exact'` whether it's
-   * matched with exactly the params and anchor this link navigates to.
+   * matched with exactly the params and anchor this link navigates to. Read
+   * once - whether a link tracks isn't something that can change.
    */
   trackMatch?: boolean | 'exact';
   /** Bypasses an enabled `navigationBlocker`. */

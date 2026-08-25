@@ -479,7 +479,7 @@ setValue($filter, value, requestAnimationFrame); // commit before next paint (an
 
 ### `invalidate(control, silentOrScheduler?)`
 
-Resets an async control (clears value, error and ready status) and reloads if it's in use. Returns a promise of what the reload brings in, rejected with its error if it fails - the reload's own answer, not the value still in hand: the promise is armed by the call, so awaiting it right after is safe even for a silent reload that keeps its value. Like [`toPromise`](#topromisecontrol) it doesn't start the loading itself, so over a control nothing is using it stays pending until something does.
+Resets an async control (clears value, error and ready status) and reloads if it's in use - a control already loading is left to the load it has, rather than fetching twice. Returns a promise of what the reload brings in, rejected with its error if it fails - the reload's own answer, not the value still in hand: the promise is armed by the call, so awaiting it right after is safe even for a silent reload that keeps its value. Like [`toPromise`](#topromisecontrol) it doesn't start the loading itself, so over a control nothing is using it stays pending until something does.
 
 | Parameter | Type | Description |
 |---|---|---|
@@ -1535,7 +1535,7 @@ createRoot(document.getElementById('root')!).render(<RouterView />);
 
 ### `Link` / `useLink`
 
-`useLink` is a headless hook returning `href`, `onClick` and `isMatched`; `Link` is a thin render-prop wrapper over it. `isMatched` is computed (and subscribed) only with the `trackMatch` option - `true` tracks whether the route is matched, `'exact'` also compares the params and anchor the link points at.
+`useLink` is a headless hook returning `href`, `onClick` and `isMatched`; `Link` is a thin render-prop wrapper over it. `isMatched` is computed (and subscribed) only with the `trackMatch` option - `true` tracks whether the route is matched, `'exact'` also compares the params and anchor the link points at. It's read once, so a link either tracks or doesn't; everything else, `to` included, may change freely.
 
 ```tsx
 import Link from 'controlla/router/Link';
