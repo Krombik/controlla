@@ -24,6 +24,13 @@ type NavigationBlocker = {
   };
 };
 
+/** Drops whatever is parked, without letting it through. */
+const release = () => {
+  scheduleSet(root, false, false);
+
+  blocker._resume = noop;
+};
+
 /**
  * Blocks navigations while enabled (e.g. over an unsaved form): an attempted
  * navigation is parked instead of applied and `isPendingNavigation` becomes
@@ -42,6 +49,10 @@ const navigationBlocker: NavigationBlocker = {
     blocker._canNavigate = true;
 
     window.removeEventListener('beforeunload', beforeUnloadListener);
+
+    // what is parked was parked by this guard, and the guard is going -
+    // allowing it later would take the app off wherever it has moved to since
+    release();
   },
   isPendingNavigation: {
     [INTERNALS]: root,
@@ -52,11 +63,7 @@ const navigationBlocker: NavigationBlocker = {
 
       blocker._resume = noop;
     },
-    deny() {
-      scheduleSet(root, false, false);
-
-      blocker._resume = noop;
-    },
+    deny: release,
   } as NavigationBlocker['isPendingNavigation'],
 };
 

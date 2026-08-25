@@ -125,4 +125,33 @@ windowMock.onScroll = (x: number, y: number) => {
   );
 }
 
+// ---- the guard goes while a navigation is parked ----
+{
+  blocker.enable();
+
+  navigate(router.navigation.a());
+  await settle();
+
+  assert.equal(getValue(pending), true, 'disable: parked first');
+
+  // the form holding the guard unmounts with the dialog still up
+  blocker.disable();
+  await settle();
+
+  assert.equal(getValue(pending), false, 'disable: nothing is left pending');
+  assert.equal(location.pathname, '/b', 'disable: and it did not go through');
+
+  // the app moves on, unblocked
+  navigate(router.navigation.a());
+  await settle();
+
+  assert.equal(location.pathname, '/a', 'disable: navigation is free again');
+
+  // whatever the dialog does now, the old attempt is not still waiting
+  pending.allow();
+  await settle();
+
+  assert.equal(location.pathname, '/a', 'disable: no navigation comes back');
+}
+
 console.log('blocker.test.ts: all assertions passed');
