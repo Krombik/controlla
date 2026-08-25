@@ -52,3 +52,17 @@ export const urlFinalizer: Mutable<PendingItem> = {
  * writes into history replaces.
  */
 export const replacing = { _value: false };
+
+/** What `repairHistory` shares with the router. */
+export const historyState = {
+  _knownLength: 0,
+  _index: 0,
+  _repairedUrl: '',
+  _resolveRepair: undefined as ((value: true) => void) | undefined,
+};
+
+/** What `navigationBlocker` shares with the router. */
+export const blocker = {
+  _canNavigate: true,
+  _resume: noop as () => void,
+};

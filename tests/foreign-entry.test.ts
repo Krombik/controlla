@@ -26,6 +26,8 @@ const { default: createPath } =
   await import('../build/router/createPath/index.js');
 const { default: navigate } = await import('../build/router/navigate/index.js');
 import getValue from '../build/core/getValue/index.js';
+import navigationBlocker from '../build/router/navigationBlocker/index.js';
+import repairHistory from '../build/router/repairHistory/index.js';
 
 windowMock.onScroll = () => {};
 
@@ -41,7 +43,7 @@ const settle = async () => {
 
 const urls = () => entries.map((entry) => entry.url);
 
-const blocker = router.navigationBlocker;
+const blocker = navigationBlocker;
 const pending = blocker.isPendingNavigation;
 
 await settle();
@@ -60,7 +62,7 @@ assert.equal(location.pathname, '/payment', 'but the url did not');
 assert.equal(getValue(router.routes.payment), true, 'nor the matched route');
 
 // ---- the app asks, once whatever produced them is done ----
-assert.equal(await router.repairHistory(), true, 'there was something to drop');
+assert.equal(await repairHistory(), true, 'there was something to drop');
 await settle();
 
 assert.deepEqual(urls(), ['/checkout', '/payment'], 'repaired in place');
@@ -68,7 +70,7 @@ assert.equal(history.length, 2, 'so the history counts right again');
 assert.equal(location.pathname, '/payment', 'without moving off the page');
 assert.equal(getValue(router.routes.payment), true, 'or off the route');
 
-assert.equal(await router.repairHistory(), false, 'nothing left to drop');
+assert.equal(await repairHistory(), false, 'nothing left to drop');
 
 // one back press, no dead ones
 history.go(-1);

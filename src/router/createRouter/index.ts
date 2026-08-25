@@ -8,7 +8,6 @@ import type {
   RouterControlRoot,
   RouterPatch,
   Router,
-  NavigationState,
   Route,
   AnyPaths,
   RouterWrite,
@@ -41,8 +40,10 @@ import createManualScheduler from '#scheduler/createManualScheduler';
 import parseSearch from '#router/internal/parseSearch';
 import addToLevel from '#internal/addToLevel';
 import {
+  blocker,
   clearWrites,
   getRouterPatch,
+  historyState,
   paramsHandler,
   replacing,
   urlFinalizer,
@@ -54,6 +55,8 @@ import throwNotMatched from '#router/internal/throwNotMatched';
 import watchReflow from '#router/internal/watchReflow';
 import reportError from '#internal/reportError';
 import safeSessionStorage from '#persist/safeSessionStorage';
+import $navigationState from '#router/navigationState';
+import navigationBlocker from '#router/navigationBlocker';
 
 type HistoryState = {
   idx?: number;
@@ -126,12 +129,6 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
   if ('scrollRestoration' in history) {
     history.scrollRestoration = 'manual';
   }
-
-  const beforeUnloadListener = (e: BeforeUnloadEvent) => {
-    e.preventDefault();
-
-    e.returnValue = true;
-  };
 
   const saveScrollPosHistory: () => void = safeSessionStorage
     ? () => {
@@ -268,10 +265,10 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
     if (nav) {
       paramsHandler._hasNavigation = false;
 
-      if (!canNavigate && !nav._ignoreBlock && !nav._isHistoryEvent) {
+      if (!blocker._canNavigate && !nav._ignoreBlock && !nav._isHistoryEvent) {
         nav._ignoreBlock = true;
 
-        resumeNavigation = () => {
+        blocker._resume = () => {
           const nextLane = getSchedulerLane();
 
           clearWrites();
@@ -467,7 +464,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
             );
           }
         } else {
-          const nextHistoryIndex = currentHistoryIndex + 1;
+          const nextHistoryIndex = historyState._index + 1;
 
           history.pushState(
             {
@@ -503,10 +500,10 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
           saveScrollPosHistory();
 
-          knownLength = history.length;
+          historyState._knownLength = history.length;
 
           // only once the entry exists, or the index outruns the real history
-          currentHistoryIndex = nextHistoryIndex;
+          historyState._index = nextHistoryIndex;
 
           navigationStateRoot._enqueueSet(
             { action: 'push', delta: 1 },
@@ -969,16 +966,11 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
     }
   };
 
-  const pendingNavigationRoot = makePrimitiveInternals(false);
+  const pendingNavigationRoot = navigationBlocker.isPendingNavigation[
+    INTERNALS
+  ] as ControlInternals;
 
-  const navigationStateRoot = makePrimitiveInternals({
-    action: 'none',
-    delta: 0,
-  } satisfies NavigationState);
-
-  const $navigationState = {
-    [INTERNALS]: navigationStateRoot,
-  } as unknown as Router<any>['navigationState'];
+  const navigationStateRoot = $navigationState[INTERNALS] as ControlInternals;
 
   const state = history.state as HistoryState | null;
 
@@ -998,32 +990,28 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
   let canBlockPop = true;
 
-  let knownLength = history.length;
+  historyState._knownLength = history.length;
 
-  let historyRepairResolve: ((value: true) => void) | undefined | void;
-
-  let repairedUrl = '';
-
-  let currentHistoryIndex = 0;
-
-  let canNavigate = true;
-
-  let resumeNavigation: () => void = noop;
+  historyState._index = 0;
 
   const popStateListener = (e: PopStateEvent) => {
-    if (historyRepairResolve) {
+    const resolveRepair = historyState._resolveRepair;
+
+    if (resolveRepair) {
       history.pushState(
         {
           ...(history.state as HistoryState),
-          idx: currentHistoryIndex,
+          idx: historyState._index,
         } satisfies HistoryState,
         '',
-        repairedUrl
+        historyState._repairedUrl
       );
 
-      knownLength = history.length;
+      historyState._knownLength = history.length;
 
-      historyRepairResolve = historyRepairResolve(true);
+      historyState._resolveRepair = undefined;
+
+      resolveRepair(true);
 
       return;
     }
@@ -1038,14 +1026,14 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
         scheduleSet(pendingNavigationRoot, true, true);
       } else {
-        delta = nextHistoryIndex - currentHistoryIndex;
+        delta = nextHistoryIndex - historyState._index;
 
         if (delta) {
           // blocker active: undo the pop and park it for allow()/deny()
-          isBlockedPop = canBlockPop && !canNavigate;
+          isBlockedPop = canBlockPop && !blocker._canNavigate;
 
           if (isBlockedPop) {
-            resumeNavigation = () => {
+            blocker._resume = () => {
               canBlockPop = false;
 
               history.go(delta);
@@ -1058,7 +1046,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
           const nextScrollPosHistoryIndex = nextHistoryIndex * 2;
 
-          const currScrollPosHistoryIndex = currentHistoryIndex * 2;
+          const currScrollPosHistoryIndex = historyState._index * 2;
 
           const nextScrollX = scrollPosHistory[nextScrollPosHistoryIndex];
 
@@ -1085,7 +1073,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
             saveScrollPosHistory();
           }
 
-          currentHistoryIndex = nextHistoryIndex;
+          historyState._index = nextHistoryIndex;
 
           canBlockPop = true;
         }
@@ -1120,14 +1108,14 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
   let isKnownEntry = true;
 
   if (state && state.idx != null) {
-    currentHistoryIndex = state.idx;
+    historyState._index = state.idx;
   } else {
     isKnownEntry = false;
 
     history.replaceState(
       {
         ...(typeof state == 'object' ? state : null),
-        idx: currentHistoryIndex,
+        idx: historyState._index,
       } satisfies HistoryState,
       ''
     );
@@ -1176,7 +1164,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
       start = end + 1;
     } while (start <= rawSize);
   } else {
-    scrollPosHistory = Array(currentHistoryIndex * 2);
+    scrollPosHistory = Array(historyState._index * 2);
   }
 
   const rawSavedScroll =
@@ -1191,7 +1179,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
   if (rawSavedScroll) {
     let comma = rawSavedScroll.indexOf(',');
 
-    if (+rawSavedScroll.slice(0, comma) == currentHistoryIndex) {
+    if (+rawSavedScroll.slice(0, comma) == historyState._index) {
       const start = comma + 1;
 
       comma = rawSavedScroll.indexOf(',', start);
@@ -1203,7 +1191,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
   }
 
   if (restoreX === undefined) {
-    const currentScrollPosHistoryIndex = currentHistoryIndex * 2;
+    const currentScrollPosHistoryIndex = historyState._index * 2;
 
     restoreX = scrollPosHistory[currentScrollPosHistoryIndex];
 
@@ -1234,7 +1222,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
         safeSessionStorage!.setItem(
           CURRENT_SCROLL_POS_KEY,
-          `${currentHistoryIndex},${Math.round(window.scrollX)},${Math.round(window.scrollY)}`
+          `${historyState._index},${Math.round(window.scrollX)},${Math.round(window.scrollY)}`
         );
       }, SCROLL_SAVE_DELAY);
     }
@@ -1255,50 +1243,6 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
   return {
     routes: routes as any,
     navigation: navigations as any,
-    navigationState: $navigationState,
-    repairHistory: () =>
-      new Promise<boolean>((resolve) => {
-        const foreignCount = history.length - knownLength;
-
-        if (foreignCount < 1 || !currentHistoryIndex) {
-          resolve(false);
-        } else {
-          repairedUrl = location.pathname + location.search + location.hash;
-
-          historyRepairResolve = resolve;
-
-          history.go(-foreignCount - 1);
-        }
-      }),
-    navigationBlocker: {
-      enable() {
-        canNavigate = false;
-
-        window.addEventListener('beforeunload', beforeUnloadListener);
-
-        return this.disable;
-      },
-      disable() {
-        canNavigate = true;
-
-        window.removeEventListener('beforeunload', beforeUnloadListener);
-      },
-      isPendingNavigation: {
-        [INTERNALS]: pendingNavigationRoot,
-        allow() {
-          scheduleSet(pendingNavigationRoot, false, false);
-
-          resumeNavigation();
-
-          resumeNavigation = noop;
-        },
-        deny() {
-          scheduleSet(pendingNavigationRoot, false, false);
-
-          resumeNavigation = noop;
-        },
-      } as Router<any>['navigationBlocker']['isPendingNavigation'],
-    },
   };
 };
 

@@ -35,6 +35,8 @@ import selectRegisteredAnchors from '../build/router/selectRegisteredAnchors/ind
 import registerAnchor from '../build/router/registerAnchor/index.js';
 import trackScroll from '../build/router/trackScroll/index.js';
 import getValue from '../build/core/getValue/index.js';
+import $navigationState from '../build/router/navigationState/index.js';
+import navigationBlocker from '../build/router/navigationBlocker/index.js';
 import isSourceUpdate from '../build/core/isSourceUpdate/index.js';
 import watchValues from '../build/core/watchValues/index.js';
 
@@ -85,7 +87,7 @@ assert.deepEqual(
   'init: params'
 );
 assert.equal(
-  getValue(router.navigationState).action,
+  getValue($navigationState).action,
   'none',
   'init: navigationState'
 );
@@ -115,11 +117,7 @@ assert.deepEqual(
   { sort: 'asc' },
   'nav: posts params'
 );
-assert.equal(
-  getValue(router.navigationState).action,
-  'push',
-  'nav: push action'
-);
+assert.equal(getValue($navigationState).action, 'push', 'nav: push action');
 assert.equal(entries.length, 2, 'nav: pushed entry');
 
 // 3. setValue on a params control — pushes, syncs the URL
@@ -133,7 +131,7 @@ assert.deepEqual(
 );
 assert.equal(entries.length, 3, 'setValue: pushed entry');
 assert.equal(
-  getValue(router.navigationState).action,
+  getValue($navigationState).action,
   'push',
   'setValue: push action'
 );
@@ -144,7 +142,7 @@ await tick();
 assert.equal(location.search, '?sort=top', 'replaceValue: url');
 assert.equal(entries.length, 3, 'replaceValue: no new entry');
 assert.equal(
-  getValue(router.navigationState).action,
+  getValue($navigationState).action,
   'replace',
   'replaceValue: action'
 );
@@ -157,11 +155,7 @@ navigate(router.navigation.home(), true);
 await tick();
 assert.equal(location.pathname, '/', 'replace: url');
 assert.equal(entries.length, 3, 'replace: no new entry');
-assert.equal(
-  getValue(router.navigationState).action,
-  'replace',
-  'replace: action'
-);
+assert.equal(getValue($navigationState).action, 'replace', 'replace: action');
 assert.equal(getValue(router.routes.home), true, 'replace: home matched');
 assert.equal(getValue(router.routes.user), false, 'replace: user unmatched');
 // unmatch clears params in a macrotask, not synchronously — so subscribers on
@@ -196,7 +190,7 @@ assert.equal(
   '/user/7/posts?sort=asc',
   'pop: url'
 );
-assert.equal(getValue(router.navigationState).action, 'pop', 'pop: action');
+assert.equal(getValue($navigationState).action, 'pop', 'pop: action');
 assert.equal(getValue(router.routes.user.posts), true, 'pop: posts matched');
 assert.deepEqual(
   getValue(selectParams(router.routes.user)),
@@ -225,13 +219,13 @@ assert.deepEqual(
   { id: 5 },
   'pop2: params'
 );
-assert.equal(getValue(router.navigationState).action, 'pop', 'pop2: action');
+assert.equal(getValue($navigationState).action, 'pop', 'pop2: action');
 
 // the state the finalizer writes commits with it, so a watcher over both is
 // handed one tuple, and a consistent one
 const navTuples: Array<[string, number]> = [];
 const stopNavTuple = watchValues(
-  [router.navigationState, selectParams(router.routes.user)],
+  [$navigationState, selectParams(router.routes.user)],
   ([state, params]: any) => {
     navTuples.push([state.action, params.id]);
   }
@@ -266,21 +260,21 @@ navigate(router.navigation.user({ id: 5 }).profile(), true);
 await tick();
 
 // 7. blocked navigation + anchor target
-const disable = router.navigationBlocker.enable();
+const disable = navigationBlocker.enable();
 navigate(router.navigation.docs('intro'));
 await tick();
 assert.equal(getValue(router.routes.docs), false, 'block: parked');
 assert.equal(
-  getValue(router.navigationBlocker.isPendingNavigation),
+  getValue(navigationBlocker.isPendingNavigation),
   true,
   'block: pending'
 );
 
 // deny drops the parked navigation
-router.navigationBlocker.isPendingNavigation.deny();
+navigationBlocker.isPendingNavigation.deny();
 await tick();
 assert.equal(
-  getValue(router.navigationBlocker.isPendingNavigation),
+  getValue(navigationBlocker.isPendingNavigation),
   false,
   'deny: released'
 );
@@ -291,14 +285,14 @@ assert.equal(location.pathname, '/user/5/profile', 'deny: url untouched');
 navigate(router.navigation.docs('intro'));
 await tick();
 assert.equal(
-  getValue(router.navigationBlocker.isPendingNavigation),
+  getValue(navigationBlocker.isPendingNavigation),
   true,
   'block: pending again'
 );
-router.navigationBlocker.isPendingNavigation.allow();
+navigationBlocker.isPendingNavigation.allow();
 await tick();
 assert.equal(
-  getValue(router.navigationBlocker.isPendingNavigation),
+  getValue(navigationBlocker.isPendingNavigation),
   false,
   'allow: released'
 );

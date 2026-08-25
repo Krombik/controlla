@@ -80,22 +80,6 @@ export type Router<
   MergedPaths extends AnyPaths = MergePaths<Paths>,
 > = {
   /**
-   * Blocks navigations while enabled (e.g. over an unsaved form): an
-   * attempted navigation is parked instead of applied and
-   * `isPendingNavigation` becomes `true`: `allow()` lets it proceed,
-   * `deny()` drops it. Closing the tab is guarded via `beforeunload`.
-   */
-  readonly navigationBlocker: {
-    /** Enables the blocker; returns `disable`. */
-    enable(): () => void;
-    disable(): void;
-    /** Whether a navigation is parked awaiting `allow()`/`deny()`. */
-    readonly isPendingNavigation: ReadonlyControl<boolean> & {
-      allow(): void;
-      deny(): void;
-    };
-  };
-  /**
    * The route tree mirroring the paths: every route is a readonly boolean
    * control of whether it's matched, and the argument for `selectParams`,
    * `selectAnchor` and `createRouterView`.
@@ -127,20 +111,6 @@ export type Router<
       ? Navigation<Children, Params, Optional, Async, Anchor>
       : never;
   };
-  /** The last history action: `push`, `replace` or `pop` (with its delta). */
-  readonly navigationState: ReadonlyControl<NavigationState>;
-  /**
-   * Drops the entries a third party left in the history - every navigation of
-   * an iframe (a 3DS payment frame, an ad) appends one, and while they are
-   * there the back button does nothing for as many presses. Every navigation
-   * repairs the history first, so calling this is only for staying on the page
-   * after whatever produced them: `await router.repairHistory()`.
-   *
-   * Resolves once done, or right away when there is nothing to drop. Cannot
-   * repair the very first entry of the session, which has nothing in front of
-   * it to push from.
-   */
-  repairHistory(): Promise<boolean>;
 };
 
 declare const IS_PAGE_BRAND: unique symbol;

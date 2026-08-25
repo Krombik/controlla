@@ -132,7 +132,7 @@ For working code rather than snippets, [`examples/`](examples) has twelve standa
 - **DOM**: [`mediaQuery`](#mediaqueryquery), [`$online`](#online), [`$pageVisible`](#pagevisible), [`$windowSize`](#windowsize)
 - **Schedulers**: [`batch`](#batchcallback-scheduler), [`createManualScheduler`](#createmanualscheduler), [`createThrottleScheduler`](#createthrottleschedulerms), [`createDebounceScheduler`](#createdebounceschedulerms)
 - **Forms**: [`useForm`](#useformcontrol-options), [`FormProvider`](#formprovider-form), [`useValidator`](#usevalidatorcontrol-validate-validateon--validator), [`usePathValidator`](#usepathvalidatorcontrol-validate-validateon--pathvalidator), [`useNativeField`](#usenativefieldcontrol-options--nativefield), [`useField`](#usefieldcontrol--field), [`useFieldArray`](#usefieldarraycontrol), [`useFieldState`](#usefieldstatecontrol), [`useFormState`](#useformstate)
-- **Router**: [`createRouter`](#createrouterpaths), [`createPath`](#createpathpath), [`createAsyncPath`](#createasyncpathsource), [`param`](#paramoptions), [`query`](#queryoptions), [`oneOf`](#oneofoptions), [`arrayParam`](#arrayparamoptions), [`createRouterView`](#createrouterviewroutes), [`Link` / `useLink`](#link--uselink), [`navigate`](#navigateto-replace-ignoreblock-scrolltotop-scrollrestoration), [params as controls](#route-params-are-controls), [`replaceValue`](#replacevaluecontrol-value-scheduler), [anchors](#anchors), [`registerAnchorOffset`](#registeranchoroffsetroute), [`selectRegisteredAnchors`](#selectregisteredanchorsroute), [`trackScroll`](#trackscrollanchor), [`navigationBlocker`](#blocking-navigation), [`repairHistory`](#repairhistory)
+- **Router**: [`createRouter`](#createrouterpaths), [`createPath`](#createpathpath), [`createAsyncPath`](#createasyncpathsource), [`param`](#paramoptions), [`query`](#queryoptions), [`oneOf`](#oneofoptions), [`arrayParam`](#arrayparamoptions), [`createRouterView`](#createrouterviewroutes), [`Link` / `useLink`](#link--uselink), [`navigate`](#navigateto-replace-ignoreblock-scrolltotop-scrollrestoration), [params as controls](#route-params-are-controls), [`replaceValue`](#replacevaluecontrol-value-scheduler), [anchors](#anchors), [`registerAnchorOffset`](#registeranchoroffsetroute), [`selectRegisteredAnchors`](#selectregisteredanchorsroute), [`trackScroll`](#trackscrollanchor), [`$navigationState`](#navigationstate), [`navigationBlocker`](#blocking-navigation), [`repairHistory`](#repairhistory)
 - **[Troubleshooting](#troubleshooting)**: [param value type + `stringify`](#paramquery-value-type-breaks-when-stringify-is-present), [named import suggestions in VS Code](#get-named-controlla-import-suggestions-in-vs-code)
 
 ---
@@ -1398,8 +1398,7 @@ const router = createRouter(paths);
 
 - `router.routes` - the typed route tree, where every route is a readonly control of whether it's matched.
 - `router.navigation` - target builders, for [`navigate`](#navigateto-replace-ignoreblock-scrolltotop-scrollrestoration) and [`Link`](#link--uselink) below.
-- `router.navigationState` - a control reporting how the current entry was reached: `{ action: 'push' | 'replace' | 'pop', delta }`. Mostly for analytics - telling a real navigation apart from a back/forward one.
-- `router.navigationBlocker` - see [Blocking navigation](#blocking-navigation).
+- [`$navigationState`](#navigationstate) and [`navigationBlocker`](#blocking-navigation) are standalone imports, not part of the router.
 
 ### `createPath(...path)`
 
@@ -1682,12 +1681,22 @@ const paths = {
 const state = useValue(selectRegisteredAnchors(router.routes.docs).intro); // 'active' | true | undefined
 ```
 
+### `$navigationState`
+
+Reports how the current entry was reached: `{ action: 'push' | 'replace' | 'pop', delta }`. Mostly for analytics - telling a real navigation apart from a back/forward one.
+
+```ts
+import $navigationState from 'controlla/router/navigationState';
+
+const { action, delta } = useValue($navigationState);
+```
+
 ### Blocking navigation
 
 Guard unsaved changes - while `navigationBlocker` is enabled, an attempted navigation is parked instead of applied. `isPendingNavigation` is just a control plus `allow()`/`deny()` - it doesn't render anything itself, so build whatever UI you want around it (dialog, toast, inline banner). Tab close is guarded via `beforeunload`. Only the latest attempt is parked - if another navigation is attempted while one is pending, `allow()` resolves that later one and the earlier is dropped.
 
 ```tsx
-const { navigationBlocker } = router;
+import navigationBlocker from 'controlla/router/navigationBlocker';
 
 useEffect(() => navigationBlocker.enable(), []);   // enable returns disable
 
@@ -1705,7 +1714,9 @@ if (pending) {
 Drops the history entries a third party left behind. Every navigation inside an iframe - a 3DS payment frame, an embedded ad - appends one, and while they're there the back button does nothing for as many presses as were added.
 
 ```ts
-const repaired = await router.repairHistory();
+import repairHistory from 'controlla/router/repairHistory';
+
+const repaired = await repairHistory();
 ```
 
 Every navigation repairs the history first, so call this only to fix the back button while staying on the page. Resolves to `false` when there was nothing to drop, or when the current entry is the session's first - that one has nothing in front of it to push from.
