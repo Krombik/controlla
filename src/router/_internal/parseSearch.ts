@@ -1,14 +1,5 @@
 import { EMPTY_OBJECT } from '#router/internal/constants';
-
-// a malformed escape is reachable from any pasted or crawled url, and it must
-// not take the router down - browsers keep the raw text instead of throwing too
-const decode = (value: string) => {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-};
+import decodeParam from '#router/internal/decodeParam';
 
 const parseSearch = (search: string): Record<string, string> => {
   if (search) {
@@ -24,7 +15,7 @@ const parseSearch = (search: string): Record<string, string> => {
       }
 
       if (eq && eq < end) {
-        params[search.slice(i, eq - 1)] = decode(search.slice(eq, end));
+        params[search.slice(i, eq - 1)] = decodeParam(search.slice(eq, end));
       }
 
       i = end + 1;

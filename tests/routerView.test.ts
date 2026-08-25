@@ -123,7 +123,7 @@ test('the view renders the matched page, and only the slots that changed', async
   await app.unmount();
 });
 
-test('the params of a page outlive it by a task, then go', async () => {
+test('the params of a page go once it is gone', async () => {
   const app = await mount(h(View, null));
 
   await go(router.navigation.shop().item({ id: 3 }));
@@ -139,16 +139,15 @@ test('the params of a page outlive it by a task, then go', async () => {
     }
   );
 
-  // the page's own watches are still subscribed while it is torn down, so
-  // nothing may hand them the params of a page on its way out
   await go(router.navigation.home());
 
   assert.equal(app.container.textContent, 'home');
-  assert.deepEqual(seen, [], 'nothing was told while it was leaving');
 
+  // that nothing hears them go while the page is still being torn down is the
+  // last test's - an async `act` spans tasks, so this one cannot tell
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  assert.deepEqual(seen, [undefined], 'and a task later they are gone');
+  assert.deepEqual(seen, [undefined], 'they are cleared, and only once');
 
   unwatch();
 

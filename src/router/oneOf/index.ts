@@ -19,8 +19,9 @@ const oneOf = ((param: Record<string, OneOfOptions<string[], true>>) =>
 
     const { optional, variants, defaultValue } = param[name];
 
+    // the url holds them escaped, which is what the path is matched against
     const pattern = `/(?<${name}>(?:${variants
-      .map((v) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      .map((v) => encodeURIComponent(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
       .join('|')}))`;
 
     parsers[name] =

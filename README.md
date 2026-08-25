@@ -1589,7 +1589,7 @@ const SortSelect = () => {
 setValue($catalog, { sort: 'price', page: 2 });    // whole object, pushes an entry
 ```
 
-[`setValue`](#setvaluecontrol-value-scheduler)/[`replaceValue`](#replacevaluecontrol-value-scheduler) throw if the route isn't matched. If a `navigate()` also happens in the same tick, the write is dropped instead of applying - the navigation wins.
+Leaving a route clears its params - read while it isn't matched, they're `undefined`. [`setValue`](#setvaluecontrol-value-scheduler)/[`replaceValue`](#replacevaluecontrol-value-scheduler) throw if the route isn't matched. If a `navigate()` also happens in the same tick, the write is dropped instead of applying - the navigation wins.
 
 ### `replaceValue(control, value, scheduler?)`
 

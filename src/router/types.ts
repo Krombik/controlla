@@ -104,3 +104,9 @@ export type SelectParams<R extends RouteParams<any, any, any>> =
 
 export type SelectAnchor<R extends RouteParams<any, any, string>> =
   R extends RouteParams<any, any, infer A> ? Control<A | ''> : never;
+
+/** What `$navigationState` holds - see its `action` and `delta`. */
+export type NavigationState = {
+  readonly action: 'none' | 'push' | 'replace' | 'pop';
+  readonly delta: number;
+};

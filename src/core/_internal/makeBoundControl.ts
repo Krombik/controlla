@@ -41,6 +41,7 @@ import settlePromise from '#internal/settlePromise';
 import armPromise from '#internal/armPromise';
 import { AggregateControlError } from '#internal/AggregateControlError';
 import throwReadonlyError from '#internal/throwReadonlyError';
+import reportError from '#internal/reportError';
 import { commitErrorValue, commitStatusValue } from '#internal/commitStatus';
 import { sourceUpdate } from '#internal/sourceUpdate';
 import {
@@ -360,7 +361,13 @@ function commitSet(this: BoundInternals, _: any, lane: Lane) {
   } else {
     const activeNodes = root._activeNodes;
 
-    currentTarget = getNextTarget(registry, root._keys);
+    try {
+      // the item is built here, of what the registry was handed to build it
+      // with - whatever that does is not a commit's to carry out
+      currentTarget = getNextTarget(registry, root._keys);
+    } catch (err) {
+      reportError(err);
+    }
 
     if (currentTarget) {
       attachUntrackedNotifier(currentTarget, root._selfNotifier);

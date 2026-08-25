@@ -5,6 +5,7 @@ import noop from '#internal/noop';
 import { INTERNALS } from '#internal/constants';
 import { EMPTY_OBJECT, ONCE_PASSIVE } from '#router/internal/constants';
 import watchReflow from '#router/internal/watchReflow';
+import reportError from '#internal/reportError';
 import type { AnchorScrollOptions } from '#router/types';
 import type { AnchorParam } from '#router/internal/types';
 import type { Lane } from '#internal/types';
@@ -41,7 +42,15 @@ function anchorScrollTo(this: AnchorParam, id: string, instant?: boolean) {
     const entry = entries[i];
 
     if (entry._id == id) {
-      let options = self._getOptions(self._offsetEl, id);
+      let options: AnchorScrollOptions;
+
+      try {
+        options = self._getOptions(self._offsetEl, id);
+      } catch (err) {
+        reportError(err);
+
+        options = EMPTY_OBJECT;
+      }
 
       if (instant) {
         options = { ...options, behavior: 'instant' };

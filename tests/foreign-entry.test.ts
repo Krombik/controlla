@@ -31,6 +31,9 @@ import repairHistory from '../build/router/repairHistory/index.js';
 
 windowMock.onScroll = () => {};
 
+// nothing has booted yet, so there is no entry of ours to repair from
+assert.equal(await repairHistory(), false, 'no router: nothing to drop');
+
 const router = createRouter({
   checkout: createPath('checkout'),
   payment: createPath('payment'),
@@ -62,7 +65,15 @@ assert.equal(location.pathname, '/payment', 'but the url did not');
 assert.equal(getValue(router.routes.payment), true, 'nor the matched route');
 
 // ---- the app asks, once whatever produced them is done ----
-assert.equal(await repairHistory(), true, 'there was something to drop');
+// a second caller joins the repair in flight instead of taking it over
+const [repaired, joined] = await Promise.all([
+  repairHistory(),
+  repairHistory(),
+]);
+
+assert.equal(repaired, true, 'there was something to drop');
+assert.equal(joined, true, 'and the second caller heard about it too');
+
 await settle();
 
 assert.deepEqual(urls(), ['/checkout', '/payment'], 'repaired in place');

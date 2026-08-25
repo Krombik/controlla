@@ -1,5 +1,5 @@
 // the env module must come first: it installs the browser mocks
-import { tick } from './_env/dom.ts';
+import { tick, reportedErrors } from './_env/dom.ts';
 import assert from 'node:assert';
 import test from 'node:test';
 
@@ -13,6 +13,7 @@ import createDerivedControl from '../src/core/createDerivedControl/index.ts';
 import useControl from '../src/core/useControl/index.ts';
 import useDerivedControl from '../src/core/useDerivedControl/index.ts';
 import getValue from '../src/core/getValue/index.ts';
+import watchValue from '../src/core/watchValue/index.ts';
 import selectLoading from '../src/core/selectLoading/index.ts';
 import retain from '../src/core/retain/index.ts';
 import useValue from '../src/core/useValue/index.ts';
@@ -693,6 +694,66 @@ test('a dropped item is still what the control bound to it reads', async () => {
   await tick();
 
   assert.equal(getValue($bound), 'item-1', 'and a key move binds a fresh one');
+
+  scope[0]._cleanup();
+});
+
+test('a registry that throws while an item is built keeps the flush', async () => {
+  const registry = createRegistry(createControl, (id: number) => {
+    if (id == 2) {
+      throw new Error('the factory blew up');
+    }
+
+    return { n: id };
+  });
+
+  const $key = createPrimitiveControl(1);
+
+  const scope: Subscription[] = (cleanupScope._value = []);
+
+  const $bound: any = createBoundControl(registry as any, $key as any);
+
+  cleanupScope._value = null;
+
+  scope[0]._subscribe();
+
+  const $other = createPrimitiveControl('start');
+
+  const seen: string[] = [];
+
+  const unwatch = watchValue($other, (value: string) => {
+    seen.push(value);
+  });
+
+  await tick();
+
+  assert.deepEqual(getValue($bound), { n: 1 });
+
+  // the item of key 2 is built inside the commit, and building it throws
+  setValue($key, 2);
+
+  setValue($other, 'same flush');
+
+  await tick();
+
+  assert.equal(
+    (reportedErrors.at(-1) as Error).message,
+    'the factory blew up',
+    'the throw is reported, not swallowed'
+  );
+
+  assert.equal(getValue($bound), undefined, 'the key resolves to nothing');
+
+  assert.deepEqual(seen, ['same flush'], 'and the rest of the flush landed');
+
+  // whatever the flush left behind must not outlive it
+  setValue($other, 'later');
+
+  await tick();
+
+  assert.deepEqual(seen, ['same flush', 'later'], 'the next one flushes too');
+
+  unwatch();
 
   scope[0]._cleanup();
 });

@@ -1,5 +1,7 @@
 import { historyState } from '#router/internal/state';
 
+let pending: Promise<boolean> | undefined;
+
 /**
  * Drops the entries a third party left in the history - every navigation of an
  * iframe (a 3DS payment frame, an ad) appends one, and while they are there the
@@ -11,20 +13,33 @@ import { historyState } from '#router/internal/state';
  * repair the very first entry of the session, which has nothing in front of it
  * to push from.
  */
-const repairHistory = (): Promise<boolean> =>
-  new Promise<boolean>((resolve) => {
-    const foreignCount = history.length - historyState._knownLength;
+const repairHistory = (): Promise<boolean> => {
+  // one repair at a time: a second `history.go` would take over the first
+  // one's resolve and leave whoever awaits it there for good
+  if (pending) {
+    return pending;
+  }
 
-    if (foreignCount < 1 || !historyState._index) {
-      resolve(false);
-    } else {
-      historyState._repairedUrl =
-        location.pathname + location.search + location.hash;
+  const foreignCount = history.length - historyState._knownLength;
 
-      historyState._resolveRepair = resolve;
+  if (foreignCount < 1 || !historyState._index) {
+    return Promise.resolve(false);
+  }
 
-      history.go(-foreignCount - 1);
-    }
+  historyState._repairedUrl =
+    location.pathname + location.search + location.hash;
+
+  pending = new Promise<boolean>((resolve) => {
+    historyState._resolveRepair = () => {
+      pending = undefined;
+
+      resolve(true);
+    };
   });
+
+  history.go(-foreignCount - 1);
+
+  return pending;
+};
 
 export default repairHistory;

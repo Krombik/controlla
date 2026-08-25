@@ -38,6 +38,9 @@ import type {
 import type { NavigationTarget } from '#router/types';
 import createManualScheduler from '#scheduler/createManualScheduler';
 import parseSearch from '#router/internal/parseSearch';
+import decodePathParams from '#router/internal/decodePathParams';
+import decodeParam from '#router/internal/decodeParam';
+import encodePathValue from '#router/internal/encodePathValue';
 import addToLevel from '#internal/addToLevel';
 import {
   blocker,
@@ -132,10 +135,15 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
   const saveScrollPosHistory: () => void = safeSessionStorage
     ? () => {
-        safeSessionStorage!.setItem(
-          SCROLL_POS_HISTORY_KEY,
-          scrollPosHistory.join()
-        );
+        try {
+          safeSessionStorage!.setItem(
+            SCROLL_POS_HISTORY_KEY,
+            scrollPosHistory.join()
+          );
+        } catch (err) {
+          // a storage that is full or refused is not what a navigation dies on
+          reportError(err);
+        }
       }
     : noop;
 
@@ -193,11 +201,25 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
     searchParams: Record<string, string>,
     initial: boolean
   ) => {
+    let i = 0;
+
     for (
-      let i = 0;
+      ;
       i < matchers.length && matchers[i](pathname, searchParams, initial);
       i++
     ) {}
+
+    // the boot throws over this, and every navigation after it went quiet: the
+    // url moved on while the routes stayed on whatever matched last
+    if (
+      process.env.NODE_ENV !== 'production' &&
+      wasBooted &&
+      i == matchers.length
+    ) {
+      reportError(
+        new Error(`no path matched "${pathname}" - use withNotFound`)
+      );
+    }
 
     scheduleFlush(historyLane);
 
@@ -604,7 +626,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
                       : (param as string);
 
                     if (value !== '') {
-                      str += '/' + value;
+                      str += '/' + encodePathValue(value);
                     }
                   }
 
@@ -871,7 +893,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
           if (_anchor) {
             updates.push({
               _root: _anchor._hash,
-              _params: location.hash.slice(1),
+              _params: decodeParam(location.hash.slice(1)),
               _path: undefined,
             });
           }
@@ -898,7 +920,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
                 if (isMatched) {
                   const pathParams: Record<string, string> = withPathParams
-                    ? (isMatched as RegExpExecArray).groups!
+                    ? decodePathParams((isMatched as RegExpExecArray).groups!)
                     : EMPTY_OBJECT;
 
                   const updates: RouterWrite[] = [];
@@ -1011,7 +1033,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
       historyState._resolveRepair = undefined;
 
-      resolveRepair(true);
+      resolveRepair();
 
       return;
     }

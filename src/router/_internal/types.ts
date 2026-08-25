@@ -195,11 +195,6 @@ export type Navigation<
 
 export type Hash = ValueOrUpdater<string>;
 
-export type NavigationState = {
-  readonly action: 'none' | 'push' | 'replace' | 'pop';
-  readonly delta: number;
-};
-
 /**
  * Flat `[name, getDefaultValue, ...]` pairs of the params declaring a
  * `defaultValue`.

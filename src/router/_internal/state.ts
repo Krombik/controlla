@@ -58,7 +58,7 @@ export const historyState = {
   _knownLength: 0,
   _index: 0,
   _repairedUrl: '',
-  _resolveRepair: undefined as ((value: true) => void) | undefined,
+  _resolveRepair: undefined as (() => void) | undefined,
 };
 
 /** What `navigationBlocker` shares with the router. */
