@@ -78,12 +78,10 @@ export const distribute = (validator: ValidatorInternals, error: any) => {
   if (invalid != validator._invalid) {
     validator._invalid = invalid;
 
-    if (form) {
-      const count = (form._errorCount += invalid ? 1 : -1);
+    const count = (form._errorCount += invalid ? 1 : -1);
 
-      if (form._validControl) {
-        setValue(form._validControl, !count);
-      }
+    if (form._validControl) {
+      setValue(form._validControl, !count);
     }
 
     syncWatch(validator);
@@ -91,7 +89,7 @@ export const distribute = (validator: ValidatorInternals, error: any) => {
 
   const prev = validator._marked;
 
-  if (form && (invalid || prev.length)) {
+  if (invalid || prev.length) {
     const next: FieldEntry[] = [];
 
     if (invalid) {
@@ -144,51 +142,49 @@ const setPending = (validator: ValidatorInternals, delta: number) => {
   if (!prev != !pending) {
     const form = validator._form;
 
-    if (form) {
-      const count = (form._pendingCount += pending ? 1 : -1);
+    const count = (form._pendingCount += pending ? 1 : -1);
 
-      if (form._validatingControl) {
-        setValue(form._validatingControl, !!count);
-      }
+    if (form._validatingControl) {
+      setValue(form._validatingControl, !!count);
+    }
 
-      if (pending) {
-        const covered: FieldEntry[] = (validator._pendingEntries = []);
+    if (pending) {
+      const covered: FieldEntry[] = (validator._pendingEntries = []);
 
-        const entries = form._entries;
+      const entries = form._entries;
 
-        if (validator._paths) {
-          const it = entries.values();
+      if (validator._paths) {
+        const it = entries.values();
 
-          for (let i = entries.size; i--;) {
-            const entry = it.next().value!;
+        for (let i = entries.size; i--;) {
+          const entry = it.next().value!;
 
-            if (covers(validator, entry._control)) {
-              covered.push(entry);
-            }
+          if (covers(validator, entry._control)) {
+            covered.push(entry);
           }
-        } else {
-          const controls = validator._controls;
-
-          for (let i = 0; i < controls.length; i++) {
-            const entry = entries.get(controls[i]);
-
-            if (entry) {
-              covered.push(entry);
-            }
-          }
-        }
-
-        for (let i = covered.length; i--;) {
-          setEntryPending(covered[i], 1);
         }
       } else {
-        const covered = validator._pendingEntries;
+        const controls = validator._controls;
 
-        validator._pendingEntries = [];
+        for (let i = 0; i < controls.length; i++) {
+          const entry = entries.get(controls[i]);
 
-        for (let i = covered.length; i--;) {
-          setEntryPending(covered[i], -1);
+          if (entry) {
+            covered.push(entry);
+          }
         }
+      }
+
+      for (let i = covered.length; i--;) {
+        setEntryPending(covered[i], 1);
+      }
+    } else {
+      const covered = validator._pendingEntries;
+
+      validator._pendingEntries = [];
+
+      for (let i = covered.length; i--;) {
+        setEntryPending(covered[i], -1);
       }
     }
   }
@@ -375,7 +371,7 @@ export const clearUnder = (form: FormInternals, target: Control) => {
 export const holdValidator = (validator: ValidatorInternals) => {
   const form = validator._form;
 
-  if (form && form._validators.indexOf(validator) < 0) {
+  if (form._validators.indexOf(validator) < 0) {
     form._validators.push(validator);
 
     if (validator._mode == 'blur') {
@@ -398,12 +394,10 @@ export const releaseValidator = (validator: ValidatorInternals) => {
 
   const form = validator._form;
 
-  if (form) {
-    removeFromArray(form._validators, validator);
+  removeFromArray(form._validators, validator);
 
-    if (validator._mode == 'blur') {
-      removeFromArray(form._blurValidators, validator);
-    }
+  if (validator._mode == 'blur') {
+    removeFromArray(form._blurValidators, validator);
   }
 };
 

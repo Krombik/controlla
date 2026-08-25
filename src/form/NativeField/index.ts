@@ -8,14 +8,14 @@ import type {
   NativeFieldType,
 } from '#form/types';
 import useNativeProps from '#form/internal/useNativeProps';
-import { getFieldState } from '#form/internal/entry';
+import { getEntry, getFieldState } from '#form/internal/entry';
 import FormContext from '#form/internal/FormContext';
-import useEntry from '#form/internal/useEntry';
+import throwNoProvider from '#form/internal/throwNoProvider';
 
 const NativeField = ((props: NativeFieldProps) => {
-  const form = useContext(FormContext);
+  const form = useContext(FormContext) || throwNoProvider();
 
-  const entry = useEntry(form, props.control, false);
+  const entry = getEntry(form, props.control);
 
   return props.render(useNativeProps(form, entry, props), getFieldState(entry));
 }) as {
@@ -23,7 +23,7 @@ const NativeField = ((props: NativeFieldProps) => {
    * `useNativeField` as a component: a field the element owns, mountable
    * conditionally without a component of its own. Typing rerenders nothing -
    * neither this nor what's around it - and the {@link FieldState state} the
-   * {@link NativeFieldProps.render render} gets is subscribed to only where you
+   * {@link NativeFieldProps.render render} gets costs a rerender only where you
    * read it.
    *
    * Everything but the {@link NativeFieldProps.control control} is read once.

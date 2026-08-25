@@ -242,7 +242,7 @@ export type AsyncControlOptions<
 
 type MixedKey<K> = K | ReadonlyControl<K | undefined>;
 
-type MixedKeys<Keys extends PrimitiveOrNested[]> = {
+export type MixedKeys<Keys extends PrimitiveOrNested[]> = {
   [I in keyof Keys]: MixedKey<Keys[I]>;
 };
 
@@ -274,6 +274,23 @@ type BoundControl<T extends Control, K extends any[]> = CombineErrors<
   }
 >;
 
+/** What {@link createBoundControl} over a registry of {@link T} with {@link K} keys gives. */
+export type Bound<T extends Control, K extends any[]> = [
+  Extract<K[number], ReadonlyAsyncControl>,
+] extends [never]
+  ? T extends AsyncControl
+    ? BoundControl<T, K>
+    : Extract<K[number], ReadonlyControl> extends ReadonlyControl<infer Value>
+      ? [Extract<Value, undefined>] extends [never]
+        ? T
+        : T extends ControlScope<infer Value>
+          ? ControlScope<Value | undefined>
+          : T extends Control<infer Value>
+            ? Control<Value | undefined>
+            : never
+      : never
+  : BoundControl<T, K>;
+
 declare const REGISTRY_BRAND: unique symbol;
 
 declare class RegistryBrand {
@@ -287,40 +304,14 @@ export type Registry<
   /** Returns the item for the given keys, creating and caching it on first access. */
   get(...keys: Keys): T;
   /**
-   * Returns a control bound to the given keys, where keys can be controls:
-   * it mirrors the registry item under the keys' current values and rebinds
-   * to another item when a key control's value changes. While the new item
-   * has no value yet, it shows `undefined` — or keeps the previous value if
-   * the registry was created with the {@link RegistryOptions.keepPrev
-   * keepPrev} option ({@link RegistryOptions.suppressError suppressError}
-   * additionally holds it through errors).
-   */
-  bind<const K extends MixedKeys<Keys>>(
-    ...keys: K
-  ): [Extract<K[number], ReadonlyAsyncControl>] extends [never]
-    ? T extends AsyncControl
-      ? BoundControl<T, K>
-      : Extract<K[number], ReadonlyControl> extends ReadonlyControl<infer Value>
-        ? [Extract<Value, undefined>] extends [never]
-          ? T
-          : T extends ControlScope<infer Value>
-            ? ControlScope<Value | undefined>
-            : T extends Control<infer Value>
-              ? Control<Value | undefined>
-              : never
-        : never
-    : BoundControl<T, K>;
-  /**
    * Deletes a control entry from the storage associated with the given key.
    *
    * **Warning**: This only removes the control entry from
    * the storage but does not clear or reset the control itself.
    */
-  delete(...keys: MixedKeys<Keys> | PartialTuple<MixedKeys<Keys>>): boolean;
+  delete(...keys: Keys | PartialTuple<Keys>): boolean;
   /** Removes all entries from the registry (does not reset the controls themselves). */
   clear(): void;
-  /** @internal */
-  _bound: WeakMap<any, any> | undefined;
   /** @internal */
   readonly _storage: Map<any, any>;
   /** @internal */
@@ -335,6 +326,8 @@ export type Registry<
   readonly _initArg: any;
   /** @internal */
   readonly _externalStorage: SyncExternalStorage | undefined;
+  /** @internal */
+  _isObserved: boolean;
   /** @internal */
   _type: ControlType;
   /** @internal */

@@ -3,6 +3,7 @@ import type { FieldRenderProps } from '#form/types';
 import useFieldProps from '#form/internal/useFieldProps';
 import { useContext } from 'react';
 import FormContext from '#form/internal/FormContext';
+import throwNoProvider from '#form/internal/throwNoProvider';
 import useEntry from '#form/internal/useEntry';
 
 /**
@@ -11,9 +12,7 @@ import useEntry from '#form/internal/useEntry';
  * `onChange` taking the value itself, and whether a validator holds an error
  * for it.
  *
- * Outside a `FormProvider` it is still wired to the control, but no rule can
- * reach it - `isError` stays `false`, and the error is what the control a
- * validator handed back holds.
+ * Throws outside a `FormProvider`.
  *
  * Reading the value here means this component rerenders on every keystroke,
  * which a component taking a `value` prop makes unavoidable. For an `input`,
@@ -31,9 +30,9 @@ import useEntry from '#form/internal/useEntry';
 const useField = <C extends Control>(
   control: C
 ): FieldRenderProps<SelectValue<C>> => {
-  const form = useContext(FormContext);
+  const form = useContext(FormContext) || throwNoProvider();
 
-  return useFieldProps(control, form, useEntry(form, control, true));
+  return useFieldProps(control, form, useEntry(form, control));
 };
 
 export default useField;

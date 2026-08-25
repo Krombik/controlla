@@ -11,7 +11,7 @@ import { INTERNALS } from '#internal/constants';
 import setValue from '#core/setValue';
 import watchValue from '#core/watchValue';
 import identity from '#internal/identity';
-import isNotEqual from '#form/internal/isNotEqual';
+import isNotEqual from '#internal/isNotEqual';
 import { holdEntry, releaseEntry } from '#form/internal/entry';
 import { handleBlur } from '#form/internal/validator';
 
@@ -265,7 +265,7 @@ type Cache = {
  * field's life.
  */
 const useNativeProps = (
-  form: FormInternals | undefined,
+  form: FormInternals,
   entry: FieldEntry,
   options: NativeFieldOptions<any, any>
 ): NativeFieldRenderProps<any> => {
@@ -413,7 +413,7 @@ const useNativeProps = (
             release = detach;
           }
         },
-        onBlur: form && handleBlur(form, entry._control),
+        onBlur: handleBlur(form, entry._control),
         ...kind._attrs,
       },
     };

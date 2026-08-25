@@ -40,7 +40,7 @@ export type PollOptions<
     syncedKeysCount?: SyncedKeysCount extends KeysCountRange<Keys>
       ? SyncedKeysCount
       : KeysCountRange<Keys>;
-    /** If `true`, each group commits its results on its own lane instead of sharing one. */
+    /** If `true`, each group's results land on their own instead of all together. */
     isolatedLanes?: SyncedKeysCount extends 0 ? never : boolean;
   };
 

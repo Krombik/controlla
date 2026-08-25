@@ -21,9 +21,11 @@ import {
   UNCHANGED,
 } from '#internal/commitPatchNode';
 import { attach, detach } from '#internal/syncLifecycle';
-import attachNotifier from '#internal/attachNotifier';
 import {
   applyLoadWiring,
+  cleanupDerived,
+  readSources,
+  subscribeDerived,
   enqueueSet,
   sourceChangeNotify,
   type DerivedControlInternals,
@@ -35,11 +37,9 @@ import settlePromise from '#internal/settlePromise';
 import armPromise from '#internal/armPromise';
 import addToQueue from '#internal/addToQueue';
 import { AggregateControlError } from '#internal/AggregateControlError';
-import { notify } from '#internal/flushQueue';
-import { registerCleanup } from '#internal/cleanup';
+import { notify, silentLane } from '#internal/flushQueue';
+import { registerSubscription } from '#internal/cleanup';
 import { sourceUpdate } from '#internal/sourceUpdate';
-import removeFromArray from '#internal/removeFromArray';
-import Ref from '#internal/Ref';
 
 interface AsyncDerivedControlInternals
   extends
@@ -50,13 +50,9 @@ interface AsyncDerivedControlInternals
   readonly _once: boolean;
 }
 
-function sourceErrorNotify(
-  this: Notifier,
-  lane: Lane,
-  root: AsyncDerivedControlInternals,
-  value: any,
-  _: any
-) {
+function sourceErrorNotify(this: Notifier, lane: Lane, value: any) {
+  const root: AsyncDerivedControlInternals = this._target;
+
   root._errors[this._index] = value;
 
   root._upToDate = false;
@@ -259,6 +255,43 @@ function commitSet(
   // the value it was after, so nothing is left listening for another one
   if (root._once && status == Status.READY) {
     root._cleanup();
+
+    // it has the value it was after, so there is nothing left to catch up with
+    root._pending = undefined;
+  }
+}
+
+/** {@link readSources}, plus the errors of the sources it also stopped hearing. */
+function resyncAsyncDerived(this: AsyncDerivedControlInternals) {
+  // first, so the errors read below are the ones the sources settle on - a
+  // source owing a catch-up of its own is where one of them comes from
+  readSources(this);
+
+  const sources = this._sources;
+
+  const errors = this._errors;
+
+  for (let i = 0, l = sources.length; i < l; i++) {
+    const errorControl = (sources[i]._root as AsyncControlInternals)
+      ._errorControl;
+
+    if (errorControl) {
+      const error = errorControl[INTERNALS]._value;
+
+      if (error !== errors[i]) {
+        errors[i] = error;
+
+        // an error of its own is what the recompute below turns it into
+        this._upToDate = false;
+      }
+    }
+  }
+
+  // unlike a plain derived, what it computes is not the mapper's answer alone -
+  // the loading and error status is settled in the commit, which tells nobody
+  // here
+  if (!this._upToDate) {
+    this._commitSet(null, silentLane);
   }
 }
 
@@ -275,6 +308,8 @@ const makeAsyncDerivedControl = (params: any[], once: boolean) => {
 
   const notifiers: Notifier[] = [];
 
+  const sources: Array<ChildControlNode<ControlInternals>> = Array(sourceCount);
+
   const loadableSources: ControlInternals[] = [];
 
   const mapper = params[sourceCount] || identity;
@@ -283,6 +318,7 @@ const makeAsyncDerivedControl = (params: any[], once: boolean) => {
 
   const derivedRoot: AsyncDerivedControlInternals = {
     _root: undefined!,
+    _pending: undefined,
     _get: readRootValue,
     _listeners: EMPTY_ARR,
     _indexMap: undefined,
@@ -292,17 +328,11 @@ const makeAsyncDerivedControl = (params: any[], once: boolean) => {
     _storage: undefined,
     _setExternal: noop,
     _commitSet: commitSet,
-    _cleanup: () => {
-      for (let i = 0, l = notifiers.length; i < l; i++) {
-        const notifier = notifiers[i];
-
-        if (notifier._source) {
-          removeFromArray(notifier._attachedTo, notifier);
-
-          notifier._source = undefined;
-        }
-      }
-    },
+    _sources: sources,
+    _notifiers: notifiers,
+    _subscribe: subscribeDerived,
+    _cleanup: cleanupDerived,
+    _resync: resyncAsyncDerived,
     _enqueueSet: enqueueSet,
     _level: 0,
     _value: undefined,
@@ -318,10 +348,8 @@ const makeAsyncDerivedControl = (params: any[], once: boolean) => {
     _readyControl: undefined!,
     _promise: undefined,
     _errors: errors,
-    _once: !!once,
+    _once: once,
   };
-
-  const weakRef = new Ref(derivedRoot);
 
   let maxLevel = 0;
 
@@ -332,7 +360,7 @@ const makeAsyncDerivedControl = (params: any[], once: boolean) => {
   for (let i = 0; i < sourceCount; i++) {
     const internals: ChildControlNode<
       ControlInternals | AsyncControlInternals
-    > = params[i][INTERNALS];
+    > = (sources[i] = params[i][INTERNALS]);
 
     const root = internals._root;
 
@@ -367,36 +395,23 @@ const makeAsyncDerivedControl = (params: any[], once: boolean) => {
         isNoError = false;
       }
 
-      const errorNotifier: Notifier = {
-        _ref: weakRef,
+      notifiers.push({
+        _target: derivedRoot,
         _notify: sourceErrorNotify,
         _index: i,
         _attachedTo: EMPTY_ARR,
-        _source: undefined,
-      };
-
-      attachNotifier(errorInternals, errorNotifier);
-
-      notifiers.push(errorNotifier);
+        _source: errorInternals,
+      });
     }
 
-    const notifier: Notifier = {
-      _ref: weakRef,
+    notifiers.push({
+      _target: derivedRoot,
       _notify: sourceChangeNotify,
       _index: i,
       _attachedTo: EMPTY_ARR,
-      _source: undefined,
-    };
-
-    attachNotifier(internals, notifier);
-
-    notifiers.push(notifier);
-
-    // activate the source (no-op unless it's a bound child) so its value
-    internals._root._attach(internals, undefined, false);
+      _source: internals,
+    });
   }
-
-  registerCleanup(derivedRoot, derivedRoot._cleanup);
 
   derivedRoot._values = isSingle ? values[0] : values;
 
@@ -418,17 +433,13 @@ const makeAsyncDerivedControl = (params: any[], once: boolean) => {
     }
   }
 
-  // everything was there already, so nothing has to be watched for
-  if (once && isReady) {
-    derivedRoot._cleanup();
-  }
-
   applyLoadWiring(derivedRoot, loadableSources);
 
   (derivedRoot as Mutable<typeof derivedRoot>)._root = derivedRoot;
 
   const errorInternals: ErrorControlInternals<AsyncDerivedControlInternals> = {
     _root: undefined!,
+    _pending: undefined,
     _attach: attach,
     _detach: detach,
     _dependents: EMPTY_ARR,
@@ -457,6 +468,11 @@ const makeAsyncDerivedControl = (params: any[], once: boolean) => {
   (derivedRoot as Mutable<typeof derivedRoot>)._readyControl = {
     [INTERNALS]: makeStatusInternals(derivedRoot, isReady || undefined),
   };
+
+  // everything was there already, so nothing has to be watched for
+  if (!once || !isReady) {
+    registerSubscription(derivedRoot, derivedRoot);
+  }
 
   return createScope(derivedRoot);
 };

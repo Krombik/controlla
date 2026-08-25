@@ -21,7 +21,7 @@ const enum Status {
   IMMEDIATE,
 }
 
-type Subscription = {
+type Watch = {
   _level: number;
   _callback(values?: any[], prevValues?: any[]): void | (() => void);
   readonly _values: any[] | undefined;
@@ -38,16 +38,9 @@ type Subscription = {
   _commitSet(data: null, lane: Lane): void;
 };
 
-type StrongRef<T extends WeakKey> = WeakRef<T> & {
-  readonly _value: T;
-};
+function valuesNotify(this: Notifier, lane: Lane, value: any) {
+  const sub: Watch = this._target;
 
-function valuesNotify(
-  this: Notifier,
-  lane: Lane,
-  sub: Subscription,
-  value: any
-) {
   sub._values![this._index] = value;
 
   sub._fromSource ||= sourceUpdate._value;
@@ -55,23 +48,21 @@ function valuesNotify(
   addToQueue(lane, sub as any);
 }
 
-function plainNotify(this: Notifier, lane: Lane, sub: Subscription) {
+function plainNotify(this: Notifier, lane: Lane) {
+  const sub: Watch = this._target;
+
   sub._fromSource ||= sourceUpdate._value;
 
   addToQueue(lane, sub as any);
 }
 
-function derefSelf(this: StrongRef<any>) {
-  return this._value;
-}
-
-const keepTuple = (sub: Subscription) => {
+const keepTuple = (sub: Watch) => {
   if (sub._prevValues !== false) {
     sub._prevValues = sub._values!.slice();
   }
 };
 
-function commitSet(this: Subscription) {
+function commitSet(this: Watch) {
   const self = this;
 
   const loadable = self._loadable;
@@ -144,7 +135,7 @@ const watchValues = ((
 
   const values = callbackArity ? Array(count) : undefined;
 
-  const sub: Subscription = {
+  const sub: Watch = {
     _level: 0,
     _callback: callback,
     _values: values,
@@ -155,11 +146,6 @@ const watchValues = ((
     _cleanup: noop,
     _commitSet: commitSet,
   };
-
-  const strongRef = {
-    _value: sub,
-    deref: derefSelf,
-  } as StrongRef<any>;
 
   const notify = callbackArity ? valuesNotify : plainNotify;
 
@@ -202,7 +188,7 @@ const watchValues = ((
     attachNotifier(
       internals,
       (notifiers[i] = {
-        _ref: strongRef,
+        _target: sub,
         _notify: notify,
         _index: i,
         _attachedTo: EMPTY_ARR,
@@ -219,9 +205,10 @@ const watchValues = ((
     } catch (err) {
       reportError(err);
     }
-
-    keepTuple(sub);
   }
+
+  // what they hold now is what the first change is a change from
+  keepTuple(sub);
 
   return () => {
     sub._callback = noop;

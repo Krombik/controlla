@@ -1,16 +1,13 @@
-import { useLayoutEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 
 import type { Control, SelectValue } from '#types';
 import type { FormOptions, FormState } from '#form/types';
 import type { FormInternals } from '#form/internal/types';
 import makeForm from '#form/internal/makeForm';
-import {
-  getEntry,
-  holdEntry,
-  releaseEntry,
-  watchArmedLoads,
-} from '#form/internal/entry';
-import { removeListener } from '#internal/flushQueue';
+import { getEntry, holdEntry, releaseEntry } from '#form/internal/entry';
+import { addListener, removeListener } from '#internal/flushQueue';
+import { INTERNALS } from '#internal/constants';
+import type { AsyncControlInternals, ChangeListener } from '#internal/types';
 
 /**
  * Makes a form over the {@link control}. The fields and validators under its
@@ -27,7 +24,9 @@ import { removeListener } from '#internal/flushQueue';
  * and a component that has to switch has to remount.
  *
  * `$isDirty` compares against the baseline: what the {@link control} held when
- * the form appeared, then whatever a `reset` left. A submit doesn't move it -
+ * the form mounted, then whatever a `reset` left. Only what sits under the
+ * {@link control} has one - a field over another control is swept and submitted
+ * like the rest, but reads as never dirty. A submit doesn't move it -
  * `reset(control, values)` from the handler is what makes what was sent the new
  * one. Over an async control it is the first value a load hands over, so waiting
  * for data is not an edit and the fields start clean.
@@ -65,39 +64,68 @@ const useForm = <C extends Control>(
   control: C,
   options: FormOptions<SelectValue<C>>
 ): FormState => {
-  const ref = useRef<FormInternals>(null);
-
-  const form = (ref.current ||= makeForm(control, options));
+  const form = (useRef<FormInternals>(null).current ||= makeForm(
+    control,
+    options
+  ));
 
   form._options = options;
 
-  // the controls it watches outlive it, so what it holds on them goes when the
-  // form does - the load watches of the async roots it baselines against, and
-  // the entry of its own control, which no field of it is there to release. A
-  // render that never commits leaves nothing behind, since this is the only
-  // thing that subscribes them
-  useLayoutEffect(() => {
+  // the control outlives the form, so what the form holds on it goes when the
+  // form does - the load watch it baselines against, and the entry of its own
+  // control, which no field of it is there to release. A render that never
+  // commits leaves nothing behind, since this is the only thing that runs.
+  //
+  // After the paint, so what it baselines against is a value nothing of the
+  // commit is still going to move
+  useEffect(() => {
     const entry = getEntry(form, form._control);
-
-    form._attached = true;
 
     holdEntry(entry);
 
-    watchArmedLoads(form);
+    const root = form._control[INTERNALS]._root;
+
+    let listener: ChangeListener | undefined;
+
+    // taken once: an `Activity` hiding the form and showing it again runs this
+    // again, and by then the edits are what the value holds
+    if (!form._baselined) {
+      const value = root._value;
+
+      // the first value a load hands over is the baseline. What comes after it
+      // is not the form's business: whoever asked for a reload is who decides
+      // whether what it brought is the new baseline. A plain listener, so the
+      // form is never what starts the load
+      if (
+        value === undefined &&
+        (root as Partial<AsyncControlInternals>)._errorControl
+      ) {
+        addListener(
+          root,
+          (listener = (next) => {
+            if (next !== undefined) {
+              removeListener(root, listener!);
+
+              listener = undefined;
+
+              form._baseline = next;
+
+              form._baselined = true;
+            }
+          })
+        );
+      } else {
+        form._baseline = value;
+
+        form._baselined = true;
+      }
+    }
 
     return () => {
-      form._attached = false;
-
       releaseEntry(entry);
 
-      const armed = form._armedRoots;
-
-      const it = armed.entries();
-
-      for (let i = armed.size; i--;) {
-        const item = it.next().value!;
-
-        removeListener(item[0], item[1]);
+      if (listener) {
+        removeListener(root, listener);
       }
     };
   }, [form]);

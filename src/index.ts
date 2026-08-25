@@ -12,6 +12,7 @@ export { default as SuspenseControlsConsumer } from './core/SuspenseControlsCons
 export { default as batch } from './core/batch';
 export { default as createAsyncControl } from './core/createAsyncControl';
 export { default as createAsyncDerivedControl } from './core/createAsyncDerivedControl';
+export { default as createBoundControl } from './core/createBoundControl';
 export { default as createControl } from './core/createControl';
 export { default as createControlsContext } from './core/createControlsContext';
 export { default as createDerivedControl } from './core/createDerivedControl';
@@ -31,6 +32,7 @@ export { default as setValue } from './core/setValue';
 export { default as toPromise } from './core/toPromise';
 export { default as useAsyncControl } from './core/useAsyncControl';
 export { default as useAsyncDerivedControl } from './core/useAsyncDerivedControl';
+export { default as useBoundControl } from './core/useBoundControl';
 export { default as useControl } from './core/useControl';
 export { default as useDerivedControl } from './core/useDerivedControl';
 export { default as useInfiniteValues } from './core/useInfiniteValues';

@@ -10,6 +10,9 @@ import getValue from '../src/core/getValue/index.ts';
 import setValue from '../src/core/setValue/index.ts';
 import invalidate from '../src/core/invalidate/index.ts';
 import watchValue from '../src/core/watchValue/index.ts';
+import { cleanupScope } from '../src/core/_internal/cleanup.ts';
+import type { Subscription } from '../src/core/_internal/types.ts';
+import type { SyncExternalStorage } from '../src/core/types.ts';
 import useForm from '../src/form/useForm/index.ts';
 import Field from '../src/form/Field/index.ts';
 import NativeField from '../src/form/NativeField/index.ts';
@@ -22,7 +25,7 @@ import useField from '../src/form/useField/index.ts';
 import useNativeField from '../src/form/useNativeField/index.ts';
 import FormContext from '../src/form/_internal/FormContext.ts';
 import { renderHook } from './_env/hooks.ts';
-import isNotEqual from '../src/form/_internal/isNotEqual.ts';
+import isNotEqual from '../src/core/_internal/isNotEqual.ts';
 import noop from '../src/core/_internal/noop.ts';
 import { INTERNALS } from '../src/core/_internal/constants.ts';
 import type {
@@ -35,52 +38,30 @@ import type {
 import type { Control, ReadonlyControl } from '../src/core/types.ts';
 
 /** Enough of an input for the element wiring — no DOM involved. */
-const fakeInput = (position = 0, type?: string) => {
-  const listeners: Record<string, Array<() => void>> = {};
+/** A real input in the document, so the lib wires up what a browser gives it. */
+const fakeInput = (type = 'text', parent?: any) => {
+  const element: any = document.createElement('input');
 
-  return {
-    value: '',
-    checked: false,
-    tagName: 'INPUT',
-    isConnected: true,
-    type,
-    position,
-    selectionStart: null as number | null,
-    selectionEnd: null as number | null,
-    setSelectionRange(start: number, end: number) {
-      this.selectionStart = start;
+  element.type = type;
 
-      this.selectionEnd = end;
-    },
-    focused: false,
-    addEventListener(type: string, listener: () => void) {
-      (listeners[type] ||= []).push(listener);
-    },
-    removeEventListener(type: string, listener: () => void) {
-      listeners[type] = (listeners[type] || []).filter((it) => it !== listener);
-    },
-    setAttribute() {},
-    removeAttribute() {},
-    focus() {
-      this.focused = true;
-    },
-    compareDocumentPosition(other: { position: number }) {
-      return other.position < position ? 2 : 4;
-    },
-    emit(type: string, event?: any) {
-      const it = {
-        target: this,
-        preventDefault: () => (it.defaultPrevented = true),
-        defaultPrevented: false,
-        ...event,
-      };
+  (parent || document.body).appendChild(element);
 
-      (listeners[type] || []).forEach((listener: any) => listener(it));
-
-      return it;
-    },
-  };
+  return element;
 };
+
+/** Dispatches a real event and hands it back, so a test reads what it did. */
+const emit = (element: any, type: string, init?: any) => {
+  const event: any =
+    type == 'beforeinput' || type == 'input'
+      ? new InputEvent(type, { cancelable: true, bubbles: true, ...init })
+      : new Event(type, { cancelable: true, bubbles: true });
+
+  element.dispatchEvent(event);
+
+  return event;
+};
+
+const focused = (element: any) => document.activeElement === element;
 
 /** Renders a component of the module with the form in context, and mounts it. */
 const mount = <T>(form: FormState | undefined, render: () => T) =>
@@ -287,10 +268,10 @@ test('an uncontrolled field lets the element own the value both ways', async () 
 
   input.value = 'john';
 
-  input.emit('input');
+  emit(input, 'input');
 
   // `change` follows what a person types, carrying what `input` already gave
-  input.emit('change');
+  emit(input, 'change');
 
   await tick();
 
@@ -300,7 +281,7 @@ test('an uncontrolled field lets the element own the value both ways', async () 
   // a password manager assigns the value and announces only `change`
   input.value = 'jack';
 
-  input.emit('change');
+  emit(input, 'change');
 
   await tick();
 
@@ -343,9 +324,10 @@ test('a failed submit focuses the invalid field first in the document', async ()
 
   validator(form, $values.first, invalid);
 
-  const laterInput = fakeInput(5);
+  // appended in document order, which is the order the focus follows
+  const earlierInput = fakeInput();
 
-  const earlierInput = fakeInput(1);
+  const laterInput = fakeInput();
 
   // a controlled `Field` only records the element, it binds nothing
   later.result.props.ref(laterInput);
@@ -354,8 +336,8 @@ test('a failed submit focuses the invalid field first in the document', async ()
 
   await form.submit();
 
-  assert.equal(earlierInput.focused, true);
-  assert.equal(laterInput.focused, false);
+  assert.equal(focused(earlierInput), true);
+  assert.equal(focused(laterInput), false);
 });
 
 test('focus answers whether the field had an element to focus', () => {
@@ -372,7 +354,7 @@ test('focus answers whether the field had an element to focus', () => {
   email.result.props.ref(input);
 
   assert.equal(form.focus($values.email), true);
-  assert.equal(input.focused, true);
+  assert.equal(focused(input), true);
 
   // registered, but its `ref` never reached an element
   assert.equal(form.focus($values.name), false);
@@ -430,13 +412,13 @@ test('the element type picks how a value is written back', async () => {
 
   const form = createForm($values);
 
-  const box = fakeInput(0, 'checkbox');
+  const box = fakeInput('checkbox');
 
   nativeField(form, { type: 'checkbox', control: $values.agreed }).ref(box);
 
   assert.equal(box.checked, false);
-  // a boolean must never land on `value`
-  assert.equal(box.value, '');
+  // a boolean must never land on `value` - a checkbox's own default stands
+  assert.equal(box.value, 'on');
 
   setValue($values.agreed, true);
 
@@ -446,24 +428,30 @@ test('the element type picks how a value is written back', async () => {
 
   box.checked = false;
 
-  box.emit('change');
+  emit(box, 'change');
 
   await tick();
 
   assert.equal(getValue($values.agreed), false);
 
-  const select: any = fakeInput(1);
-
-  select.tagName = 'SELECT';
+  const select: any = document.createElement('select');
 
   select.multiple = true;
 
-  select.options = [{ value: 'a' }, { value: 'b' }];
+  for (const value of ['a', 'b']) {
+    const option: any = document.createElement('option');
+
+    option.value = value;
+
+    select.appendChild(option);
+  }
+
+  document.body.appendChild(select);
 
   nativeField(form, { type: 'multiselect', control: $values.tags }).ref(select);
 
   assert.deepEqual(
-    select.options.map((it: any) => it.selected),
+    [...select.options].map((it: any) => it.selected),
     [true, false]
   );
 });
@@ -495,7 +483,7 @@ test('a rewrite while typing keeps the caret off the end', async () => {
   assert.equal(input.selectionStart, 1);
 
   // a type without a text cursor is left alone
-  const number: any = fakeInput(0, 'number');
+  const number: any = fakeInput('number');
 
   nativeField(form, { type: 'text', control: $values.age }).ref(number);
 
@@ -511,7 +499,7 @@ test('a numeric field parses what it reads and refuses what it cannot', async ()
 
   const form = createForm($values);
 
-  const input = fakeInput(0, 'text');
+  const input = fakeInput('text');
 
   nativeField(form, { type: 'decimal', control: $values.amount }).ref(input);
 
@@ -521,7 +509,7 @@ test('a numeric field parses what it reads and refuses what it cannot', async ()
   // a decimal keypad emits the locale separator
   input.value = '1,5';
 
-  input.emit('input');
+  emit(input, 'input');
 
   await tick();
 
@@ -530,7 +518,7 @@ test('a numeric field parses what it reads and refuses what it cannot', async ()
   // '-' on its own is a state the field passes through, not a number
   input.value = '-';
 
-  input.emit('input');
+  emit(input, 'input');
 
   await tick();
 
@@ -538,7 +526,7 @@ test('a numeric field parses what it reads and refuses what it cannot', async ()
 
   input.value = '';
 
-  input.emit('input');
+  emit(input, 'input');
 
   await tick();
 
@@ -550,18 +538,24 @@ test('a numeric field parses what it reads and refuses what it cannot', async ()
   input.selectionStart = input.selectionEnd = 2;
 
   assert.equal(
-    input.emit('beforeinput', { data: '3' }).defaultPrevented,
+    emit(input, 'beforeinput', { data: '3' }).defaultPrevented,
     false
   );
-  assert.equal(input.emit('beforeinput', { data: 'a' }).defaultPrevented, true);
   assert.equal(
-    input.emit('beforeinput', { data: '.' }).defaultPrevented,
+    emit(input, 'beforeinput', { data: 'a' }).defaultPrevented,
+    true
+  );
+  assert.equal(
+    emit(input, 'beforeinput', { data: '.' }).defaultPrevented,
     false
   );
   // a second separator would leave it unreadable
   input.value = '1.2';
   input.selectionStart = input.selectionEnd = 3;
-  assert.equal(input.emit('beforeinput', { data: '.' }).defaultPrevented, true);
+  assert.equal(
+    emit(input, 'beforeinput', { data: '.' }).defaultPrevented,
+    true
+  );
 });
 
 test('a radio group is read and written through the DOM group', async () => {
@@ -571,32 +565,38 @@ test('a radio group is read and written through the DOM group', async () => {
 
   const { ref } = nativeField(form, { type: 'radio', control: $values.plan });
 
-  // a RadioNodeList has no tagName, which is how a lone radio is told apart
-  const group: any = {
-    value: 'free',
+  // a real group: the DOM is what collects radios sharing a name, and a
+  // `RadioNodeList` has no tagName, which is how a lone radio is told apart
+  const formNode: any = document.createElement('form');
+
+  document.body.appendChild(formNode);
+
+  const radio = (value: string) => {
+    const element = fakeInput('radio', formNode);
+
+    element.name = 'plan';
+
+    element.value = value;
+
+    return element;
   };
 
-  const first = fakeInput(0, 'radio');
+  const first = radio('free');
 
-  const second = fakeInput(1, 'radio');
+  const second = radio('pro');
 
-  const formNode = {
-    elements: {
-      namedItem: (name: string) => (name === 'plan' ? group : null),
-    },
-  };
+  radio('basic');
 
-  Object.assign(first, { form: formNode, name: 'plan' });
-
-  Object.assign(second, { form: formNode, name: 'plan' });
+  const group: any = formNode.elements.namedItem('plan');
 
   const detachFirst = ref(first)!;
 
   const detachSecond = ref(second)!;
 
+  // what a click does: the group's value moves, the element reports it
   group.value = 'pro';
 
-  second.emit('change');
+  emit(second, 'change');
 
   await tick();
 
@@ -615,26 +615,26 @@ test('a radio group is read and written through the DOM group', async () => {
 
   group.value = 'pro';
 
-  second.emit('change');
+  emit(second, 'change');
 
   await tick();
 
   assert.equal(getValue($values.plan), 'pro');
 
-  group.value = 'kept';
+  group.value = 'basic';
 
   setValue($values.plan, 'free');
 
   await tick();
 
-  assert.equal(group.value, 'kept');
+  assert.equal(group.value, 'basic');
 
   // and the one that was released reports nothing
   detachSecond();
 
-  group.value = 'basic';
+  group.value = 'pro';
 
-  second.emit('change');
+  emit(second, 'change');
 
   await tick();
 
@@ -911,8 +911,8 @@ test('the first value a load brings is the baseline, the ones after it are not',
 
   // the watch was for one value - nothing is left listening for the next
   assert.equal(
-    (form as any)._armedRoots.size,
-    0,
+    (form as any)._baselined,
+    true,
     'the first value is all the form waited for'
   );
 
@@ -1019,8 +1019,8 @@ test('a value that landed with nobody listening is still the baseline', async ()
   rendered.remount();
 
   assert.equal(
-    (form as any)._armedRoots.size,
-    0,
+    (form as any)._baselined,
+    true,
     'the value it was waiting for is already there'
   );
   assert.equal(getValue(form.$isDirty), false);
@@ -1109,17 +1109,10 @@ test('aria lands on the element without a rerender, and shares describedby', asy
 
   const form = createForm($values);
 
-  const attributes: Record<string, string> = {};
+  const input = fakeInput('text');
 
-  const input = Object.assign(fakeInput(0, 'text'), {
-    setAttribute(name: string, value: string) {
-      attributes[name] = value;
-    },
-    getAttribute: (name: string) => attributes[name] ?? null,
-    removeAttribute(name: string) {
-      delete attributes[name];
-    },
-  });
+  // read off the element itself: aria is written there and nowhere else
+  const attribute = (name: string) => input.getAttribute(name) ?? undefined;
 
   let error: string | undefined = 'invalid';
 
@@ -1132,14 +1125,14 @@ test('aria lands on the element without a rerender, and shares describedby', asy
 
   validator(form, $values.email, () => error);
 
-  assert.equal(attributes['aria-invalid'], undefined);
-  assert.equal(attributes['aria-describedby'], 'hint');
+  assert.equal(attribute('aria-invalid'), undefined);
+  assert.equal(attribute('aria-describedby'), 'hint');
 
   await form.validate();
 
-  assert.equal(attributes['aria-invalid'], 'true');
+  assert.equal(attribute('aria-invalid'), 'true');
   // the field composes what describes it with the error it now holds
-  assert.equal(attributes['aria-describedby'], 'hint email-error');
+  assert.equal(attribute('aria-describedby'), 'hint email-error');
 
   // a validator dropped without passing leaves the error alone, so it has to
   // actually pass for the attributes to come back off
@@ -1147,8 +1140,8 @@ test('aria lands on the element without a rerender, and shares describedby', asy
 
   await form.validate();
 
-  assert.equal(attributes['aria-invalid'], undefined);
-  assert.equal(attributes['aria-describedby'], 'hint');
+  assert.equal(attribute('aria-invalid'), undefined);
+  assert.equal(attribute('aria-describedby'), 'hint');
 });
 
 test('isSubmitting flips even when nothing about the submit is async', async () => {
@@ -1329,7 +1322,7 @@ test('converters sit between the element and the control, both ways', async () =
 
   const form = createForm($values);
 
-  const input = fakeInput(0, 'text');
+  const input = fakeInput('text');
 
   let shout = false;
 
@@ -1344,7 +1337,7 @@ test('converters sit between the element and the control, both ways', async () =
 
   input.selectionStart = input.selectionEnd = 4;
 
-  input.emit('input');
+  emit(input, 'input');
 
   await tick();
 
@@ -1413,7 +1406,7 @@ test('an element bound to another control stops feeding the old one', async () =
 
   const form = createForm($values);
 
-  const input = fakeInput(0, 'text');
+  const input = fakeInput('text');
 
   const a = nativeField(form, { type: 'text', control: $values.a });
 
@@ -1429,7 +1422,7 @@ test('an element bound to another control stops feeding the old one', async () =
 
   input.value = 'typed';
 
-  input.emit('input');
+  emit(input, 'input');
 
   await tick();
 
@@ -1474,7 +1467,7 @@ test('a blur runs the validators that validate on blur, and only those', async (
 
   const form = createForm($values);
 
-  const input = fakeInput(0, 'text');
+  const input = fakeInput('text');
 
   const seen: string[] = [];
 
@@ -1501,7 +1494,7 @@ test('a blur runs the validators that validate on blur, and only those', async (
 
   input.value = 'jane@example.com';
 
-  input.emit('input');
+  emit(input, 'input');
 
   await tick();
 
@@ -1518,9 +1511,9 @@ test('a native field is registered by its element, and goes with the last', asyn
 
   const form = createForm($values);
 
-  const first = fakeInput(0, 'text');
+  const first = fakeInput('text');
 
-  const second = fakeInput(1, 'text');
+  const second = fakeInput('text');
 
   const { ref } = nativeField(form, { type: 'text', control: $values.email });
 
@@ -1728,9 +1721,9 @@ test('a failed submit focuses under an error holding no element of its own', asy
 
   const second = field(form, $values.rows[1]);
 
-  const firstInput = fakeInput(1);
+  const firstInput = fakeInput();
 
-  const secondInput = fakeInput(5);
+  const secondInput = fakeInput();
 
   first.result.props.ref(firstInput);
 
@@ -1741,8 +1734,8 @@ test('a failed submit focuses under an error holding no element of its own', asy
   await form.submit();
 
   // the array holds the error and no element, so the first field under it does
-  assert.equal(firstInput.focused, true);
-  assert.equal(secondInput.focused, false);
+  assert.equal(focused(firstInput), true);
+  assert.equal(focused(secondInput), false);
 });
 
 test('a validator of an unregistered path still blocks the submit', async () => {
@@ -1981,7 +1974,7 @@ test('a changed control is a different rule, and takes its error with it', async
   assert.equal(await form.validate(), true, 'the row it moved to passes');
 });
 
-test('a bare reset clears the rules of the fields outside the form control', async () => {
+test('a bare reset clears the rules outside the form control, not the value', async () => {
   const $values = createControl({ email: 'jane@example.com' });
 
   const $foreign = createControl({ note: 'kept' });
@@ -2005,7 +1998,11 @@ test('a bare reset clears the rules of the fields outside the form control', asy
 
   await tick();
 
-  assert.equal(getValue($foreign.note), 'kept');
+  assert.equal(
+    getValue($foreign.note),
+    'edited',
+    'no baseline outside the form control is nothing to go back to'
+  );
   assert.equal(getValue($error), undefined);
   assert.equal(getValue(note.$isError), false);
   assert.equal(getValue(form.$isValid), true);
@@ -2125,9 +2122,9 @@ test('a field lets go of its own element, not of another field of the control', 
 
   const second = field(form, $values.email);
 
-  const firstInput = fakeInput(0);
+  const firstInput = fakeInput();
 
-  const secondInput = fakeInput(1);
+  const secondInput = fakeInput();
 
   first.result.props.ref(firstInput);
 
@@ -2135,7 +2132,7 @@ test('a field lets go of its own element, not of another field of the control', 
 
   // whichever bound last is what focus reaches
   assert.equal(form.focus($values.email), true);
-  assert.equal(secondInput.focused, true);
+  assert.equal(focused(secondInput), true);
 
   // the other one going takes nothing with it
   first.result.props.ref(null);
@@ -2212,4 +2209,269 @@ test('a submit handler that throws is the handler`s to answer for', async () => 
 
   // and it submits again when asked again
   await assert.rejects(form.submit(), /the server said no/);
+});
+
+test('a value the mount catches up with is the baseline, not an edit', () => {
+  let stored: { name: string } = { name: 'a' };
+
+  const storage: SyncExternalStorage<{ name: string }> = () => ({
+    get: () => stored,
+    set: (value) => {
+      stored = value;
+    },
+    observe: () => noop,
+  });
+
+  // created by a hook, so nothing observes the storage until the mount
+  const scope: Subscription[] = (cleanupScope._value = []);
+
+  let $values: any;
+
+  try {
+    $values = createControl(undefined, storage);
+  } finally {
+    cleanupScope._value = null;
+  }
+
+  // the window: the storage moves with nothing listening to it
+  stored = { name: 'b' };
+
+  // the control's own mount, an insertion effect - which every layout effect of
+  // the commit runs after, `useForm`'s baselining one included
+  scope[0]._subscribe();
+
+  assert.equal(getValue($values.name), 'b', 'the catch-up landed');
+
+  const form = createForm($values);
+
+  const mounted = field(form, $values.name);
+
+  // reading it is what starts the dirty tracking
+  assert.equal(
+    getValue(mounted.result.state.$isDirty),
+    false,
+    'and the baseline it took is what the catch-up left'
+  );
+  assert.equal(getValue(form.$isDirty), false);
+
+  scope[0]._cleanup();
+});
+
+test('every form hook needs the provider', () => {
+  const $values = createControl({ name: 'a' });
+
+  const noProvider = /no form provider/;
+
+  // a field with no form to meet in is swept by nothing and marked by nobody,
+  // so it is a mistake rather than a lesser field
+  assert.throws(
+    () => mount(undefined, () => useField($values.name)),
+    noProvider
+  );
+
+  assert.throws(
+    () =>
+      mount(undefined, () => useNativeField($values.name, { type: 'text' })),
+    noProvider
+  );
+
+  assert.throws(
+    () => mount(undefined, () => useFieldState($values.name)),
+    noProvider
+  );
+
+  assert.throws(
+    () => mount(undefined, () => useValidator($values.name, noop)),
+    noProvider
+  );
+
+  assert.throws(
+    () => mount(undefined, () => usePathValidator($values, () => undefined)),
+    noProvider
+  );
+
+  assert.throws(
+    () =>
+      mount(undefined, () =>
+        Field({ control: $values.name, render: (() => null) as any })
+      ),
+    noProvider
+  );
+
+  assert.throws(
+    () =>
+      mount(undefined, () =>
+        NativeField({
+          control: $values.name,
+          type: 'text',
+          render: (() => null) as any,
+        })
+      ),
+    noProvider
+  );
+});
+
+test('a field outside the form control has no dirtiness of its own', async () => {
+  const $values = createControl({ email: 'jane@example.com' });
+
+  const $foreign = createControl({ note: 'kept' });
+
+  const form = createForm($values);
+
+  const email = field(form, $values.email).result.state;
+
+  // reading it starts the tracking, so what mounts after this registers into a
+  // form already counting - the other way in for an entry outside the control
+  assert.equal(getValue(form.$isDirty), false);
+
+  const note = field(form, $foreign.note).result.state;
+
+  setValue($foreign.note, 'edited');
+
+  await tick();
+
+  assert.equal(
+    getValue(note.$isDirty),
+    false,
+    'the form baselines its own control, and that is the only baseline there is'
+  );
+  assert.equal(getValue(form.$isDirty), false, 'so the form counts none of it');
+
+  setValue($values.email, 'john@example.com');
+
+  await tick();
+
+  assert.equal(getValue(email.$isDirty), true, 'what is under it still counts');
+  assert.equal(getValue(form.$isDirty), true);
+});
+
+test('a form hidden and shown again keeps the baseline it took', async () => {
+  const $values = createControl({ name: 'jane' });
+
+  const rendered = renderHook(() => useForm($values, { submit: noop } as any));
+
+  const form = rendered.result;
+
+  const name = field(form, $values.name).result.state;
+
+  setValue($values.name, 'john');
+
+  await tick();
+
+  assert.equal(getValue(name.$isDirty), true);
+
+  // what `Activity` does to it: the effects go and come back, and the ref
+  // carrying the form goes through untouched, so the form is the same one
+  rendered.unmount();
+
+  rendered.remount();
+
+  await tick();
+
+  assert.equal(
+    getValue(name.$isDirty),
+    true,
+    'a second mount is no reason to call the edits the baseline'
+  );
+
+  assert.equal((form as any)._baseline.name, 'jane');
+});
+
+test('a targeted reset outside the form control leaves it alone', async () => {
+  // the same key on both, which is what makes a mixed-up baseline visible
+  const $values = createControl({ note: 'the form one' });
+
+  const $foreign = createControl({ note: 'kept' });
+
+  const form = createForm($values);
+
+  field(form, $foreign.note);
+
+  setValue($foreign.note, 'edited');
+
+  await tick();
+
+  form.reset($foreign.note);
+
+  await tick();
+
+  assert.equal(
+    getValue($foreign.note),
+    'edited',
+    'no baseline of its own is nothing to restore to'
+  );
+});
+
+test('a valued reset outside the form control writes it and nothing else', async () => {
+  const $values = createControl({ note: 'the form one' });
+
+  const $foreign = createControl({ note: 'kept' });
+
+  const form = createForm($values);
+
+  const note = field(form, $foreign.note).result.state;
+
+  const own = field(form, $values.note).result.state;
+
+  assert.equal(getValue(note.$isDirty), false);
+
+  form.reset($foreign.note, 'given');
+
+  await tick();
+
+  assert.equal(getValue($foreign.note), 'given', 'the value is written');
+  assert.equal(
+    getValue($values.note),
+    'the form one',
+    'and the form baseline it shares a path with is untouched'
+  );
+
+  setValue($values.note, 'edited');
+
+  await tick();
+
+  assert.equal(getValue(own.$isDirty), true);
+
+  setValue($values.note, 'the form one');
+
+  await tick();
+
+  assert.equal(
+    getValue(own.$isDirty),
+    false,
+    'so what the form is over still measures against what it held'
+  );
+});
+
+test('a reset with a value before the data lands is not a baseline', async () => {
+  const $values = createAsyncControl<{ name: string; other: string }>();
+
+  const form = createForm($values);
+
+  const name = field(form, $values.name).result.state;
+
+  const other = field(form, $values.other).result.state;
+
+  // an async control refuses to be written into nothing, so this moves nothing
+  // - and it must not make a baseline out of the one path it names either
+  form.reset($values.name, 'typed');
+
+  await tick();
+
+  assert.equal(
+    (form as any)._baselined,
+    false,
+    'the load is still what the baseline is owed to'
+  );
+
+  setValue($values, { name: 'jane', other: 'x' });
+
+  await tick();
+
+  assert.deepEqual((form as any)._baseline, { name: 'jane', other: 'x' });
+
+  // a stub baseline of `{ name: 'typed' }` would read every other field dirty
+  assert.equal(getValue(form.$isDirty), false);
+  assert.equal(getValue(name.$isDirty), false);
+  assert.equal(getValue(other.$isDirty), false);
 });

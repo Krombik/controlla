@@ -5,7 +5,6 @@ import {
   useEffect,
   useSyncExternalStore,
 } from 'react';
-import DisposeContext from '#internal/DisposeContext';
 
 import type { PageRoute, RouterControlRoot } from '#router/internal/types';
 import noop from '#internal/noop';
@@ -34,8 +33,6 @@ type Slot = {
   _notify(): void;
 };
 
-const DisposeProvider = DisposeContext.Provider;
-
 const setSlot = (slot: Slot, Component: ComponentType) => {
   if (slot._component != Component) {
     slot._component = Component;
@@ -44,67 +41,38 @@ const setSlot = (slot: Slot, Component: ComponentType) => {
   }
 };
 
-const disposeAll = (disposables: Array<() => void>) => {
-  for (let i = 0, l = disposables.length; i < l; i++) {
-    disposables[i]();
-  }
-
-  disposables.length = 0;
-};
-
 const handleRouter = (
   level: number,
   routes: Array<RouterPage | RouterContainer>,
   components: ComponentType[],
   slots: Slot[],
-  unmounting: { _value: boolean },
   getRouter: (level: number) => () => ReactElement
 ) => {
   const Router = getRouter(level);
 
-  // `components.length == level`, so this level's slot holds every container
-  // declared here and the page slot of every page declared here
-  const slot = slots[level];
-
   for (let i = 0; i < routes.length; i++) {
     const [arg1, arg2] = routes[i];
 
-    const disposables: Array<() => void> = [];
-
     if (Array.isArray(arg2)) {
-      const effect = () => () => {
-        // still this slot's component, with the view up: an <Activity> hide or
-        // a re-suspended boundary, not a navigation out of the layout
-        if (slot._component != ContainerSlot || unmounting._value) {
-          disposeAll(disposables);
-        }
-      };
-
-      const ContainerSlot = () => {
-        useEffect(effect, EMPTY_ARR);
-
-        return jsx(DisposeProvider, {
-          value: disposables,
-          children: jsx(arg1 as ComponentType<PropsWithChildren>, {
-            children: jsx(Child, EMPTY_OBJECT),
-          }),
+      const ContainerSlot = () =>
+        jsx(arg1 as ComponentType<PropsWithChildren>, {
+          children: jsx(Child, EMPTY_OBJECT),
         });
-      };
 
       const Child = handleRouter(
         level + 1,
         arg2,
         append(components, ContainerSlot),
         slots,
-        unmounting,
         getRouter
       );
     } else {
       const count = components.length;
 
       const clearParams = () => {
-        // a navigation back to the page within the task leaves nothing to
-        // clear - the match has already refilled these from the url
+        // still the matched page: an `<Activity>` hide, a re-suspended
+        // boundary, or a navigation back to it within the task, which has
+        // already refilled these from the url
         if (
           ((arg1 as PageRoute<true>)[INTERNALS] as PrimitiveControlInternals)
             ._value
@@ -137,34 +105,20 @@ const handleRouter = (
         }
       };
 
+      // the params outlive the page by a task. React destroys the passive
+      // effects of a deleted subtree parent-first, so this runs before the
+      // cleanups inside the page - what a `watchValue` there opened is still
+      // subscribed, and clearing here would hand it the params of a page on
+      // its way out. Whether there is anything to clear by then is
+      // `clearParams`' own question
       const effect = () => () => {
-        if (
-          ((arg1 as PageRoute<true>)[INTERNALS] as PrimitiveControlInternals)
-            ._value
-        ) {
-          if (unmounting._value) {
-            disposeAll(disposables);
-          }
-
-          return;
-        }
-
-        disposeAll(disposables);
-
-        // the params outlive the page by a task. React tears a deleted subtree
-        // down parent-first, so this runs before the cleanups inside the page:
-        // clearing them here would notify every `watchValue` in it while it is
-        // still subscribed, with the params of a page on its way out
         setTimeout(clearParams);
       };
 
       const PageSlot = () => {
         useEffect(effect, EMPTY_ARR);
 
-        return jsx(DisposeProvider, {
-          value: disposables,
-          children: jsx(arg2, EMPTY_OBJECT),
-        });
+        return jsx(arg2, EMPTY_OBJECT);
       };
 
       (arg1 as PageRoute<true>)._register(() => {
@@ -207,19 +161,7 @@ const createRouterView = (routes: Array<RouterPage | RouterContainer>) => {
 
   const slots: Slot[] = [];
 
-  // deletion tears effects down parent-first and the root router is above
-  // every slot, so this is already set when a page's cleanup reads it
-  const unmounting = { _value: false };
-
-  const onUnmount = () => {
-    unmounting._value = false;
-
-    return () => {
-      unmounting._value = true;
-    };
-  };
-
-  return handleRouter(0, routes, EMPTY_ARR, slots, unmounting, (level) => {
+  return handleRouter(0, routes, EMPTY_ARR, slots, (level) => {
     if (level < routers.length) {
       return routers[level];
     }
@@ -236,16 +178,8 @@ const createRouterView = (routes: Array<RouterPage | RouterContainer>) => {
 
     const getComponent = () => slot._component;
 
-    const Router = level
-      ? () => jsx(useSyncExternalStore(subscribe, getComponent), EMPTY_OBJECT)
-      : () => {
-          useEffect(onUnmount, EMPTY_ARR);
-
-          return jsx(
-            useSyncExternalStore(subscribe, getComponent),
-            EMPTY_OBJECT
-          );
-        };
+    const Router = () =>
+      jsx(useSyncExternalStore(subscribe, getComponent), EMPTY_OBJECT);
 
     slots.push(slot);
 

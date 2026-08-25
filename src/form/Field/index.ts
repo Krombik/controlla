@@ -6,13 +6,14 @@ import useFieldProps from '#form/internal/useFieldProps';
 import { getFieldState } from '#form/internal/entry';
 import useEntry from '#form/internal/useEntry';
 import FormContext from '#form/internal/FormContext';
+import throwNoProvider from '#form/internal/throwNoProvider';
 
 const Field = ((props: FieldProps) => {
   const { control } = props;
 
-  const form = useContext(FormContext);
+  const form = useContext(FormContext) || throwNoProvider();
 
-  const entry = useEntry(form, control, true);
+  const entry = useEntry(form, control);
 
   return props.render(
     useFieldProps(control, form, entry),
@@ -26,7 +27,7 @@ const Field = ((props: FieldProps) => {
    * what keeps that rerender to this field instead of the section around it.
    *
    * The wiring goes on your component; the {@link FieldState state} is there for
-   * `$isDirty` and the rest, and reading none of it subscribes to nothing. An
+   * `$isDirty` and the rest, and costs nothing where you leave it unread. An
    * `input`, `select` or `textarea` belongs to `NativeField`, which rerenders
    * nothing at all.
    *

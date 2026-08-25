@@ -1,5 +1,4 @@
 import type { Control } from '#types';
-import type { ChangeListener, ControlInternals } from '#internal/types';
 import type {
   FieldState,
   FormOptions,
@@ -33,7 +32,7 @@ export type NativeKind<E extends FieldElement = FieldElement> = {
  * @internal
  */
 export type ValidatorInternals = {
-  readonly _form: FormInternals | undefined;
+  readonly _form: FormInternals;
   /** What it validates - one control, unless it was given a tuple of them. */
   readonly _controls: readonly Control[];
   /** Whether the error answers per control rather than for the one control. */
@@ -68,9 +67,9 @@ export type ValidatorInternals = {
 /** @internal */
 export type FieldEntry = {
   readonly _control: Control;
-  readonly _form: FormInternals | undefined;
-  /** The baseline of an entry with no form; the rest resolve theirs through `_roots`. */
-  _snapshot: any;
+  readonly _form: FormInternals;
+  /** Whether it sits under the form control, which is what has a baseline. */
+  readonly _tracked: boolean;
   /**
    * Only maintained while the form tracks dirtiness - which a per-field
    * `$isDirty` starts too, since that is read from here.
@@ -117,18 +116,16 @@ export type FormInternals = FormState & {
    * changes bucket, and leaving a field walks these instead of all of them.
    */
   readonly _blurValidators: ValidatorInternals[];
-  /** Baseline value per root, captured when the form first registers a field of it. */
-  readonly _roots: Map<ControlInternals, any>;
-  /** The load watch held on every async root the form baselines against. */
-  readonly _armedRoots: Map<ControlInternals, ChangeListener>;
+  /** What the fields compare against: the form control's value, taken by the mount. */
+  _baseline: any;
+  /** Whether it has one - a load it is still waiting for does not, yet. */
+  _baselined: boolean;
   _options: FormOptions;
   /** Validators currently holding an error. */
   _errorCount: number;
   /** Validators currently in flight. */
   _pendingCount: number;
   _dirtyCount: number;
-  /** Whether the load watches of `_armedRoots` are subscribed. */
-  _attached: boolean;
   _isSubmitting: boolean;
   _submittingControl: Control<boolean> | undefined;
   _validatingControl: Control<boolean> | undefined;

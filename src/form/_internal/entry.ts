@@ -1,106 +1,25 @@
 import type { Control } from '#types';
 import type { FieldEntry, FormInternals } from '#form/internal/types';
-import type { AsyncControlInternals, ChangeListener } from '#internal/types';
 import type { FieldState } from '#form/types';
 import { INTERNALS } from '#internal/constants';
-import createDerivedControl from '#core/createDerivedControl';
 import createPrimitiveControl from '#core/createPrimitiveControl';
 import getValue from '#core/getValue';
 import setValue from '#core/setValue';
 import watchValue from '#core/watchValue';
-import { addListener, removeListener } from '#internal/flushQueue';
-import isNotEqual from '#form/internal/isNotEqual';
+import isNotEqual from '#internal/isNotEqual';
 import { dropEntry, seedEntry } from '#form/internal/validator';
 import identity from '#internal/identity';
 import noop from '#internal/noop';
 
 /**
- * The first value a load hands over is the baseline. What comes after it is
- * not the form's business: whoever asked for a reload is who decides whether
- * what it brought is the new baseline. A plain listener: the form must not be
- * what starts the load.
- */
-const watchFirstLoad = (form: FormInternals, root: AsyncControlInternals) => {
-  const armed = form._armedRoots;
-
-  if (!armed.has(root)) {
-    const listener: ChangeListener = (value) => {
-      if (value !== undefined) {
-        removeListener(root, listener);
-
-        armed.delete(root);
-
-        form._roots.set(root, value);
-      }
-    };
-
-    armed.set(root, listener);
-
-    // before the mount its effect subscribes these, so a render that never
-    // commits leaves nothing behind
-    if (form._attached) {
-      addListener(root, listener);
-    }
-  }
-};
-
-/**
- * The load watches of every root armed so far, subscribed by the mount. A
- * value that landed between the render that armed one and this is already its
- * baseline: the notify it came with had nobody to hear it, and the next one is
- * an edit.
- */
-export const watchArmedLoads = (form: FormInternals) => {
-  const armed = form._armedRoots;
-
-  const it = armed.entries();
-
-  for (let i = armed.size; i--;) {
-    const item = it.next().value!;
-
-    const root = item[0];
-
-    const value = root._value;
-
-    if (value !== undefined) {
-      armed.delete(root);
-
-      form._roots.set(root, value);
-    } else {
-      addListener(root, item[1]);
-    }
-  }
-};
-
-/**
- * The whole root at once, so every field of it compares against the same
- * moment. An async root that hasn't arrived is left alone: every path of it
- * reads `undefined`, which is what it compares against anyway.
+ * Whatever the form was baselined at, down this control's path. Until it has
+ * one - a load it is still waiting for - this is the value itself, so nothing
+ * reads dirty against a baseline that isn't there yet.
  */
 export const getBaseline = (form: FormInternals, control: Control) => {
   const internals = control[INTERNALS];
 
-  const roots = form._roots;
-
-  const root = internals._root;
-
-  let value: any;
-
-  if (roots.has(root)) {
-    value = roots.get(root);
-  } else {
-    value = root._value;
-
-    if ((root as Partial<AsyncControlInternals>)._errorControl) {
-      if (value !== undefined) {
-        roots.set(root, value);
-      } else {
-        watchFirstLoad(form, root as AsyncControlInternals);
-      }
-    } else {
-      roots.set(root, value);
-    }
-  }
+  let value = form._baselined ? form._baseline : internals._root._value;
 
   const path = internals._path;
 
@@ -115,7 +34,7 @@ export const getBaseline = (form: FormInternals, control: Control) => {
 
 /** The value `reset` restores this field to, and `$isDirty` compares it against. */
 export const snapshotOf = (entry: FieldEntry) =>
-  entry._form ? getBaseline(entry._form, entry._control) : entry._snapshot;
+  getBaseline(entry._form, entry._control);
 
 /** Whether {@link control} is {@link target} or sits under it. */
 export const isUnder = (target: Control, control: Control) => {
@@ -148,13 +67,10 @@ export const isUnder = (target: Control, control: Control) => {
   return true;
 };
 
-export const makeEntry = (
-  control: Control,
-  form: FormInternals | undefined
-): FieldEntry => ({
+const makeEntry = (control: Control, form: FormInternals): FieldEntry => ({
   _control: control,
   _form: form,
-  _snapshot: form ? undefined : getValue(control),
+  _tracked: isUnder(form._control, control),
   _dirty: false,
   _errorCount: 0,
   _pendingCount: 0,
@@ -234,13 +150,15 @@ export const startDirtyTracking = (form: FormInternals) => {
   for (let i = entries.size; i--;) {
     const entry = it.next().value!;
 
-    if (isNotEqual(getValue(entry._control), snapshotOf(entry))) {
-      entry._dirty = true;
+    if (entry._tracked) {
+      if (isNotEqual(getValue(entry._control), snapshotOf(entry))) {
+        entry._dirty = true;
 
-      count++;
+        count++;
+      }
+
+      watchDirty(form, entry);
     }
-
-    watchDirty(form, entry);
   }
 
   form._dirtyCount = count;
@@ -254,7 +172,7 @@ const attachEntry = (form: FormInternals, entry: FieldEntry) => {
 
   form._entries.set(control, entry);
 
-  if (form._dirtyControl && !entry._unwatchDirty) {
+  if (entry._tracked && form._dirtyControl && !entry._unwatchDirty) {
     watchDirty(form, entry);
 
     setEntryDirty(
@@ -272,20 +190,20 @@ const attachEntry = (form: FormInternals, entry: FieldEntry) => {
 export const holdEntry = (entry: FieldEntry) => {
   const form = entry._form;
 
-  if (form) {
-    // an `Activity` hides by unmounting, which is what carries the registration
-    if (!form._entries.has(entry._control)) {
-      attachEntry(form, entry);
-    }
+  const control = entry._control;
 
-    entry._refs++;
+  // an `Activity` hides by unmounting, which is what carries the registration
+  if (!form._entries.has(control)) {
+    attachEntry(form, entry);
   }
+
+  entry._refs++;
 };
 
 export const releaseEntry = (entry: FieldEntry) => {
   const form = entry._form;
 
-  if (form && !--entry._refs) {
+  if (!--entry._refs) {
     form._entries.delete(entry._control);
 
     // an unregistered field is nothing to mark, and nothing to keep counting
@@ -306,9 +224,6 @@ export const getEntry = (form: FormInternals, control: Control) => {
 
   if (entry === undefined) {
     entry = makeEntry(control, form);
-
-    // before anything can be edited through the field
-    getBaseline(form, control);
 
     attachEntry(form, entry);
   }
@@ -335,18 +250,10 @@ export const getFieldState = (entry: FieldEntry): FieldState<any> =>
       // a rebaseline moves dirtiness without touching the value, so this is
       // fed by `setEntryDirty` rather than derived - and that is what keeps
       // `_dirty`, which has to be running before seeding from it
-      if (form) {
-        if (!form._dirtyControl) {
-          startDirtyTracking(form);
-        }
-
-        return (entry._dirtyControl ||= createPrimitiveControl(entry._dirty));
+      if (!form._dirtyControl) {
+        startDirtyTracking(form);
       }
 
-      // no form is no rebaseline: the value is the only input left
-      return (entry._dirtyControl ||= createDerivedControl(
-        entry._control,
-        (value) => isNotEqual(value, entry._snapshot)
-      ));
+      return (entry._dirtyControl ||= createPrimitiveControl(entry._dirty));
     },
   });

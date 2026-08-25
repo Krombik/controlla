@@ -1,7 +1,9 @@
 import type { Control, SyncExternalStorage } from '#types';
-import { useContext, useRef } from 'react';
-import DisposeContext from '#internal/DisposeContext';
+import { useRef } from 'react';
+import type { Subscription } from '#internal/types';
 import { cleanupScope } from '#internal/cleanup';
+import { EMPTY_ARR } from '#internal/constants';
+import useSubscription from '#internal/useSubscription';
 
 const makeUseControl =
   (
@@ -12,26 +14,32 @@ const makeUseControl =
     withoutLazyArg: boolean
   ) =>
   (arg1?: any, externalStorage?: SyncExternalStorage): any => {
-    const controlRef = useRef<Control | null>(null);
+    const ref = useRef<[Control, Subscription] | null>(null);
 
-    const scope = useContext(DisposeContext);
+    let item = ref.current;
 
-    let control = controlRef.current;
-
-    if (control === null) {
-      cleanupScope._value = scope;
-
+    if (item === null) {
+      const scope = (cleanupScope._value = []);
       try {
-        controlRef.current = control = createControl(
-          withoutLazyArg || typeof arg1 != 'function' ? arg1 : arg1(),
-          externalStorage
-        );
+        ref.current = item = [
+          createControl(
+            withoutLazyArg || typeof arg1 != 'function' ? arg1 : arg1(),
+            externalStorage
+          ),
+          scope[0],
+        ];
       } finally {
         cleanupScope._value = null;
       }
     }
 
-    return control;
+    const subscription = item[1];
+
+    if (subscription) {
+      useSubscription(subscription, EMPTY_ARR);
+    }
+
+    return item[0];
   };
 
 export default makeUseControl;

@@ -1,4 +1,4 @@
-import { useContext, useLayoutEffect, useRef } from 'react';
+import { useContext, useEffect, useRef } from 'react';
 
 import type { Control, ControlScope, SelectValue } from '#types';
 import type { ValidatorInternals } from '#form/internal/types';
@@ -7,6 +7,7 @@ import createControl from '#core/createControl';
 import noop from '#internal/noop';
 import watchValue from '#core/watchValue';
 import FormContext from '#form/internal/FormContext';
+import throwNoProvider from '#form/internal/throwNoProvider';
 import {
   distribute,
   holdValidator,
@@ -18,7 +19,7 @@ const useValidator = ((
   validate: (value: any) => any,
   validateOn?: ValidateOn
 ): any => {
-  const form = useContext(FormContext);
+  const form = useContext(FormContext) || throwNoProvider();
 
   const ref = useRef<ValidatorInternals>(null);
 
@@ -59,7 +60,7 @@ const useValidator = ((
         _unwatch: noop,
       });
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     holdValidator(validator);
 
     // an error written from outside a validator - a rejection coming back from

@@ -1,11 +1,19 @@
-import type { DerivedControlInternals } from '#internal/derivedControlUtils';
-import { INTERNALS } from '#internal/constants';
-import DisposeContext from '#internal/DisposeContext';
-import { useContext, useRef } from 'react';
+import { useRef } from 'react';
 import type { Control } from '#types';
 import append from '#internal/append';
-import removeFromArray from '#internal/removeFromArray';
+import type { Subscription } from '#internal/types';
 import { cleanupScope } from '#internal/cleanup';
+import noop from '#internal/noop';
+import useSubscription from '#internal/useSubscription';
+
+/**
+ * What a creation that registered nothing is mounted through - a `once` control
+ * over sources that were all ready has nothing left to follow. Stands in so the
+ * hook below is handed one subscription and one dep either way.
+ */
+const INERT_SCOPE: Subscription[] = [
+  { _subscribe: noop, _cleanup: noop, _resync: noop },
+];
 
 /**
  * Rebuilds the control when a {@link controls} entry changes identity.
@@ -18,14 +26,12 @@ const useDerived = (
   once: boolean,
   combiner?: (...values: any[]) => any
 ) => {
-  const ref = useRef<null | { _controls: Control[]; _item: Control }>(null);
-
-  const scope = useContext(DisposeContext);
+  const ref = useRef<[Subscription[], Control[], Control] | null>(null);
 
   let item = ref.current;
 
   if (item) {
-    const prevControls = item._controls;
+    const prevControls = item[1];
 
     const withoutCombiner = combiner === undefined;
 
@@ -37,22 +43,13 @@ const useDerived = (
 
     for (let i = 0; i < controlsCount; i++) {
       if (prevControls[i] != controls[i]) {
-        const cleanup = (item._item[INTERNALS] as DerivedControlInternals)
-          ._cleanup;
+        item[0] = cleanupScope._value = [];
 
-        cleanup();
-
-        if (scope) {
-          removeFromArray(scope, cleanup);
-
-          cleanupScope._value = scope;
-        }
+        item[1] = controls;
 
         try {
-          item._controls = controls;
-
-          item._item = make(
-            combiner === undefined ? controls : append(controls, combiner),
+          item[2] = make(
+            withoutCombiner ? controls : append(controls, combiner),
             once
           );
         } finally {
@@ -63,22 +60,25 @@ const useDerived = (
       }
     }
   } else {
-    cleanupScope._value = scope;
-
     try {
-      ref.current = item = {
-        _controls: controls,
-        _item: make(
+      ref.current = item = [
+        (cleanupScope._value = []),
+        controls,
+        make(
           combiner === undefined ? controls : append(controls, combiner),
           once
         ),
-      };
+      ];
     } finally {
       cleanupScope._value = null;
     }
   }
 
-  return item._item;
+  const scope = item[0].length ? item[0] : INERT_SCOPE;
+
+  useSubscription(scope[0], scope);
+
+  return item[2];
 };
 
 export default useDerived;

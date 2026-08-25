@@ -2,10 +2,7 @@ import { useContext } from 'react';
 
 import type { FormState } from '#form/types';
 import FormContext from '#form/internal/FormContext';
-
-const throwNoProvider = (): never => {
-  throw new Error('no form provider');
-};
+import throwNoProvider from '#form/internal/throwNoProvider';
 
 /**
  * The enclosing form, so `$isSubmitting`, `$isValid`, `$isDirty` and `submit`

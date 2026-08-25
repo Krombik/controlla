@@ -48,6 +48,7 @@ function commitSet(this: MarkedInternals, nextValue: any, lane: Lane) {
 const makePrimitiveInternals = (value: any): PrimitiveControlInternals => {
   const internals: MarkedInternals = {
     _root: undefined!,
+    _pending: undefined,
     _get: readRootValue,
     _listeners: EMPTY_ARR,
     _indexMap: undefined,

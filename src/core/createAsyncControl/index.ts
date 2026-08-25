@@ -275,6 +275,7 @@ const createAsyncControl: {
 
   const errorControl: ErrorControlInternals<AsyncControlInternals> = {
     _root: undefined!,
+    _pending: undefined,
     _get: readRootValue,
     _listeners: EMPTY_ARR,
     _indexMap: undefined,
@@ -292,6 +293,7 @@ const createAsyncControl: {
   const internals = initControl<AsyncControlInternals>(
     {
       _root: undefined!,
+      _pending: undefined,
       _get: readRootValue,
       _listeners: EMPTY_ARR,
       _indexMap: undefined,

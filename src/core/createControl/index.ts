@@ -85,6 +85,7 @@ const createControl: {
     initControl<ControlInternals>(
       {
         _root: undefined!,
+        _pending: undefined,
         _get: readRootValue,
         _listeners: EMPTY_ARR,
         _indexMap: undefined,

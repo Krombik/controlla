@@ -8,6 +8,7 @@ import type {
 import type { Scheduler } from '#types';
 import scheduleMicrotask from '#internal/scheduleMicrotask';
 import reportError from '#internal/reportError';
+import noop from '#internal/noop';
 
 type NotifiableInternals = {
   readonly _listeners: ChangeListener[];
@@ -31,6 +32,10 @@ export const notify = (
   value: any,
   prevValue: any
 ) => {
+  if (lane._silent) {
+    return;
+  }
+
   const listeners = internals._listeners;
 
   const listenersCount = listeners.length;
@@ -64,31 +69,10 @@ export const notify = (
 
   const dependents = internals._dependents;
 
-  let l = dependents.length;
+  for (let i = 0, l = dependents.length; i < l; i++) {
+    const item = dependents[i];
 
-  // GC'd dependents are compacted in place via swap-pop
-  if (l) {
-    for (let i = 0, item = dependents[0]; ;) {
-      const control = item._ref.deref();
-
-      if (control) {
-        item._notify(lane, control, value, prevValue);
-
-        if (++i == l) {
-          return;
-        }
-
-        item = dependents[i];
-      } else {
-        const last = dependents.pop()!;
-
-        if (i == --l) {
-          return;
-        }
-
-        dependents[i] = item = last;
-      }
-    }
+    item._notify(lane, value, prevValue);
   }
 };
 
@@ -130,6 +114,23 @@ export const flushNotifications = () => {
 
 const flushLanes = new WeakMap<Scheduler, Lane>();
 
+/**
+ * The lane a catch-up writes through. Nothing is told about it: it runs while
+ * React commits, before anything of that commit is attached, and telling a
+ * dependent is what would queue one - so nothing lands here either, and it is
+ * never flushed.
+ */
+export const silentLane: Lane = {
+  _scheduler: noop,
+  _beforeFlushHooks: [],
+  _canScheduleFlush: false,
+  _patchByControl: new Map(),
+  _pendingControlLevels: [],
+  _minPendingLevel: Infinity,
+  _maxPendingLevel: 0,
+  _silent: true,
+};
+
 const flushQueue = (
   lane: Lane,
   pendingControlLevels: Lane['_pendingControlLevels'],
@@ -164,57 +165,58 @@ const flushQueue = (
   }
 };
 
+/** Runs the lane now, rather than when its scheduler would have. */
+export const flushLane = (lane: Lane) => {
+  if (currentLane) {
+    pendingLanes.push(() => flushLane(lane));
+
+    return;
+  }
+
+  const { _beforeFlushHooks: beforeFlushHooks } = lane;
+
+  currentLane = lane;
+
+  for (let i = 0; i < beforeFlushHooks.length; i++) {
+    try {
+      beforeFlushHooks[i]();
+    } catch (err) {
+      reportError(err);
+    }
+  }
+
+  beforeFlushHooks.length = 0;
+
+  flushQueue(lane, lane._pendingControlLevels, lane._patchByControl);
+
+  currentLane = null;
+
+  lane._minPendingLevel = Infinity;
+
+  lane._maxPendingLevel = 0;
+
+  lane._canScheduleFlush = true;
+
+  const pendingLanesCount = pendingLanes.length;
+
+  if (pendingLanesCount) {
+    const copy = pendingLanes.slice();
+
+    pendingLanes.length = 0;
+
+    for (let i = 0; i < pendingLanesCount; i++) {
+      copy[i]();
+    }
+  }
+};
+
 export const scheduleFlush = (lane: Lane) => {
   const scheduler = lane._scheduler;
 
   if (lane._canScheduleFlush) {
     lane._canScheduleFlush = false;
 
-    const cb = () => {
-      if (currentLane) {
-        pendingLanes.push(cb);
-
-        return;
-      }
-
-      const { _beforeFlushHooks: beforeFlushHooks } = lane;
-
-      currentLane = lane;
-
-      for (let i = 0; i < beforeFlushHooks.length; i++) {
-        try {
-          beforeFlushHooks[i]();
-        } catch (err) {
-          reportError(err);
-        }
-      }
-
-      beforeFlushHooks.length = 0;
-
-      flushQueue(lane, lane._pendingControlLevels, lane._patchByControl);
-
-      currentLane = null;
-
-      lane._minPendingLevel = Infinity;
-
-      lane._maxPendingLevel = 0;
-
-      lane._canScheduleFlush = true;
-
-      const pendingLanesCount = pendingLanes.length;
-
-      if (pendingLanesCount) {
-        const copy = pendingLanes.slice();
-
-        pendingLanes.length = 0;
-
-        for (let i = 0; i < pendingLanesCount; i++) {
-          copy[i]();
-        }
-      }
-    };
-
-    scheduler(cb);
+    scheduler(() => flushLane(lane));
   }
 
   if ('_debounce' in scheduler && lane !== currentLane) {
@@ -243,6 +245,7 @@ export const getLane = (scheduler: Scheduler) => {
           _pendingControlLevels: [],
           _minPendingLevel: Infinity,
           _maxPendingLevel: 0,
+          _silent: false,
         })
       ),
     lane

@@ -11,6 +11,7 @@ const makeStatusInternals = (
   value: any
 ): Omit<ReadonlyPrimitiveControlInternals, keyof Attachers> => ({
   _root: root,
+  _pending: undefined,
   _dependents: EMPTY_ARR,
   _get: readRootValue,
   _indexMap: undefined,

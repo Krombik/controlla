@@ -33,7 +33,7 @@ yarn add controlla
 npm install --save controlla
 ```
 
-> Requires React 17 or above. Runs anywhere - where `WeakRef`/`FinalizationRegistry` are missing (React Native's Hermes, browsers older than mid-2020) controls are kept alive instead of collected: behavior is identical, memory just isn't reclaimed on its own.
+> Requires React 18 or above.
 
 ## Quick start
 
@@ -48,7 +48,7 @@ const $form = createControl({ name: '', email: '', agree: false });
 
 const NameInput = () => {
   const name = useValue($form.name);     // subscribes to .name only
-  return <input value={name} onChange={(e) => setValue($form.name, e.target.value)} />;
+  return <input value={name} onChange={(e) => setValue($form.name, e.target.value)} />
 };
 
 const Submit = () => {
@@ -126,7 +126,7 @@ For working code rather than snippets, [`examples/`](examples) has twelve standa
 - **Async status**: [`selectLoading`](#selectloadingcontrol), [`selectReady`](#selectreadycontrol), [`selectError`](#selecterrorcontrol)
 - **Components**: [`ControlConsumer`](#controlconsumer), [`ControlsConsumer`](#controlsconsumer), [`CombinedControlsConsumer`](#combinedcontrolsconsumer), [`InfiniteControlsConsumer`](#infinitecontrolsconsumer), [`SuspenseControlConsumer`](#suspensecontrolconsumer), [`SuspenseControlsConsumer`](#suspensecontrolsconsumer)
 - **Utils**: [`$never`](#never), [`isAggregateControlError`](#isaggregatecontrolerrorerr), [`isSourceUpdate`](#issourceupdate)
-- **Registry**: [`createRegistry`](#createregistrycreate-initarg-options)
+- **Registry**: [`createRegistry`](#createregistrycreate-initarg-options), [`createBoundControl` / `useBoundControl`](#createboundcontrol--useboundcontrol)
 - **Loaders**: [`requestLoader`](#requestloaderfetch-options-scheduler), [`pollLoader`](#pollloaderfetch-options-scheduler)
 - **Persistence**: [`getPersistStorage`](#getpersiststorageoptions), [`safeLocalStorage`](#safelocalstorage), [`safeSessionStorage`](#safesessionstorage)
 - **DOM**: [`mediaQuery`](#mediaqueryquery), [`$online`](#online), [`$pageVisible`](#pagevisible), [`$windowSize`](#windowsize)
@@ -285,7 +285,7 @@ const $total = createAsyncDerivedControl($cart, $rates, (cart, rates) => cart.to
 
 ### `createSnapshotControl` / `useSnapshotControl`
 
-[`createAsyncDerivedControl`](#createasyncderivedcontrol--useasyncderivedcontrol) computed **once** - at the first moment every source is ready and error-free. The sources are dropped right after, so later source changes and reloads leave the value alone and it stays freely settable. Sources that are already ready are never even subscribed to.
+[`createAsyncDerivedControl`](#createasyncderivedcontrol--useasyncderivedcontrol) computed **once** - at the first moment every source is ready and error-free. From then on it stops following them: later source changes and reloads leave the value alone, and it stays freely settable.
 
 Until that moment it behaves like any async control: loading, or holding an [`AggregateControlError`](#isaggregatecontrolerrorerr). Using it still loads loadable sources and `invalidate` still reloads them - the value just no longer follows.
 
@@ -409,9 +409,31 @@ const user = useSuspenseValue($user);
 const [user, error] = useSuspenseValue($user, true);
 ```
 
+> **Don't create the control in the component that suspends on it.** A control a creation hook made in that same component never arrives - the value it is waiting for never reaches it, and the fallback stays up for good. Create it above the boundary (or in a [bag](#createcontrolscontextcreatecontrols-useparentcontrols)) and read it in a child:
+>
+> ```tsx
+> // wrong - the hook's control never gets subscribed
+> const Wrong = () => {
+>   const $doubled = useAsyncDerivedControl($count, double);
+>
+>   return <p>{useSuspenseValue($doubled)}</p>;
+> };
+>
+> // right - the suspending component only reads
+> const Right = () => {
+>   const $doubled = useAsyncDerivedControl($count, double);
+>
+>   return (
+>     <Suspense fallback={null}>
+>       <Value control={$doubled} />
+>     </Suspense>
+>   );
+> };
+> ```
+
 ### `useSuspenseValues(controls, safe?)`
 
-Like `useSuspenseValue` for an array - suspends until **all** are ready. Array length must stay constant across renders.
+Like `useSuspenseValue` for an array - suspends until **all** are ready. Array length must stay constant across renders, and the same rule applies: don't create the controls in the component that suspends on them.
 
 | Parameter | Type | Description |
 |---|---|---|
@@ -690,7 +712,7 @@ Multi-control `SuspenseControlConsumer`: suspends until all are ready.
 
 ### `$never`
 
-An async control stuck **loading forever** (value `undefined`, never settles, writes are no-ops). A placeholder where a control is expected but not yet available.
+An async control stuck **loading forever** (value `undefined`, never settles, writes are no-ops). A placeholder where a control is expected but not yet available. Nested paths of it never settle either, and neither does anything derived from it or bound by it - it emits nothing, so whatever reads it keeps the value it started with and stays loading.
 
 ```jsx
 {/* $user may be undefined until selected - $never keeps the fallback shown */}
@@ -788,18 +810,45 @@ const expandedRegistry = createRegistry(createPrimitiveControl, (sectionId: stri
 | Method | Returns | Description |
 |---|---|---|
 | `get(...keys)` | the item | The control for the keys, created on first access. Keys compared structurally (objects/arrays allowed). |
-| `bind(...keys)` | a bound control | Like `get`, but keys may be **controls**; re-targets to the item under their current values when a key control changes, aggregating key-control errors with the item's own. `keepPrev` controls what it shows while re-targeting. |
 | `invalidate(...keys)` | `void` | Reset items under the keys or a key prefix (async registries only). |
-| `delete(...keys)` | `boolean` | Remove an item (doesn't reset the control itself). |
-| `clear()` | `void` | Remove all items. |
+| `delete(...keys)` | `boolean` | Remove an item (doesn't reset the control itself) and release its `externalStorage`. |
+| `clear()` | `void` | Remove every item, the same way. |
+
+Dropping an item a bound control is still mirroring is safe, and yours to decide: that control keeps showing what it last read, and picks up a fresh item the next time one of its keys changes.
 
 ```ts
 const $user = userRegistry.get(42);
 
-const $selectedId = createPrimitiveControl(42);
-const $selectedUser = userRegistry.bind($selectedId);   // retargets when $selectedId changes
-
 userRegistry.invalidate(42);
+```
+
+### `createBoundControl` / `useBoundControl`
+
+`createBoundControl(registry, ...keys)` - like `get`, but keys may be **controls**: it mirrors the item under their current values and **re-targets** when a key control changes, aggregating key-control errors with the item's own. [`keepPrev`](#createregistrycreate-initarg-options) controls what it shows while re-targeting.
+
+Every call builds its own, so its lifetime is the caller's: at module level or in a [bag](#createcontrolscontextcreatecontrols-useparentcontrols) it lives for good.
+
+`useBoundControl(registry)` gives back a `bind` for the component, keeping one control per call position - so a list calls it once per row, and how many rows there are may change between renders, which is what makes it usable with [`useInfiniteValues`](#useinfinitevaluescontrols). A position rebuilds when the keys it is called with change, subscribes when the component mounts, and lets go of its keys and its item on unmount - or as soon as a render stops reaching that position.
+
+```tsx
+const $selectedId = createPrimitiveControl(42);
+
+// retargets when $selectedId changes
+const $selectedUser = createBoundControl(userRegistry, $selectedId);
+
+const Profile = () => {
+  const bind = useBoundControl(userRegistry);
+
+  return <p>{useValue(bind($selectedId)).name}</p>;
+};
+
+const Rows = ({ ids }: { ids: number[] }) => {
+  const bind = useBoundControl(userRegistry);
+
+  return useInfiniteValues(ids.map((id) => bind(id))).map((user) => (
+    <p key={user.id}>{user.name}</p>
+  ));
+};
 ```
 
 ---
@@ -842,7 +891,7 @@ Re-fetches on an interval until the result is loaded. Returns `AsyncControlOptio
 | `isLoaded` | `(value, prevValue, attempt) => boolean` | **Required.** When `true`, polling stops. |
 | `initialValue?` | `T` or `(...keys) => T` | Initial value. |
 | `syncedKeysCount?` | `number` | Trailing keys whose controls poll in sync (share one clock); omit for independent polling. |
-| `isolatedLanes?` | `boolean` | Each synced group commits on its own lane. |
+| `isolatedLanes?` | `boolean` | Each synced group's results land on their own, instead of all groups landing together. |
 | `reloadIfStale?` / `reloadOnFocus?` / `loadingTimeout?` / … | | Async options, as in `AsyncControlOptions`. |
 
 **`actions`**
@@ -881,7 +930,11 @@ Builds a `SyncExternalStorage` to pass as a control's second argument. Returns `
 ```ts
 const $theme = createControl(
   'light',
-  getPersistStorage({ name: 'theme', storage: safeLocalStorage, observable: true })
+  getPersistStorage({
+    name: 'theme',
+    storage: safeLocalStorage,
+    observable: true,
+  })
 );
 ```
 
@@ -915,7 +968,7 @@ import useValue from 'controlla/core/useValue';
 
 const Nav = () => {
   const isMobile = useValue(mediaQuery('(max-width: 600px)'));
-  return <nav className={isMobile ? 'drawer' : 'tabs'} />;
+  return <nav className={isMobile ? 'drawer' : 'tabs'} />
 };
 ```
 
@@ -1062,9 +1115,9 @@ Creates the form handle. Created once and kept for the component's life; `option
 
 **Returns**: a `FormState` - `$isSubmitting`, `$isValidating`, `$isValid`, `$isDirty`, `submit(event?)`, `validate()`, `reset(control?, value?)`, `focus(control)`.
 
-`$isValid` is every mounted validator holding no error - one that never ran counts as valid. `focus(control)` focuses that field's element and returns whether there was one; a field is focusable once it's mounted and passed its `ref` on. A failed `submit` focuses the first invalid field in the *document*, and for an error that marks no field of its own (an array rule, a group rule) the first field under what it validates.
+`$isValid` is every mounted validator holding no error - one that never ran counts as valid. `focus(control)` focuses that field's element and returns whether there was one; a field is focusable once it's mounted and passed its `ref` on. A failed `submit` focuses the first invalid field in the _document_, and for an error that marks no field of its own (an array rule, a group rule) the first field under what it validates.
 
-The **baseline** is taken when the form is created, and moves to whatever a `reset` wrote. `$isDirty` and `changed` are both measured against it. A submit leaves it alone - `reset(control, values)` from the handler is what makes what was sent the new baseline, so an autosaving form gets what moved since the *previous* submit:
+The **baseline** is the form control's value, taken when the form mounts, and it moves to whatever a `reset` wrote. `$isDirty` and `changed` are both measured against it. It is the only baseline there is: a field over some other control is validated, swept and submitted like any other, but has nothing to compare against, so its `$isDirty` stays `false`, it counts towards nothing, and a bare `reset()` clears its rules without touching its value. A submit leaves it alone - `reset(control, values)` from the handler is what makes what was sent the new baseline, so an autosaving form gets what moved since the _previous_ submit:
 
 ```ts
 const form = useForm($values, {
@@ -1078,7 +1131,7 @@ const form = useForm($values, {
 
 A `reset` also takes the errors of what it restored with it. A rule watching more than what was reset keeps its own - it holds an error, so it is watching, and the restored value is what runs it again: what it reports is about that value, not about the one on its way out.
 
-Over an async control the baseline is the **first** value a load hands over - the one the form waited for, so waiting for data is not an edit and the fields start clean. Every value after it is a value like any other: a reload overwrites what is being edited and the form reads as dirty against what it first got. Nothing rebaselines it for you, because nothing but the caller knows whether what came back should replace the edits - `reset(control, values)` from wherever the reload was asked for is what says so:
+Over an async control the baseline is the **first** value a load hands over - the one the form waited for, so waiting for data is not an edit and the fields start clean. Every value after it is a value like any other: a reload overwrites what is being edited and the form reads as dirty against what it first got. Nothing rebaselines it for you, because nothing but the caller knows whether what came back should replace the edits - `reset(control, values)` from wherever the reload was asked for is what says so. A `reset` before that first value lands writes the values but not the baseline - there is nothing to move yet, and the load's first value is still the one:
 
 ```ts
 await api.save(values);
@@ -1090,7 +1143,7 @@ A form over a control that reloads underneath it (`reloadOnFocus`, `reloadIfStal
 
 ### `<FormProvider form>`
 
-Exposes the form to the fields, validators and `useFieldState`/`useFormState` calls under it. Outside any provider a field is still wired to its control and a rule still validates - they just have no form to meet in, so nothing is swept, nothing is marked (`isError` stays `false`), and the error is only what its own control holds.
+Exposes the form to the fields, validators and `useFieldState`/`useFormState` calls under it. Every one of them needs it: a field, a rule or a state read outside any provider throws, since a field with no form to meet in is swept by nothing and marked by nobody.
 
 ### Errors
 
@@ -1100,7 +1153,7 @@ A validator hands back the error as a **control**, so the shape is yours - a mes
 const $error = useValidator($values.email, (email) =>
   email.includes('@') ? undefined : 'invalid email');
 
-<ControlConsumer control={$error} />;
+<ControlConsumer control={$error} />
 ```
 
 `undefined` is passing; anything else is failing. A field never carries the error itself - it only knows **that** it has one, since several validators can cover it:
@@ -1118,14 +1171,16 @@ A `useValidator` error is also writable, so a rejection coming back from the ser
 setValue($error, 'already taken');
 ```
 
-Whatever the trigger, an error revalidates live until it clears. Which is why the next run of that rule overwrites what you wrote: to keep a server error until *you* clear it, give the rule a control to read it from. A rule watches every control it is given, and only answers for the slots it fills:
+Whatever the trigger, an error revalidates live until it clears. Which is why the next run of that rule overwrites what you wrote: to keep a server error until _you_ clear it, give the rule a control to read it from. A rule watches every control it is given, and only answers for the slots it fills:
 
 ```tsx
 const $rejected = useControl<string | undefined>(undefined);   // yours to clear
 
 const [$emailError] = useValidator(
   [$values.email, $rejected],
-  ([email, rejected]) => [rejected ?? (email.includes('@') ? undefined : 'invalid email')],
+  ([email, rejected]) => [
+    rejected ?? (email.includes('@') ? undefined : 'invalid email'),
+  ],
   'change'
 );
 ```
@@ -1164,7 +1219,8 @@ The component form takes the same three as props and hands the error control(s) 
     validate={(email) => (email ? undefined : 'required')}
     render={($error) => <ControlConsumer control={$error} />}
   />
-)}
+  );
+}
 ```
 
 ### `usePathValidator(control, validate, validateOn?)` / `<PathValidator>`
@@ -1192,7 +1248,7 @@ const errorOf = usePathValidator($values.emails, (emails) => {
   return errors;
 });
 
-<ControlConsumer control={errorOf($values.emails[index])} />;
+<ControlConsumer control={errorOf($values.emails[index])} />
 ```
 
 **Returns**: `errorOf(control)` - that control's error as a control of its own, `undefined` while it has none. The control is made the first time it's asked for and kept, so a field whose error nothing renders allocates nothing. Targets are controls, not strings, so a rename follows and there's nothing to parse.
@@ -1217,8 +1273,8 @@ The component form is the same rule, mountable with the subtree it belongs to, a
 A field the **element itself owns**: read on every `input`/`change`, written back only when the control moves elsewhere (a `reset`, an async fill). Typing re-renders nothing, and neither does an error appearing - `aria-invalid` and `aria-describedby` land on the element directly.
 
 | Option | Type | Description |
-|---|---|---|
-| `type` | `NativeFieldType` | What the field *is*, not which element renders it - see below. |
+| --------------------------- | ----------------- | -------------------------------------------------------------- |
+| `type`                      | `NativeFieldType` | What the field _is_, not which element renders it - see below. |
 | `parse?` / `format?` | `(value) => …` | Converts on the way to the control and back. |
 | `errorId?` / `describedBy?` | `string` | Composed into the element's `aria-describedby`. |
 
@@ -1234,7 +1290,7 @@ const amount = useNativeField($values.amount, {
   errorId: 'amount-error',
 });
 
-return <input {...amount} />;
+return <input {...amount} />
 ```
 
 The component form takes the same options as props, and hands `render` the wiring plus the field's state - for a field mounted inline, in a list, or conditionally:
@@ -1300,7 +1356,7 @@ useValidator($values.tags, (tags) => (tags.length > 10 ? 'too many' : undefined)
   render={(keys) =>
     keys.map((key, index) => <Row key={key} $tag={$values.tags[index]} />)
   }
-/>;
+/>
 
 <button onClick={() => append('')}>add</button>;
 <button onClick={() => removeMany(selectedIndexes)}>remove selected</button>;
@@ -1470,7 +1526,8 @@ const RouterView = createRouterView([
     [router.routes.product, ProductPage],
     [router.routes.product.reviews, ReviewsPage],
     [router.routes.catalog, CatalogPage],
-  ]],
+    ],
+  ],
   [router.routes[NOT_FOUND], NotFoundPage],
 ]);
 
@@ -1659,7 +1716,7 @@ The router also handles what you'd expect from the platform - scroll position is
 
 ### `param`/`query` value type breaks when `stringify` is present
 
-A param's value type is inferred from `parse`'s **return**. If you leave `parse`'s argument implicit *and* also pass a `stringify`, TypeScript has to resolve the value type to type both callbacks' implicit arguments before it has inferred it from the return - it falls back to `string`, which then clashes with the real return type:
+A param's value type is inferred from `parse`'s **return**. If you leave `parse`'s argument implicit _and_ also pass a `stringify`, TypeScript has to resolve the value type to type both callbacks' implicit arguments before it has inferred it from the return - it falls back to `string`, which then clashes with the real return type:
 
 ```ts
 param({
@@ -1698,7 +1755,7 @@ Every export is reachable two ways: the named barrel (`import { selectParams } f
 ```jsonc
 {
   "typescript.preferences.includePackageJsonAutoImports": "on",
-  "typescript.preferences.autoImportSpecifierExcludeRegexes": ["^controlla$"]
+  "typescript.preferences.autoImportSpecifierExcludeRegexes": ["^controlla$"],
 }
 ```
 

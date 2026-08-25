@@ -18,6 +18,8 @@ const { default: isSourceUpdate } =
   await import('../build/core/isSourceUpdate/index.js');
 const { default: createRegistry } =
   await import('../build/core/createRegistry/index.js');
+const { default: createBoundControl } =
+  await import('../build/core/createBoundControl/index.js');
 import setValue from '../build/core/setValue/index.js';
 import getValue from '../build/core/getValue/index.js';
 const { default: invalidate } =
@@ -228,7 +230,7 @@ const reg = createRegistry(createControl, (id: number) => `item-${id}`);
 assert.equal(getValue(reg.get(1)), 'item-1');
 assert.equal(reg.get(1), reg.get(1), 'cached');
 const $key = createPrimitiveControl(1);
-const $bound = reg.bind($key);
+const $bound = createBoundControl(reg, $key);
 assert.equal(getValue($bound), 'item-1', 'bound initial');
 const keySeen: boolean[] = [];
 const stopKeySeen = watchValue($bound, () => {
@@ -492,7 +494,7 @@ const originReg = createRegistry(createAsyncControl, {
   },
 });
 const $originKey = createPrimitiveControl(1);
-const $originBound = originReg.bind($originKey) as any;
+const $originBound = createBoundControl(originReg, $originKey) as any;
 const relOrigin = retain($originBound);
 await tick();
 const boundSeen: Array<[number, boolean]> = [];
@@ -525,7 +527,7 @@ const boundReg = createRegistry(createAsyncControl, {
   },
 });
 const $boundId = createPrimitiveControl(1);
-const $boundItem = boundReg.bind($boundId) as any;
+const $boundItem = createBoundControl(boundReg, $boundId) as any;
 const $overBoundChild = createDerivedControl(
   $boundItem.n,
   (n: number | undefined) => n
@@ -560,8 +562,8 @@ const chainedReg = createRegistry(createAsyncControl, {
   },
 });
 const $outerId = createPrimitiveControl(1);
-const $outerItem = outerReg.bind($outerId) as any;
-const $chained = chainedReg.bind($outerItem.n) as any;
+const $outerItem = createBoundControl(outerReg, $outerId) as any;
+const $chained = createBoundControl(chainedReg, $outerItem.n) as any;
 const relChained = retain($chained);
 await tick();
 assert.equal(getValue($chained), 'hotel-10', 'bound key over bound child');
@@ -576,7 +578,10 @@ relChained();
 
 // `watchValues` subscribes through `_dependents` rather than a listener, so it
 // needs the activation too - `watchValue` gets it from passing its listener
-const $watchedItem = outerReg.bind(createPrimitiveControl(4)) as any;
+const $watchedItem = createBoundControl(
+  outerReg,
+  createPrimitiveControl(4)
+) as any;
 const watchedSeen: number[] = [];
 // immediate, because the value landing is where the control starts rather than
 // a change to it - which is the only thing this one has to report
@@ -617,7 +622,7 @@ const objReg = createRegistry(
   (key: { dest: string }, page: number) => ({ n: key.dest, page })
 );
 const $objKey = createPrimitiveControl({ dest: 'x' });
-const $objBound = objReg.bind($objKey, 0) as any;
+const $objBound = createBoundControl(objReg, $objKey, 0) as any;
 assert.deepEqual(
   getValue($objBound),
   { n: 'x', page: 0 },
@@ -731,7 +736,8 @@ rel2();
 
   // the registry builds a throwaway probe control to learn its control type
   assert.ok(
-    createRegistry(createAsyncControl, opts).bind(
+    createBoundControl(
+      createRegistry(createAsyncControl, opts),
       createPrimitiveControl<string | undefined>(undefined),
       0
     ),
@@ -1033,7 +1039,7 @@ rel2();
 
   const $key = createPrimitiveControl(1);
 
-  const $bound = (registry as any).bind($key);
+  const $bound = createBoundControl(registry as any, $key) as any;
 
   const release = retain($bound);
 

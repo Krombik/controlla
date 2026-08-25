@@ -9,15 +9,16 @@ import type {
 import useNativeProps from '#form/internal/useNativeProps';
 import { useContext } from 'react';
 import FormContext from '#form/internal/FormContext';
-import useEntry from '#form/internal/useEntry';
+import throwNoProvider from '#form/internal/throwNoProvider';
+import { getEntry } from '#form/internal/entry';
 
 const useNativeField = ((
   control: Control,
   options: NativeFieldOptions<any, any>
 ): any => {
-  const form = useContext(FormContext);
+  const form = useContext(FormContext) || throwNoProvider();
 
-  return useNativeProps(form, useEntry(form, control, false), options);
+  return useNativeProps(form, getEntry(form, control), options);
 }) as {
   /**
    * A field the element owns: typing goes straight into the control and

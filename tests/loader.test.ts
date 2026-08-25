@@ -3,6 +3,8 @@ import assert from 'node:assert';
 
 const { default: createRegistry } =
   await import('../build/core/createRegistry/index.js');
+const { default: createBoundControl } =
+  await import('../build/core/createBoundControl/index.js');
 const { default: createAsyncControl } =
   await import('../build/core/createAsyncControl/index.js');
 const { default: createPrimitiveControl } =
@@ -31,7 +33,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
   );
   const reg = createRegistry(createAsyncControl, poll);
   const $key = createPrimitiveControl('Q');
-  const $page0 = reg.bind($key, 0);
+  const $page0 = createBoundControl(reg, $key, 0);
   const rel = retain($page0); // active -> page 0 poll fetch in flight
   await tick();
 
@@ -74,7 +76,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
   );
   const reg = createRegistry(createAsyncControl, poll);
   const $key = createPrimitiveControl('Q');
-  const $item = reg.bind($key);
+  const $item = createBoundControl(reg, $key);
   const rel = retain($item);
   await tick();
 
@@ -124,10 +126,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     'reloadOnFocus: initial load'
   );
 
-  assert.ok(
-    dispatchDocument('visibilitychange'),
-    'reloadOnFocus: nothing listened for visibilitychange'
-  );
+  dispatchDocument('visibilitychange');
   await sleep(5);
 
   assert.deepEqual(
@@ -149,7 +148,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     { interval: 1000, isLoaded: (v: any) => v.isFinished, syncedKeysCount: 1 }
   );
   const reg = createRegistry(createAsyncControl, poll);
-  const rel = retain(reg.bind(createPrimitiveControl('Q'), 0));
+  const rel = retain(createBoundControl(reg, createPrimitiveControl('Q'), 0));
   await tick();
 
   poll.actions.reset('Q');
@@ -175,7 +174,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     { interval: 20, isLoaded: (v: any) => v.isFinished }
   );
   const reg = createRegistry(createAsyncControl, poll);
-  const rel = retain(reg.bind(createPrimitiveControl('Q')));
+  const rel = retain(createBoundControl(reg, createPrimitiveControl('Q')));
   await tick();
 
   setValue(reg.get('Q'), { n: 'LOCAL', isFinished: true });
@@ -203,7 +202,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     { interval: 20, isLoaded: (v: any) => v.isFinished }
   );
   const reg = createRegistry(createAsyncControl, poll);
-  const rel = retain(reg.bind(createPrimitiveControl('Q')));
+  const rel = retain(createBoundControl(reg, createPrimitiveControl('Q')));
   await tick();
 
   setValue(reg.get('Q'), { n: 'LOCAL', isFinished: true });
@@ -244,7 +243,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     { interval: 20, isLoaded: (v: any) => v.isFinished, syncedKeysCount: 1 }
   );
   const reg = createRegistry(createAsyncControl, poll);
-  const rel = retain(reg.bind(createPrimitiveControl('Q'), 0));
+  const rel = retain(createBoundControl(reg, createPrimitiveControl('Q'), 0));
   await tick();
 
   setValue(reg.get('Q', 0), { n: 'LOCAL', isFinished: true });

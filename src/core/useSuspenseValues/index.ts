@@ -22,6 +22,10 @@ import useNoopLayoutEffect from '#internal/useNoopLayoutEffect';
  * pair instead (both positional). An entry may be falsy — its value is
  * `undefined` — but the array length must stay constant across renders.
  *
+ * As with {@link useSuspenseValue}, they have to come from outside the
+ * component that suspends on them — one a creation hook made in this very
+ * component never arrives, and the fallback stays up for good.
+ *
  * @example
  * ```tsx
  * const [user, cart] = useSuspenseValues([$user, $cart]);

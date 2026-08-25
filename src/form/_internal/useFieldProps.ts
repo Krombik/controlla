@@ -21,7 +21,7 @@ type Cache = {
  */
 const useFieldProps = (
   control: Control,
-  form: FormInternals | undefined,
+  form: FormInternals,
   entry: FieldEntry
 ): FieldRenderProps<any> => {
   const ref = useRef<Cache>(null);
@@ -48,7 +48,7 @@ const useFieldProps = (
             entry._element = undefined;
           }
         },
-        onBlur: form && handleBlur(form, entry._control),
+        onBlur: handleBlur(form, entry._control),
         onChange(value: any) {
           setValue(entry._control, value);
         },

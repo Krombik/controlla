@@ -6,6 +6,7 @@ import readRootValue from '#internal/readRootValue';
 import type {
   AsyncControlInternals,
   ChildControlNode,
+  ControlInternalsChild,
   Mutable,
   ControlInternals,
   Lane,
@@ -18,21 +19,51 @@ import {
   UNCHANGED,
 } from '#internal/commitPatchNode';
 import { attach, detach } from '#internal/syncLifecycle';
-import attachNotifier from '#internal/attachNotifier';
 import {
   applyLoadWiring,
   attachSingleLoad,
+  cleanupDerived,
   detachSingleLoad,
   enqueueSet,
+  readSources,
   sourceChangeNotify,
+  subscribeDerived,
   type DerivedControlInternals,
 } from '#internal/derivedControlUtils';
-import { notify } from '#internal/flushQueue';
+import { notify, silentLane } from '#internal/flushQueue';
 import reportError from '#internal/reportError';
-import { registerCleanup } from '#internal/cleanup';
+import { registerSubscription } from '#internal/cleanup';
 import { sourceUpdate } from '#internal/sourceUpdate';
-import removeFromArray from '#internal/removeFromArray';
-import Ref from '#internal/Ref';
+
+function resyncDerived(this: DerivedControlInternals) {
+  const root = this;
+
+  readSources(root);
+
+  // what it computed last is still what it computes
+  if (!root._upToDate) {
+    root._upToDate = true;
+
+    let next;
+
+    try {
+      // kept, unlike the commit's: what the sources are compared against next
+      // time is what they read as this time
+      next = root._isSingleDependency
+        ? root._mapper(root._values)
+        : root._mapper(...root._values);
+    } catch (err) {
+      reportError(err);
+
+      return;
+    }
+
+    // committed, not written: a source moving is no reason for what it derives
+    // to be another object, and replacing one is a rerender for nothing. Silent
+    // - nothing of the commit is attached to hear it
+    commitRootValue(root, next, root._value, silentLane);
+  }
+}
 
 function commitSet(
   this: DerivedControlInternals,
@@ -88,8 +119,13 @@ const makeDerivedControl = (params: any[]) => {
 
   const controlCount = params.length - 1;
 
+  const sources: ControlInternalsChild[] = Array(controlCount || 1);
+
+  const notifiers: Notifier[] = Array(controlCount || 1);
+
   const derivedRoot: DerivedControlInternals = {
     _root: undefined!,
+    _pending: undefined,
     _get: readRootValue,
     _listeners: EMPTY_ARR,
     _indexMap: undefined,
@@ -98,7 +134,11 @@ const makeDerivedControl = (params: any[]) => {
     _children: undefined,
     _storage: undefined,
     _setExternal: noop,
-    _cleanup: noop,
+    _sources: sources,
+    _notifiers: notifiers,
+    _subscribe: subscribeDerived,
+    _cleanup: cleanupDerived,
+    _resync: resyncDerived,
     _commitSet: commitSet,
     _enqueueSet: enqueueSet,
     _level: 0,
@@ -112,8 +152,6 @@ const makeDerivedControl = (params: any[]) => {
     _upToDate: true,
   };
 
-  const weakRef = new Ref(derivedRoot);
-
   if (controlCount > 1) {
     const seenLoadableSources = new Set<ControlInternals>();
 
@@ -121,12 +159,10 @@ const makeDerivedControl = (params: any[]) => {
 
     const values = Array(controlCount);
 
-    const notifiers = Array<Notifier>(controlCount);
-
     for (let i = 0; i < controlCount; i++) {
       const internals: ChildControlNode<
         ControlInternals | AsyncControlInternals
-      > = params[i][INTERNALS];
+      > = (sources[i] = params[i][INTERNALS]);
 
       const root = internals._root;
 
@@ -140,37 +176,16 @@ const makeDerivedControl = (params: any[]) => {
         loadableSources.push(root);
       }
 
-      attachNotifier(
-        internals,
-        (notifiers[i] = {
-          _ref: weakRef,
-          _notify: sourceChangeNotify,
-          _index: i,
-          _attachedTo: EMPTY_ARR,
-          _source: undefined,
-        })
-      );
-
-      // activate the source (no-op unless it's a bound child) so its value
-      root._attach(internals, undefined, false);
+      notifiers[i] = {
+        _target: derivedRoot,
+        _notify: sourceChangeNotify,
+        _index: i,
+        _attachedTo: EMPTY_ARR,
+        _source: internals,
+      };
 
       values[i] = internals._get();
     }
-
-    registerCleanup(
-      derivedRoot,
-      (derivedRoot._cleanup = () => {
-        for (let i = 0, l = notifiers.length; i < l; i++) {
-          const notifier = notifiers[i];
-
-          if (notifier._source) {
-            removeFromArray(notifier._attachedTo, notifier);
-
-            notifier._source = undefined;
-          }
-        }
-      })
-    );
 
     const combine: (...values: any[]) => any = params[controlCount];
 
@@ -188,12 +203,12 @@ const makeDerivedControl = (params: any[]) => {
 
     const root = internals._root;
 
-    const notifier: Notifier = {
-      _ref: weakRef,
+    notifiers[0] = {
+      _target: derivedRoot,
       _notify: sourceChangeNotify,
       _index: 0,
       _attachedTo: EMPTY_ARR,
-      _source: undefined,
+      _source: (sources[0] = internals),
     };
 
     maxLevel = root._level;
@@ -215,26 +230,13 @@ const makeDerivedControl = (params: any[]) => {
 
       derivedRoot._detach = detachSingleLoad;
     }
-
-    attachNotifier(internals, notifier);
-
-    registerCleanup(
-      derivedRoot,
-      (derivedRoot._cleanup = () => {
-        if (notifier._source) {
-          removeFromArray(notifier._attachedTo, notifier);
-
-          notifier._source = undefined;
-        }
-      })
-    );
-
-    root._attach(internals, undefined, false);
   }
 
   (derivedRoot as Mutable<typeof derivedRoot>)._level = maxLevel + 1;
 
   (derivedRoot as Mutable<typeof derivedRoot>)._root = derivedRoot;
+
+  registerSubscription(derivedRoot, derivedRoot);
 
   return createScope(derivedRoot);
 };

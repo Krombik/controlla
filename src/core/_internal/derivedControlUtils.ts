@@ -1,24 +1,33 @@
 import type {
   ChangeListener,
   ControlInternals,
+  ControlInternalsChild,
   Lane,
   Listeners,
   Mutable,
   Notifier,
+  Subscription,
 } from '#internal/types';
 import { addListener, removeListener } from '#internal/flushQueue';
 import queuePatch from '#internal/queuePatch';
+import attachNotifier from '#internal/attachNotifier';
+import removeFromArray from '#internal/removeFromArray';
+import { EMPTY_ARR } from '#internal/constants';
 import addToQueue from '#internal/addToQueue';
+import { actualizePending } from '#internal/cleanup';
 
-export type DerivedControlInternals = ControlInternals & {
-  readonly _load: ReadonlyArray<ControlInternals> | ControlInternals | false;
-  _mapper(...args: any[]): any;
-  _values: any;
-  /** `false` while a source change awaits recompute; local writes are dropped meanwhile */
-  _upToDate: boolean;
-  readonly _isSingleDependency: boolean;
-  _cleanup(): void;
-};
+export type DerivedControlInternals = ControlInternals &
+  Subscription & {
+    readonly _load: ReadonlyArray<ControlInternals> | ControlInternals | false;
+    _mapper(...args: any[]): any;
+    _values: any;
+    /** `false` while a source change awaits recompute; local writes are dropped meanwhile */
+    _upToDate: boolean;
+    readonly _isSingleDependency: boolean;
+    /** Its own, in `_values` order; an async one has an error notifier per source too. */
+    readonly _sources: ControlInternalsChild[];
+    readonly _notifiers: Notifier[];
+  };
 
 export function attachSingleLoad(
   this: DerivedControlInternals,
@@ -80,13 +89,92 @@ function detachMultipleLoads(
   }
 }
 
-export function sourceChangeNotify(
-  this: Notifier,
-  lane: Lane,
-  root: DerivedControlInternals,
-  value: any,
-  _: any
-) {
+/**
+ * Reads the sources again, a source owing a catch-up of its own going first, so
+ * the value read from it is the one it settles on. Leaves `_upToDate` false if
+ * any of them moved.
+ */
+export function readSources(root: DerivedControlInternals) {
+  root._pending = undefined;
+
+  const sources = root._sources;
+
+  if (root._isSingleDependency) {
+    const source = sources[0];
+
+    actualizePending(source._root);
+
+    const value = source._get();
+
+    if (value !== root._values) {
+      root._values = value;
+
+      root._upToDate = false;
+    }
+  } else {
+    const values = root._values;
+
+    for (let i = 0, l = sources.length; i < l; i++) {
+      const source = sources[i];
+
+      actualizePending(source._root);
+
+      const value = source._get();
+
+      if (value !== values[i]) {
+        values[i] = value;
+
+        root._upToDate = false;
+      }
+    }
+  }
+}
+
+/** Every notifier of it, and the sources they make it follow. */
+export function subscribeDerived(this: DerivedControlInternals) {
+  const root = this;
+
+  const notifiers = root._notifiers;
+
+  for (let i = 0, l = notifiers.length; i < l; i++) {
+    const notifier = notifiers[i];
+
+    const source = notifier._source!;
+
+    attachNotifier(source, notifier);
+
+    // a no-op unless the source is a bound child, which has to be active
+    // before it holds anything
+    source._root._attach(source, undefined, false);
+  }
+
+  // nobody read it while it was detached, so the catch-up is still owed
+  if (root._pending) {
+    root._resync();
+  }
+}
+
+export function cleanupDerived(this: DerivedControlInternals) {
+  const notifiers = this._notifiers;
+
+  for (let i = 0, l = notifiers.length; i < l; i++) {
+    const notifier = notifiers[i];
+
+    const attachedTo = notifier._attachedTo;
+
+    if (attachedTo != EMPTY_ARR) {
+      removeFromArray(attachedTo, notifier);
+
+      notifier._attachedTo = EMPTY_ARR;
+    }
+  }
+
+  this._pending = this;
+}
+
+export function sourceChangeNotify(this: Notifier, lane: Lane, value: any) {
+  const root: DerivedControlInternals = this._target;
+
   if (root._isSingleDependency) {
     root._values = value;
   } else {

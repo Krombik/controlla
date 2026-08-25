@@ -1,13 +1,15 @@
 import noop from '#internal/noop';
-import DisposeContext from '#internal/DisposeContext';
 import {
   createContext,
   useContext,
+  useInsertionEffect,
   useRef,
   type FC,
   type PropsWithChildren,
 } from 'react';
+import type { Subscription } from '#internal/types';
 import { cleanupScope } from '#internal/cleanup';
+import { EMPTY_ARR } from '#internal/constants';
 
 const throwNoProvider = () => {
   throw new Error('no controls provider');
@@ -21,8 +23,7 @@ const createControlsContext: {
    * between requests on the server - paired with the hook that reads it, which
    * throws outside the provider.
    *
-   * The bag is built on the provider's first render and kept for its whole
-   * life, so the context itself never changes.
+   * The bag is built once per mounted provider and lasts as long as it does.
    *
    * @example
    * ```tsx
@@ -83,23 +84,40 @@ const createControlsContext: {
   const ControlsProvider: FC<PropsWithChildren> = (props) => {
     const parent = useParentControls();
 
-    const scope = useContext(DisposeContext);
+    const ref = useRef<[Subscription[], T] | null>(null);
 
-    const ref = useRef<T | null>(null);
+    let item = ref.current;
 
-    let controls = ref.current;
-
-    if (controls === null) {
-      cleanupScope._value = scope;
-
+    if (item === null) {
       try {
-        ref.current = controls = createControls(parent);
+        ref.current = item = [
+          (cleanupScope._value = []),
+          createControls(parent),
+        ];
       } finally {
         cleanupScope._value = null;
       }
     }
 
-    return <ContextProvider value={controls}>{props.children}</ContextProvider>;
+    const scope = item[0];
+
+    const l = scope.length;
+
+    if (l) {
+      useInsertionEffect(() => {
+        for (let i = 0; i < l; i++) {
+          scope[i]._subscribe();
+        }
+
+        return () => {
+          for (let i = 0; i < l; i++) {
+            scope[i]._cleanup();
+          }
+        };
+      }, EMPTY_ARR);
+    }
+
+    return <ContextProvider value={item[1]}>{props.children}</ContextProvider>;
   };
 
   const useControls = () => useContext(context) || throwNoProvider();

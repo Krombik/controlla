@@ -9,11 +9,12 @@ import { INTERNALS, EMPTY_ARR } from '#internal/constants';
 import type { AsyncControlScope } from '#types';
 import alwaysTrue from '#internal/alwaysTrue';
 
-// $never never emits, so a derived control attaching to it must register
-// nothing: this sink swallows push/pop, leaving $never's _dependents untouched
+// $never never emits, so a derived or bound control attaching to it must
+// register nothing: this sink swallows the push, leaving $never's _dependents
+// untouched. Kept here rather than as a check in those controls - they attach
+// the same way to anything, and nothing of them imports this
 const inertDependents = {
   push: noop,
-  pop: noop,
   length: 0,
 } as unknown as Notifier[];
 
@@ -25,6 +26,7 @@ const NOOP_PROMISE_DESCRIPTOR: PropertyDescriptor = {
 
 const errorControl = {
   _root: undefined!,
+  _pending: undefined,
   _get: noop,
   _enqueueSet: noop,
   _value: undefined,
@@ -56,6 +58,7 @@ const internals = {
   _get: noop,
   _enqueueSet: noop,
   _root: undefined!,
+  _pending: undefined,
   _listeners: EMPTY_ARR,
   _dependents: inertDependents,
   _errorControl: {
@@ -72,6 +75,7 @@ const internals = {
 (internals as Mutable<typeof internals>)._loadingControl = {
   [INTERNALS]: {
     _root: internals,
+    _pending: undefined,
     _get: alwaysTrue,
     _value: true,
     _listeners: EMPTY_ARR,
@@ -82,6 +86,7 @@ const internals = {
 (internals as Mutable<typeof internals>)._readyControl = {
   [INTERNALS]: {
     _root: internals,
+    _pending: undefined,
     _get: noop,
     _value: undefined,
     _listeners: EMPTY_ARR,
@@ -94,7 +99,8 @@ const internals = {
  * `undefined`, `loading` is always `true`, its promise never settles and it
  * suspends indefinitely. Writes and `invalidate` are no-ops. Use it as a
  * placeholder where a control is expected but the real one isn't available
- * yet - nested paths of it never settle either.
+ * yet - nested paths of it never settle either, and neither does anything
+ * derived from it or bound by it: whatever reads it stays loading too.
  *
  * @example
  * ```jsx

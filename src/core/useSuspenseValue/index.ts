@@ -18,6 +18,11 @@ const useSuspenseValue: {
    * tuple instead. The {@link control} may be falsy — the hook returns
    * `undefined`.
    *
+   * The {@link control} has to come from outside the component that suspends
+   * on it — one a creation hook made in this very component never arrives, and
+   * the fallback stays up for good. Create it above the boundary and read it in
+   * a child.
+   *
    * @example
    * ```tsx
    * const user = useSuspenseValue($user);

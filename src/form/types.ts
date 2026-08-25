@@ -149,8 +149,9 @@ export type FormState = {
   /**
    * Puts the values back to the baseline - everything, or one control, a path
    * with no field on it included. Given a value as well, writes that and makes
-   * it the baseline instead. Either way the validators it covers forget what
-   * they held.
+   * it the baseline instead - not before the form has one, since over an async
+   * control the first value a load hands over is it. Either way the validators
+   * it covers forget what they held.
    */
   reset: {
     (): void;
@@ -175,7 +176,10 @@ export type FieldState<C extends ReadonlyControl = ReadonlyControl> = {
    * up nor down the tree, so a field is red for its own path only.
    */
   readonly $isError: ReadonlyControl<boolean>;
-  /** Whether this field has been edited since it was last reset. */
+  /**
+   * Whether this field has been edited since it was last reset. Stays `false`
+   * for a field over a control the form is not over.
+   */
   readonly $isDirty: ReadonlyControl<boolean>;
   /** Whether an async validator covering this field is in flight. */
   readonly $isValidating: ReadonlyControl<boolean>;

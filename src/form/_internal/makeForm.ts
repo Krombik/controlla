@@ -14,7 +14,7 @@ import {
   startDirtyTracking,
 } from '#form/internal/entry';
 import { clearUnder, validateAll } from '#form/internal/validator';
-import isNotEqual from '#form/internal/isNotEqual';
+import isNotEqual from '#internal/isNotEqual';
 
 /** Rewrites one path of a baseline, leaving the rest of it shared. */
 const setIn = (
@@ -51,10 +51,11 @@ const setSubmitting = (form: FormInternals, isSubmitting: boolean) => {
 
 /** Restores the {@link target} to whatever it currently restores to. */
 const restore = (form: FormInternals, target: Control) => {
-  // an unbaselined root is one whose data has never arrived - there is nothing
-  // to restore to, and writing `undefined` is what an async control refuses
-  // outright
-  if (form._roots.has(target[INTERNALS]._root)) {
+  // data that has never arrived is nothing to restore to, and writing
+  // `undefined` is what an async control refuses outright. Outside the form
+  // control there is no baseline at all - reading one down its path would be
+  // reading the form's own value at that path
+  if (form._baselined && isUnder(form._control, target)) {
     setValue(target, getBaseline(form, target));
   }
 
@@ -69,13 +70,12 @@ const makeForm = (control: Control, options: FormOptions): FormInternals => {
     _entries: entries,
     _validators: [],
     _blurValidators: [],
-    _roots: new Map(),
-    _armedRoots: new Map(),
+    _baseline: undefined,
+    _baselined: false,
     _options: options,
     _errorCount: 0,
     _pendingCount: 0,
     _dirtyCount: 0,
-    _attached: false,
     _isSubmitting: false,
     _submittingControl: undefined,
     _validatingControl: undefined,
@@ -136,9 +136,9 @@ const makeForm = (control: Control, options: FormOptions): FormInternals => {
                 // a path no longer than the form control's own is the form
                 // control, which knows the subtree moved but not where
                 if (
+                  entry._tracked &&
                   entryPath &&
                   entryPath.length > start &&
-                  isUnder(control, entry._control) &&
                   isNotEqual(getValue(entry._control), snapshotOf(entry))
                 ) {
                   paths.push(entryPath.slice(start).join('.'));
@@ -228,29 +228,34 @@ const makeForm = (control: Control, options: FormOptions): FormInternals => {
       if (arguments.length > 1) {
         const internals = target![INTERNALS];
 
-        const path = internals._path;
+        // only what the form is over has a baseline for this to move, and only
+        // once there is one to move: writing a path into nothing would make a
+        // baseline out of that path alone, and every other field would read
+        // dirty against what it never got. The value written here is part of
+        // whatever the form baselines against when it does
+        if (form._baselined && isUnder(control, target!)) {
+          const path = internals._path;
 
-        const root = internals._root;
+          // the baseline moves without a value being touched, so dirtiness is
+          // recomputed here - nothing changed for the fields, what they compare
+          // against did
+          form._baseline = path ? setIn(form._baseline, path, 0, value) : value;
 
-        const roots = form._roots;
+          form._baselined = true;
 
-        // the baseline moves without a value being touched, so dirtiness is
-        // recomputed here - nothing changed for the fields, what they compare
-        // against did
-        roots.set(root, path ? setIn(roots.get(root), path, 0, value) : value);
+          if (form._dirtyControl) {
+            const it = entries.values();
 
-        if (form._dirtyControl) {
-          const it = entries.values();
+            for (let i = entries.size; i--;) {
+              const entry = it.next().value!;
 
-          for (let i = entries.size; i--;) {
-            const entry = it.next().value!;
-
-            if (isUnder(target!, entry._control)) {
-              setEntryDirty(
-                form,
-                entry,
-                isNotEqual(getValue(entry._control), snapshotOf(entry))
-              );
+              if (isUnder(target!, entry._control)) {
+                setEntryDirty(
+                  form,
+                  entry,
+                  isNotEqual(getValue(entry._control), snapshotOf(entry))
+                );
+              }
             }
           }
         }
@@ -261,18 +266,16 @@ const makeForm = (control: Control, options: FormOptions): FormInternals => {
       } else if (target) {
         restore(form, target);
       } else {
-        // the form control covers every path under it; the fields outside are
-        // reachable one by one
         restore(form, control);
 
         const it = entries.values();
 
+        // a field outside the form control has no baseline to go back to, but
+        // the rules the form holds on it are still the form's to clear
         for (let i = entries.size; i--;) {
           const entry = it.next().value!;
 
-          if (!isUnder(control, entry._control)) {
-            setValue(entry._control, snapshotOf(entry));
-
+          if (!entry._tracked) {
             clearUnder(form, entry._control);
           }
         }

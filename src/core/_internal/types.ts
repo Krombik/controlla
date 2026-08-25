@@ -15,6 +15,8 @@ export type Lane = {
   _canScheduleFlush: boolean;
   _minPendingLevel: number;
   _maxPendingLevel: number;
+  /** Whether a commit on it tells anyone - a catch-up does not. */
+  readonly _silent: boolean;
   readonly _patchByControl: Map<PendingItem, any>;
   readonly _beforeFlushHooks: Array<() => void>;
   readonly _pendingControlLevels: PendingItem[][];
@@ -46,12 +48,23 @@ export type Listeners<T extends Function> = {
 };
 
 export type Notifier = {
-  _notify(lane: Lane, item: any, value: any, prevValue: any): void;
-  readonly _ref: WeakRef<any>;
+  _notify(this: Notifier, lane: Lane, value: any, prevValue: any): void;
+  /** What the notification is for - a derived control, a `watchValues` subscription. */
+  readonly _target: any;
   readonly _index: number;
+  /** The `_dependents` it sits in, or `EMPTY_ARR` while it is not attached. */
   _attachedTo: Notifier[];
-  /** Holds the source while attached - `_ref` is weak in the other direction. */
-  _source: ControlInternalsBase | undefined;
+  /** What it listens to, kept for as long as it exists - reattaching needs it. */
+  _source: any;
+};
+
+/** Everything a scope mounts and unmounts: controls, storage observers. */
+export type Subscription = {
+  _subscribe(): void;
+  /** Announces the catch-up it will owe, so nothing reads its control stale. */
+  _cleanup(): void;
+  /** Catches up with what moved while nothing of it was attached. */
+  _resync(): void;
 };
 
 export interface ControlInternalsBase extends Listeners<ChangeListener> {
@@ -78,6 +91,11 @@ export interface Attachers {
 export interface RootBase {
   _value: any;
   readonly _root: this;
+  /**
+   * The subscription owing a catch-up - nothing of it is attached, so its mount
+   * runs that before anything of the commit can read it.
+   */
+  _pending: Subscription | undefined;
 }
 
 export type ReadonlyPrimitiveControlInternals = ControlInternalsBase & RootBase;

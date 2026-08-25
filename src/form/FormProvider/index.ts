@@ -10,10 +10,9 @@ export type FormProviderProps = PropsWithChildren<{
 }>;
 
 /**
- * Exposes the {@link FormProviderProps.form form} to the `Field`s and
- * `useFieldState`/`useFormState` calls under it. A `Field` rendered outside
- * any provider still works - it just validates on its own and takes part in
- * no submit.
+ * Exposes the {@link FormProviderProps.form form} to the fields, validators
+ * and `useFieldState`/`useFormState` calls under it. Every one of them needs
+ * it: outside any provider they throw.
  */
 const FormProvider: FC<FormProviderProps> = (props) =>
   jsx(FormContext.Provider, {
