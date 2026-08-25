@@ -18,7 +18,7 @@ const invalidate: {
    * ```ts
    * await api.save(values);
    *
-   * const fresh = await invalidate($hotel, true);
+   * const fresh = await invalidate($product, true);
    * ```
    */
   <T>(control: AsyncControl<T>, silent?: boolean): Promise<T>;
