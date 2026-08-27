@@ -10,6 +10,9 @@
     "noUnusedParameters": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "verbatimModuleSyntax": true
+    "verbatimModuleSyntax": true,
+    // the library is linked from `../build`, whose own `react` would otherwise
+    // resolve to a second copy of the same react types
+    "preserveSymlinks": true
   }
 }
