@@ -687,7 +687,9 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
         _source: _source && _source[INTERNALS],
       };
 
-      withPathParams ||= !!pathParamsCount;
+      // a local, not the parameter: `||=` on that would hand every later sibling
+      // the path params of the one before it
+      const hasPathParams = withPathParams || !!pathParamsCount;
 
       const routesData = append(data, routeData);
 
@@ -757,7 +759,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
           routesData,
           regexStr,
           _paramsCount,
-          withPathParams
+          hasPathParams
         );
 
         if (paramsControl) {
@@ -808,7 +810,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
       } else {
         const regex = new RegExp(`^${regexStr || '/'}$`);
 
-        const testRegex = regex[withPathParams ? 'exec' : 'test'].bind(regex);
+        const testRegex = regex[hasPathParams ? 'exec' : 'test'].bind(regex);
 
         const routeIndex = chains.length;
 
@@ -919,7 +921,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
                 const isMatched = testRegex(path);
 
                 if (isMatched) {
-                  const pathParams: Record<string, string> = withPathParams
+                  const pathParams: Record<string, string> = hasPathParams
                     ? decodePathParams((isMatched as RegExpExecArray).groups!)
                     : EMPTY_OBJECT;
 
