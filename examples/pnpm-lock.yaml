@@ -177,6 +177,42 @@ importers:
         specifier: 'catalog:'
         version: 19.2.8(react@19.2.8)
 
+  13-controls-context:
+    dependencies:
+      controlla:
+        specifier: link:../../build
+        version: link:../../build
+      react:
+        specifier: 'catalog:'
+        version: 19.2.8
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.2.8(react@19.2.8)
+
+  14-forms:
+    dependencies:
+      controlla:
+        specifier: link:../../build
+        version: link:../../build
+      react:
+        specifier: 'catalog:'
+        version: 19.2.8
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.2.8(react@19.2.8)
+
+  15-infinite-list:
+    dependencies:
+      controlla:
+        specifier: link:../../build
+        version: link:../../build
+      react:
+        specifier: 'catalog:'
+        version: 19.2.8
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.2.8(react@19.2.8)
+
 packages:
 
   '@emnapi/core@1.11.1':

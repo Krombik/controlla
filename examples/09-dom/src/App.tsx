@@ -18,11 +18,12 @@ import $pageVisible from 'controlla/dom/pageVisible';
 import $windowSize from 'controlla/dom/windowSize';
 import useValue from 'controlla/core/useValue';
 import ControlConsumer from 'controlla/core/ControlConsumer';
-import Suspense from 'controlla/core/Suspense';
 import SuspenseControlConsumer from 'controlla/core/SuspenseControlConsumer';
+import usePrimitiveControl from 'controlla/core/usePrimitiveControl';
+import setValue from 'controlla/core/setValue';
 import selectLoading from 'controlla/core/selectLoading';
-import toPromise from 'controlla/core/toPromise';
-import { useEffect, useState, type FC } from 'react';
+import watchValue from 'controlla/core/watchValue';
+import { useEffect, type FC } from 'react';
 
 /** Cached per query string, so calling it inline in a component is fine. */
 const $isNarrow = mediaQuery('(max-width: 700px)');
@@ -83,26 +84,30 @@ const OnlineGate: FC = () => (
 );
 
 const App: FC = () => {
-  const [reconnects, setReconnects] = useState(0);
+  /**
+   * A count this page shows, so it is made here. The DOM controls above are
+   * module-level because there is genuinely one window and one connection.
+   */
+  const $onlineSince = usePrimitiveControl(0);
 
-  /** Re-arms after each reconnection, so it counts them rather than just the first. */
-  useEffect(() => {
-    let cancelled = false;
-
-    const wait = () => {
-      toPromise($online).then(() => {
-        if (!cancelled) {
-          setReconnects((n) => n + 1);
-        }
-      });
-    };
-
-    wait();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  /**
+   * Counting the transitions is a watcher over the loading status, not a promise
+   * loop that has to re-arm itself after every reconnection. `watchValue`
+   * returns its unwatch, so it is the whole effect.
+   */
+  useEffect(
+    () =>
+      watchValue(
+        selectLoading($online),
+        (isOffline) => {
+          if (!isOffline) {
+            setValue($onlineSince, (n) => n + 1);
+          }
+        },
+        true
+      ),
+    [$onlineSince]
+  );
 
   return (
     <>
@@ -138,13 +143,13 @@ const App: FC = () => {
 
       <fieldset>
         <legend>$online, as an async control</legend>
-        <Suspense fallback={null}>
-          <OnlineGate />
-        </Suspense>
+        {/* SuspenseControlConsumer carries its own boundary - there is no
+          React.Suspense anywhere in this file */}
+        <OnlineGate />
         <p className='muted' style={{ margin: '.4rem 0 0' }}>
           loading (= offline):{' '}
           <ControlConsumer control={selectLoading($online)} render={String} /> ·
-          resolved {reconnects} time(s)
+          resolved <ControlConsumer control={$onlineSince} /> time(s)
         </p>
         <p className='muted' style={{ marginBottom: 0 }}>
           Tick "Offline" in devtools &gt; Network to see the fallback take over.

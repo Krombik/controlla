@@ -27,6 +27,33 @@
         "cd examples/12-job-board && pnpm dev --port 5192"
       ],
       "port": 5192
+    },
+    {
+      "name": "controls-context",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd examples/13-controls-context && pnpm dev --port 5193"
+      ],
+      "port": 5193
+    },
+    {
+      "name": "forms",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd examples/14-forms && pnpm dev --port 5194"
+      ],
+      "port": 5194
+    },
+    {
+      "name": "infinite-list",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd examples/15-infinite-list && pnpm dev --port 5195"
+      ],
+      "port": 5195
     }
   ]
 }

@@ -1,33 +1,26 @@
 /**
  * Results for the current query and page, polled until the backend says it is
- * finished.
- *
- * `searchRegistry.bind($query, $params.page)` is one control per (query, page)
- * pair that follows both. Change a filter and this re-points at a different
- * control; the previous one keeps its value in the registry, so stepping back
- * through history is instant.
+ * finished. `$results` follows both - see `controls.ts`.
  *
  * Because the poll was declared with `syncedKeysCount: 1`, all pages of a single
  * query share one clock - so paging around during a search does not spawn a
  * second polling loop, and `pause`/`resume` act on the whole query at once.
  */
 
-import selectParams from 'controlla/router/selectParams';
 import setValue from 'controlla/core/setValue';
-import useValue from 'controlla/core/useValue';
 import getValue from 'controlla/core/getValue';
+import useValue from 'controlla/core/useValue';
 import selectLoading from 'controlla/core/selectLoading';
+import watchValues from 'controlla/core/watchValues';
 import SuspenseControlConsumer from 'controlla/core/SuspenseControlConsumer';
-import ControlConsumer from 'controlla/core/ControlConsumer';
+import $pageVisible from 'controlla/dom/pageVisible';
 import { useEffect, type FC } from 'react';
 
 import { PAGE_SIZE, resetSearchRounds } from '#api';
-import { searchPolling, searchRegistry } from '#controls/listings';
+import { searchPolling } from '#controls/listings';
 import { router } from '#router';
 import NavLink from '#components/NavLink';
-import { $query } from '#pages/Search';
-
-const $params = selectParams(router.routes.search);
+import { $params, $query, $results } from '#pages/Search/controls';
 
 const Skeleton: FC<{ width: string }> = ({ width }) => (
   <span className='skeleton' style={{ width }} />
@@ -45,18 +38,10 @@ const Row: FC<{ children?: never }> = () => (
  * While a poll is still widening the result set, say so instead of showing a
  * spinner over results the user can already read.
  */
-const StillSearching: FC = () => {
-  const $results = searchRegistry.bind($query, $params.page);
-
-  return (
-    <ControlConsumer
-      control={selectLoading($results)}
-      render={(isLoading) =>
-        isLoading ? <span className='tag'>still gathering results…</span> : null
-      }
-    />
-  );
-};
+const StillSearching: FC = () =>
+  useValue(selectLoading($results)) ? (
+    <span className='tag'>still gathering results…</span>
+  ) : null;
 
 const Pager: FC<{ total: number }> = ({ total }) => {
   const page = useValue($params.page);
@@ -85,28 +70,22 @@ const Pager: FC<{ total: number }> = ({ total }) => {
 };
 
 const Results: FC = () => {
-  const $results = searchRegistry.bind($query, $params.page);
-
   /**
-   * Polling should stop while the tab is in the background. `pause`/`resume`
-   * take the *group* keys - here just the query - so one call covers every page
-   * of the current search.
+   * Polling should stop while the tab is in the background. `pause`/`resume` take
+   * the *group* keys - here just the query - so one call covers every page of the
+   * current search, and the watcher's own cleanup resumes exactly what it paused.
    */
-  useEffect(() => {
-    const onVisibility = () => {
-      const query = getValue($query);
+  useEffect(
+    () =>
+      watchValues([$query, $pageVisible], ([query, isVisible]) => {
+        if (!isVisible) {
+          searchPolling.pause(query);
 
-      if (document.hidden) {
-        searchPolling.pause(query);
-      } else {
-        searchPolling.resume(query);
-      }
-    };
-
-    document.addEventListener('visibilitychange', onVisibility);
-
-    return () => document.removeEventListener('visibilitychange', onVisibility);
-  }, []);
+          return () => searchPolling.resume(query);
+        }
+      }),
+    []
+  );
 
   return (
     <>

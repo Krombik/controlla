@@ -6,16 +6,24 @@
  * time it is asked for and cached after. Two components asking for the same key
  * get the same control and share one request.
  *
- * `bind` is the part worth understanding. `.get(key)` takes a value; `.bind($key)`
- * takes a *control* and returns one that follows it. Change the selected package
- * and the bound control re-points - nothing re-runs a fetch by hand.
+ * `createBoundControl` is the part worth understanding. `.get(key)` takes a
+ * value; `createBoundControl(registry, $key)` takes a *control* and returns one
+ * that follows it. Change the selected package and the bound control re-points -
+ * nothing re-runs a fetch by hand.
+ *
+ * The registry is module-level and the selection is not. That is the split worth
+ * copying: a registry of async controls really is one per app - it is the cache,
+ * and `retain` can warm it before anything renders - while "which one am I
+ * looking at" belongs to whatever is doing the looking. So the selection and the
+ * control bound to it live in a bag, built once per mounted provider.
  */
 
 import createRegistry from 'controlla/core/createRegistry';
 import createAsyncControl from 'controlla/core/createAsyncControl';
+import createBoundControl from 'controlla/core/createBoundControl';
+import createControlsContext from 'controlla/core/createControlsContext';
 import createPrimitiveControl from 'controlla/core/createPrimitiveControl';
 import requestLoader from 'controlla/loader/requestLoader';
-import Suspense from 'controlla/core/Suspense';
 import SuspenseControlConsumer from 'controlla/core/SuspenseControlConsumer';
 import ControlConsumer from 'controlla/core/ControlConsumer';
 import setValue from 'controlla/core/setValue';
@@ -54,21 +62,34 @@ const fetchPackage = async (name: string): Promise<PackageInfo> => {
   };
 };
 
+/**
+ * `keepPrev` is about bound controls only: while one re-points at an item that
+ * is still loading, it keeps showing the previous item instead of blanking to
+ * `undefined`. Drop it and every switch flashes the fallback.
+ */
 const packageRegistry = createRegistry(
   createAsyncControl,
-  requestLoader(fetchPackage)
+  requestLoader(fetchPackage),
+  { keepPrev: true }
 );
 
-const $selected = createPrimitiveControl(NAMES[0]);
-
 /**
- * Follows `$selected`. Declared once, at module scope - not rebuilt per render.
+ * `createControls` runs once per mounted provider, so `createBoundControl` can be
+ * called straight in here - no `useBoundControl`, because there is no render to
+ * be rebuilt on. Inside a component it would be the hook instead.
  */
-const $current = packageRegistry.bind($selected);
+const [PackagesProvider, usePackages] = createControlsContext(() => {
+  const $selected = createPrimitiveControl(NAMES[0]);
+
+  return {
+    $selected,
+    $current: createBoundControl(packageRegistry, $selected),
+  };
+});
 
 const Details: FC = () => (
   <SuspenseControlConsumer
-    control={$current}
+    control={usePackages().$current}
     fallback={<p className='muted'>Loading…</p>}
     render={(info) => (
       <>
@@ -84,76 +105,93 @@ const Details: FC = () => (
   />
 );
 
-/** Reads a single field of the bound control - re-renders only when it changes. */
-const VersionOnly: FC = () => (
-  <ControlConsumer
-    control={$current.version}
-    render={(version) => <code>{version ?? '…'}</code>}
-  />
-);
+const Picker: FC = () => {
+  const { $selected } = usePackages();
 
-const App: FC = () => {
   return (
-    <>
-      <h1>Registry</h1>
-      <p className='lede'>
-        One control per package name. Switch back and forth - the second visit
-        is instant, and the request count does not move.
-      </p>
-
-      <fieldset>
-        <legend>Pick a package</legend>
+    <ControlConsumer
+      control={$selected}
+      render={(selected) => (
         <div className='row'>
           {NAMES.map((name) => (
-            <ControlConsumer
-              control={$selected}
-              render={(selected) => (
-                <button
-                  key={name}
-                  disabled={name === selected}
-                  onClick={() => setValue($selected, name)}
-                >
-                  {name}
-                </button>
-              )}
-            />
+            <button
+              key={name}
+              disabled={name === selected}
+              onClick={() => setValue($selected, name)}
+            >
+              {name}
+            </button>
           ))}
         </div>
-      </fieldset>
-
-      <Suspense fallback={null}>
-        <fieldset>
-          <legend>Bound to the selection</legend>
-          <Details />
-          <p className='muted' style={{ marginBottom: 0 }}>
-            version, as its own subscriber: <VersionOnly />
-          </p>
-        </fieldset>
-      </Suspense>
-
-      <fieldset>
-        <legend>Requests actually made</legend>
-        {/* re-rendered on every load so the tally stays honest */}
-        <ControlConsumer
-          control={selectLoading($current)}
-          render={() => (
-            <ul className='muted' style={{ margin: 0 }}>
-              {NAMES.map((name) => (
-                <li key={name}>
-                  {name}: {requestCounts[name] || 0}
-                </li>
-              ))}
-            </ul>
-          )}
-        />
-        <div className='row' style={{ marginTop: '.75rem' }}>
-          <button onClick={() => invalidate($current)}>
-            invalidate the selected one
-          </button>
-        </div>
-      </fieldset>
-    </>
+      )}
+    />
   );
 };
+
+const Bound: FC = () => {
+  const { $current } = usePackages();
+
+  return (
+    <fieldset>
+      <legend>Bound to the selection</legend>
+      <Details />
+      <p className='muted' style={{ marginBottom: 0 }}>
+        {/* a field of the bound control is a control too, and changes only when
+            that field does */}
+        version, as its own subscriber:{' '}
+        <ControlConsumer
+          control={$current.version}
+          render={(version) => <code>{version ?? '…'}</code>}
+        />
+      </p>
+    </fieldset>
+  );
+};
+
+const Tally: FC = () => {
+  const { $current } = usePackages();
+
+  return (
+    <fieldset>
+      <legend>Requests actually made</legend>
+      {/* re-rendered on every load so the tally stays honest */}
+      <ControlConsumer
+        control={selectLoading($current)}
+        render={() => (
+          <ul className='muted' style={{ margin: 0 }}>
+            {NAMES.map((name) => (
+              <li key={name}>
+                {name}: {requestCounts[name] || 0}
+              </li>
+            ))}
+          </ul>
+        )}
+      />
+      <div className='row' style={{ marginTop: '.75rem' }}>
+        <button onClick={() => invalidate($current)}>
+          invalidate the selected one
+        </button>
+      </div>
+    </fieldset>
+  );
+};
+
+const App: FC = () => (
+  <PackagesProvider>
+    <h1>Registry</h1>
+    <p className='lede'>
+      One control per package name. Switch back and forth - the second visit is
+      instant, and the request count does not move.
+    </p>
+
+    <fieldset>
+      <legend>Pick a package</legend>
+      <Picker />
+    </fieldset>
+
+    <Bound />
+    <Tally />
+  </PackagesProvider>
+);
 
 export default App;

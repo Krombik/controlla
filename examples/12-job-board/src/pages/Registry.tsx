@@ -13,12 +13,12 @@ import useValue from 'controlla/core/useValue';
 import selectLoading from 'controlla/core/selectLoading';
 import selectError from 'controlla/core/selectError';
 import invalidate from 'controlla/core/invalidate';
-import retain from 'controlla/core/retain';
-import createPrimitiveControl from 'controlla/core/createPrimitiveControl';
+import usePrimitiveControl from 'controlla/core/usePrimitiveControl';
 import setValue from 'controlla/core/setValue';
 import getValue from 'controlla/core/getValue';
 import NavLink from '#components/NavLink';
-import { useEffect, useState, type FC } from 'react';
+import type { Control } from 'controlla/core/types';
+import type { FC } from 'react';
 
 import { allListings, failNextDetailsRequest } from '#api';
 import { listingRegistry } from '#controls/listings';
@@ -27,9 +27,6 @@ import { router } from '#router';
 const IDS = allListings()
   .slice(0, 3)
   .map((listing) => listing.id);
-
-/** Which listing the detail card below is showing. A plain local control. */
-const $selectedId = createPrimitiveControl(IDS[0]);
 
 const Skeleton: FC<{ width: string }> = ({ width }) => (
   <span className='skeleton' style={{ width }} />
@@ -40,7 +37,7 @@ const Skeleton: FC<{ width: string }> = ({ width }) => (
  * goes to `renderIfError` instead of throwing to a boundary. This component has
  * its own Suspense boundary built in, so a slow listing never blanks the page.
  */
-const DetailCard: FC = () => {
+const DetailCard: FC<{ $selectedId: Control<number> }> = ({ $selectedId }) => {
   const id = useValue($selectedId);
 
   return (
@@ -95,7 +92,7 @@ const DetailCard: FC = () => {
  * `selectError` are controls too, so this re-renders on status changes without
  * subscribing to the value.
  */
-const StatusLine: FC = () => {
+const StatusLine: FC<{ $selectedId: Control<number> }> = ({ $selectedId }) => {
   const id = useValue($selectedId);
 
   return (
@@ -113,23 +110,14 @@ const StatusLine: FC = () => {
   );
 };
 
-/**
- * Prefetching: `retain` starts a control's load without reading its value and
- * returns the release. While held, the control stays in use - so polling and
- * revalidation keep running even with nothing on screen.
- */
-const Prefetch: FC = () => {
-  useEffect(() => {
-    const releases = IDS.map((id) => retain(listingRegistry.get(id)));
-
-    return () => releases.forEach((release) => release());
-  }, []);
-
-  return <p style={{ color: 'var(--muted)' }}>Holding all three listings.</p>;
-};
-
 const Registry: FC = () => {
-  const [prefetched, setPrefetched] = useState(false);
+  /**
+   * Which listing the detail card is showing - a control, but not a global one.
+   * Nothing outside this page has any business reading it, so it is made here
+   * and goes when the page does; module scope is for the registry above, which
+   * really is one per app.
+   */
+  const $selectedId = usePrimitiveControl(IDS[0]);
 
   return (
     <>
@@ -150,17 +138,16 @@ const Registry: FC = () => {
             </button>
           ))}
         </div>
-        <StatusLine />
+        <StatusLine $selectedId={$selectedId} />
       </div>
 
-      <DetailCard />
+      <DetailCard $selectedId={$selectedId} />
 
       <div className='card'>
-        <h2>Cache, refetch, prefetch</h2>
+        <h2>Cache and refetch</h2>
         <p style={{ color: 'var(--muted)' }}>
           Switch listings and come back - the second visit is instant, because
-          the control kept its value. These three buttons are the whole cache
-          API.
+          the control kept its value. These two buttons are the whole cache API.
         </p>
         <div className='row'>
           <button
@@ -177,11 +164,14 @@ const Registry: FC = () => {
           >
             invalidate silently (keep showing the old value)
           </button>
-          <button disabled={prefetched} onClick={() => setPrefetched(true)}>
-            prefetch the rest
-          </button>
         </div>
-        {prefetched && <Prefetch />}
+        <p style={{ color: 'var(--muted)', marginBottom: 0 }}>
+          Prefetching is the third one, and it does not belong on a page:{' '}
+          <span className='mono'>src/preloads.ts</span> watches the route's
+          params and <span className='mono'>retain</span>s what the next click
+          will want, at module scope - so it has already started before React
+          renders.
+        </p>
       </div>
 
       <div className='card'>

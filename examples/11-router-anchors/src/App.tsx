@@ -28,7 +28,7 @@ import selectRegisteredAnchors from 'controlla/router/selectRegisteredAnchors';
 import replaceValue from 'controlla/router/replaceValue';
 import setValue from 'controlla/core/setValue';
 import useValue from 'controlla/core/useValue';
-import createPrimitiveControl from 'controlla/core/createPrimitiveControl';
+import usePrimitiveControl from 'controlla/core/usePrimitiveControl';
 import ControlConsumer from 'controlla/core/ControlConsumer';
 import type { FC, PropsWithChildren } from 'react';
 
@@ -89,9 +89,6 @@ const $anchor = selectAnchor(router.routes.docs);
 
 /** `true` per mounted id, `'active'` for the one on screen, `undefined` if absent. */
 const $registered = selectRegisteredAnchors(router.routes.docs);
-
-/** Lets the last section unmount, so the nav visibly loses an entry. */
-const $showTroubleshooting = createPrimitiveControl(true);
 
 const Nav: FC = () => (
   <nav
@@ -154,6 +151,13 @@ const Section: FC<PropsWithChildren<{ id: SectionId; title: string }>> = ({
 );
 
 const Docs: FC = () => {
+  /**
+   * Lets a section unmount, so the nav visibly loses an entry. Made here rather
+   * than at module scope: the anchor controls above are the URL, this is just
+   * what this page is showing.
+   */
+  const $showTroubleshooting = usePrimitiveControl(true);
+
   const showTroubleshooting = useValue($showTroubleshooting);
 
   return (

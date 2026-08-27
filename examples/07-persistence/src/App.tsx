@@ -7,6 +7,11 @@
  * observed - open this page twice and change something.
  *
  * Open devtools > Application > Local Storage to watch the keys change.
+ *
+ * These two are module-level, and that is the point rather than an oversight: a
+ * control backed by storage really is one per browser - one key, shared by every
+ * tab - so scoping it to a provider would be pretending otherwise. Anything
+ * without a global source behind it belongs in a bag or a `useControl`.
  */
 
 import createControl from 'controlla/core/createControl';

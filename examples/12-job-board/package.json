@@ -5,6 +5,7 @@
   "imports": {
     "#api": "./src/api.ts",
     "#router": "./src/router.ts",
+    "#preloads": "./src/preloads.ts",
     "#App": "./src/App.tsx",
     "#components/*": "./src/components/*.tsx",
     "#controls/*": "./src/controls/*.ts",

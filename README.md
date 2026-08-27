@@ -110,7 +110,7 @@ const ProductPage = () => {
 
 See the [Router](#router) section for paths, navigation, params, anchors and more.
 
-For working code rather than snippets, [`examples/`](examples) has twelve standalone apps, ordered from a counter to a small multi-page job board - one per topic, each runnable and readable on its own.
+For working code rather than snippets, [`examples/`](examples) has fifteen standalone apps, ordered from a counter to a small multi-page job board - one per topic, each runnable and readable on its own.
 
 > Everything is importable two ways: from the root (`import { createControl, useValue } from 'controlla'`) or as its own subpath (`controlla/<domain>/<name>`, as in the examples above). Both tree-shake in a modern bundler, but subpaths make the minimal bundle a guarantee instead of an optimization - prefer them. Controls are conventionally named with a leading `$`.
 

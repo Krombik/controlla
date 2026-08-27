@@ -4,11 +4,15 @@
  *
  * The counters are the point. Type in one field and only that field's component
  * re-renders - its siblings hold their count, even though all four read from the
- * same `$application`. There is no context, no selector and no memo doing that;
- * `useValue($application.email)` subscribes to that path and nothing wider.
+ * same `$application`. There is no selector and no memo doing that;
+ * `useValue($application.candidate.email)` subscribes to that path and nothing
+ * wider. The bag below is only where the tree is declared - it is a plain
+ * `createContext` holding one value that never changes, so it re-renders
+ * nothing itself.
  */
 
 import createControl from 'controlla/core/createControl';
+import createControlsContext from 'controlla/core/createControlsContext';
 import useValue from 'controlla/core/useValue';
 import setValue from 'controlla/core/setValue';
 import getValue from 'controlla/core/getValue';
@@ -17,14 +21,22 @@ import CombinedControlsConsumer from 'controlla/core/CombinedControlsConsumer';
 import { useRef, type FC } from 'react';
 
 /**
- * Module level on purpose: the tree survives unmounts, and anything can write
- * to it without a component in scope.
+ * A bag, not a module control. Nothing about a half-filled form is global -
+ * leave the page and it should be gone - and a bag is what keeps it that way:
+ * built once per mounted provider, so two of these on one screen would not share
+ * a word of it. Module scope is for what really is one per app: the registries,
+ * the URL, the DOM controls.
+ *
+ * `createControls` runs once, inside a branch - so it is the `create*` calls
+ * that go in here, never the `use*` hooks.
  */
-const $application = createControl({
-  candidate: { name: '', email: '' },
-  answers: { years: 0, notice: '2 weeks' },
-  consent: false,
-});
+const [ApplicationProvider, useApplication] = createControlsContext(() => ({
+  $application: createControl({
+    candidate: { name: '', email: '' },
+    answers: { years: 0, notice: '2 weeks' },
+    consent: false,
+  }),
+}));
 
 /** Shows how often this component actually rendered. */
 const useRenderCount = () => {
@@ -42,6 +54,8 @@ const Renders: FC<{ of: string }> = ({ of }) => (
 );
 
 const NameField: FC = () => {
+  const { $application } = useApplication();
+
   const name = useValue($application.candidate.name);
 
   return (
@@ -61,6 +75,8 @@ const NameField: FC = () => {
 };
 
 const EmailField: FC = () => {
+  const { $application } = useApplication();
+
   const email = useValue($application.candidate.email);
 
   return (
@@ -80,6 +96,8 @@ const EmailField: FC = () => {
 };
 
 const YearsField: FC = () => {
+  const { $application } = useApplication();
+
   const years = useValue($application.answers.years);
 
   return (
@@ -120,29 +138,25 @@ const YearsField: FC = () => {
   );
 };
 
-const ConsentField: FC = () => (
-  <label className='row'>
-    <input
-      type='checkbox'
-      checked={useValue($application.consent)}
-      onChange={(e) => setValue($application.consent, e.target.checked)}
-    />
-    <span style={{ margin: 0 }}>I agree to the data processing terms</span>
-  </label>
-);
+const ConsentField: FC = () => {
+  const { $application } = useApplication();
 
-const FormState: FC = () => (
-  <>
-    <h1>Local state</h1>
-    <p className='lede'>
-      One control tree, four subscribers. Watch the render counters as you type
-      - only the field you touch goes up.
-    </p>
+  return (
+    <label className='row'>
+      <input
+        type='checkbox'
+        checked={useValue($application.consent)}
+        onChange={(e) => setValue($application.consent, e.target.checked)}
+      />
+      <span style={{ margin: 0 }}>I agree to the data processing terms</span>
+    </label>
+  );
+};
 
-    <NameField />
-    <EmailField />
-    <YearsField />
+const Summary: FC = () => {
+  const { $application } = useApplication();
 
+  return (
     <div className='card'>
       <Renders of='Summary' />
       <h2>Summary</h2>
@@ -176,7 +190,22 @@ const FormState: FC = () => (
         )}
       />
     </div>
-  </>
+  );
+};
+
+const FormState: FC = () => (
+  <ApplicationProvider>
+    <h1>Local state</h1>
+    <p className='lede'>
+      One control tree, four subscribers. Watch the render counters as you type
+      - only the field you touch goes up.
+    </p>
+
+    <NameField />
+    <EmailField />
+    <YearsField />
+    <Summary />
+  </ApplicationProvider>
 );
 
 export default FormState;

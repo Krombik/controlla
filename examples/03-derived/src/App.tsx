@@ -9,6 +9,7 @@
  */
 
 import createControl from 'controlla/core/createControl';
+import createControlsContext from 'controlla/core/createControlsContext';
 import createDerivedControl from 'controlla/core/createDerivedControl';
 import useValue from 'controlla/core/useValue';
 import setValue from 'controlla/core/setValue';
@@ -19,27 +20,39 @@ import { useRef, type FC } from 'react';
 
 type Line = { sku: string; label: string; unitPrice: number; quantity: number };
 
-const $cart = createControl<{ lines: Line[]; currency: 'EUR' | 'USD' }>({
-  currency: 'EUR',
-  lines: [
-    { sku: 'DSK-11', label: 'Standing desk', unitPrice: 289, quantity: 1 },
-    { sku: 'CHR-04', label: 'Task chair', unitPrice: 149, quantity: 2 },
-    { sku: 'LMP-02', label: 'Desk lamp', unitPrice: 39, quantity: 1 },
-  ],
-});
-
 const FREE_SHIPPING_FROM = 500;
 
-/** Recomputes when `lines` changes; dedupes when the number comes out the same. */
-const $total = createDerivedControl($cart.lines, (lines) =>
-  lines.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0)
-);
+/**
+ * A cart and everything computed from it, in one bag - a derived control is
+ * declared exactly like a plain one, and belongs wherever its sources do. None of
+ * this is module-level: a cart is one shopper's, and a control at module scope is
+ * one value for every visitor at once.
+ */
+const [CartProvider, useCart] = createControlsContext(() => {
+  const $cart = createControl<{ lines: Line[]; currency: 'EUR' | 'USD' }>({
+    currency: 'EUR',
+    lines: [
+      { sku: 'DSK-11', label: 'Standing desk', unitPrice: 289, quantity: 1 },
+      { sku: 'CHR-04', label: 'Task chair', unitPrice: 149, quantity: 2 },
+      { sku: 'LMP-02', label: 'Desk lamp', unitPrice: 39, quantity: 1 },
+    ],
+  });
 
-/** Derived from a derived control - they compose like any other source. */
-const $qualifiesForFreeShipping = createDerivedControl(
-  $total,
-  (total) => total >= FREE_SHIPPING_FROM
-);
+  /** Recomputes when `lines` changes; dedupes when the number comes out the same. */
+  const $total = createDerivedControl($cart.lines, (lines) =>
+    lines.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0)
+  );
+
+  return {
+    $cart,
+    $total,
+    /** Derived from a derived control - they compose like any other source. */
+    $qualifiesForFreeShipping: createDerivedControl(
+      $total,
+      (total) => total >= FREE_SHIPPING_FROM
+    ),
+  };
+});
 
 const Renders: FC<{ of: string }> = ({ of }) => {
   const rerenderCountRef = useRef(0);
@@ -54,7 +67,7 @@ const Renders: FC<{ of: string }> = ({ of }) => {
 };
 
 const QuantityStepper: FC<{ index: number }> = ({ index }) => {
-  const $line = $cart.lines[index];
+  const $line = useCart().$cart.lines[index];
 
   const quantity = useValue($line.quantity);
 
@@ -74,7 +87,7 @@ const QuantityStepper: FC<{ index: number }> = ({ index }) => {
 
 const Lines: FC = () => (
   <ControlConsumer
-    control={$cart.lines}
+    control={useCart().$cart.lines}
     render={(lines) => (
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <tbody>
@@ -93,19 +106,10 @@ const Lines: FC = () => (
   />
 );
 
-const App: FC = () => (
-  <>
-    <h1>Derived controls</h1>
-    <p className='lede'>
-      Change a quantity: the total re-renders every time, the free-shipping line
-      only when it flips.
-    </p>
+const Total: FC = () => {
+  const { $cart, $total, $qualifiesForFreeShipping } = useCart();
 
-    <fieldset>
-      <legend>Cart</legend>
-      <Lines />
-    </fieldset>
-
+  return (
     <fieldset>
       <legend>Total</legend>
       <p>
@@ -132,7 +136,13 @@ const App: FC = () => (
         collapses a moving total into a stable string.
       </p>
     </fieldset>
+  );
+};
 
+const Summary: FC = () => {
+  const { $cart, $total } = useCart();
+
+  return (
     <fieldset>
       <legend>Reading several controls at once</legend>
       <p>
@@ -156,7 +166,25 @@ const App: FC = () => (
         switch currency
       </button>
     </fieldset>
-  </>
+  );
+};
+
+const App: FC = () => (
+  <CartProvider>
+    <h1>Derived controls</h1>
+    <p className='lede'>
+      Change a quantity: the total re-renders every time, the free-shipping line
+      only when it flips.
+    </p>
+
+    <fieldset>
+      <legend>Cart</legend>
+      <Lines />
+    </fieldset>
+
+    <Total />
+    <Summary />
+  </CartProvider>
 );
 
 export default App;

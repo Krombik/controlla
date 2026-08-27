@@ -10,13 +10,19 @@ import requestLoader from 'controlla/loader/requestLoader';
 import pollLoader from 'controlla/loader/pollLoader';
 
 import {
+  allListings,
   fetchCompany,
   fetchListing,
   searchListings,
   type SearchQuery,
 } from '#api';
 
-/** `listingRegistry.get(1003)` / `.bind($idControl)` - keyed by listing id. */
+/** The listings the listing page offers to jump between. */
+export const JUMP_IDS = allListings()
+  .slice(0, 4)
+  .map((listing) => listing.id);
+
+/** Keyed by listing id: `.get(1003)`, or bound to a control of one. */
 export const listingRegistry = createRegistry(
   createAsyncControl,
   requestLoader(fetchListing)

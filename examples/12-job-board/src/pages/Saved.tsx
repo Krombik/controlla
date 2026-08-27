@@ -15,8 +15,8 @@ import createControl from 'controlla/core/createControl';
 import getPersistStorage from 'controlla/persist/getPersistStorage';
 import safeLocalStorage from 'controlla/persist/safeLocalStorage';
 import createDerivedControl from 'controlla/core/createDerivedControl';
-import useValue from 'controlla/core/useValue';
 import setValue from 'controlla/core/setValue';
+import useValue from 'controlla/core/useValue';
 import ControlConsumer from 'controlla/core/ControlConsumer';
 import selectParams from 'controlla/router/selectParams';
 import type { FC } from 'react';
@@ -28,6 +28,10 @@ import NavLink from '#components/NavLink';
 type SavedState = { ids: number[] };
 
 /**
+ * Module-level, and rightly so: a control backed by storage really is one per
+ * browser - one key, shared by every tab - and the sort below it is the URL. A
+ * control with no global source behind it belongs in a bag instead.
+ *
  * `isValid` is the version guard: anything written by an older build that no
  * longer parses into this shape is discarded instead of crashing a reader.
  */
@@ -115,58 +119,61 @@ const Row: FC<{ listing: Listing; saved: boolean }> = ({ listing, saved }) => (
   </li>
 );
 
-const Saved: FC = () => {
-  const savedIds = useValue($saved.ids);
+const Saved: FC = () => (
+  <>
+    <h1>Saved</h1>
+    <p className='lede'>
+      Backed by localStorage and observed across tabs - open this page twice and
+      save something in one of them.
+    </p>
 
-  return (
-    <>
-      <h1>Saved</h1>
-      <p className='lede'>
-        Backed by localStorage and observed across tabs - open this page twice
-        and save something in one of them.
-      </p>
-
-      <div className='card'>
-        <SortPicker />
-        {/* the count is its own subscriber, so it updates without re-rendering
+    <div className='card'>
+      <SortPicker />
+      {/* the count is its own subscriber, so it updates without re-rendering
             either list below */}
-        <p style={{ margin: 0, color: 'var(--muted)' }}>
-          <ControlConsumer
-            control={$saved.ids.length}
-            render={(count) => <>{count} saved</>}
-          />
-        </p>
-      </div>
+      <p style={{ margin: 0, color: 'var(--muted)' }}>
+        <ControlConsumer
+          control={$saved.ids.length}
+          render={(count) => <>{count} saved</>}
+        />
+      </p>
+    </div>
 
-      <ControlConsumer
-        control={$savedListings}
-        render={(listings) =>
-          listings.length ? (
-            <ul style={{ listStyle: 'none', padding: 0 }}>
-              {listings.map((listing) => (
-                <Row key={listing.id} listing={listing} saved />
-              ))}
-            </ul>
-          ) : (
-            <p style={{ color: 'var(--muted)' }}>
-              Nothing saved yet - pick something below.
-            </p>
-          )
-        }
-      />
+    <ControlConsumer
+      control={$savedListings}
+      render={(listings) =>
+        listings.length ? (
+          <ul style={{ listStyle: 'none', padding: 0 }}>
+            {listings.map((listing) => (
+              <Row key={listing.id} listing={listing} saved />
+            ))}
+          </ul>
+        ) : (
+          <p style={{ color: 'var(--muted)' }}>
+            Nothing saved yet - pick something below.
+          </p>
+        )
+      }
+    />
 
-      <h2 style={{ margin: '1.5rem 0 .75rem' }}>All listings</h2>
-      <ul style={{ listStyle: 'none', padding: 0 }}>
-        {LISTINGS.slice(0, 10).map((listing) => (
-          <Row
-            key={listing.id}
-            listing={listing}
-            saved={savedIds.includes(listing.id)}
-          />
-        ))}
-      </ul>
-    </>
-  );
-};
+    <h2 style={{ margin: '1.5rem 0 .75rem' }}>All listings</h2>
+    {/* the consumer is the only thing that re-renders when something is
+          saved - the sorted list above has its own subscriber */}
+    <ControlConsumer
+      control={$saved.ids}
+      render={(savedIds) => (
+        <ul style={{ listStyle: 'none', padding: 0 }}>
+          {LISTINGS.slice(0, 10).map((listing) => (
+            <Row
+              key={listing.id}
+              listing={listing}
+              saved={savedIds.includes(listing.id)}
+            />
+          ))}
+        </ul>
+      )}
+    />
+  </>
+);
 
 export default Saved;

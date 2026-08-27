@@ -9,6 +9,9 @@
  *
  * The `Company` section reads a different registry that starts loading later,
  * which is why it is still skeletoned after the rest of the page has arrived.
+ *
+ * The controls come from the page's bag - `useListing()` - so nothing here
+ * imports a module-level control and nothing has to be passed down.
  */
 
 import SuspenseControlConsumer from 'controlla/core/SuspenseControlConsumer';
@@ -19,7 +22,7 @@ import registerAnchor from 'controlla/router/registerAnchor';
 import type { FC, PropsWithChildren, ReactNode } from 'react';
 
 import { router, type ListingSection } from '#router';
-import { $company, $listing } from '#pages/Listing/bound';
+import { useListing } from '#pages/Listing/controls';
 
 const Skeleton: FC<{ width: string }> = ({ width }) => (
   <span className='skeleton' style={{ width }} />
@@ -58,32 +61,36 @@ const Bullets: FC<{ items: string[] }> = ({ items }) => (
   </ul>
 );
 
-export const Summary: FC = () => (
-  <Section
-    id='summary'
-    title={
-      // the heading waits only on "is there a value at all", so it settles one
-      // step before the body does
+export const Summary: FC = () => {
+  const { $listing } = useListing();
+
+  return (
+    <Section
+      id='summary'
+      title={
+        // the heading waits only on "is there a value at all", so it settles one
+        // step before the body does
+        <SuspenseControlConsumer
+          control={selectReady($listing)}
+          fallback={<Skeleton width='16ch' />}
+        >
+          Summary
+        </SuspenseControlConsumer>
+      }
+    >
       <SuspenseControlConsumer
-        control={selectReady($listing)}
-        fallback={<Skeleton width='16ch' />}
-      >
-        Summary
-      </SuspenseControlConsumer>
-    }
-  >
-    <SuspenseControlConsumer
-      control={$listing.summary}
-      fallback={<Lines count={2} />}
-      render={(summary) => <p style={{ margin: 0 }}>{summary}</p>}
-    />
-  </Section>
-);
+        control={$listing.summary}
+        fallback={<Lines count={2} />}
+        render={(summary) => <p style={{ margin: 0 }}>{summary}</p>}
+      />
+    </Section>
+  );
+};
 
 export const Responsibilities: FC = () => (
   <Section id='responsibilities' title='Responsibilities'>
     <SuspenseControlConsumer
-      control={$listing.responsibilities}
+      control={useListing().$listing.responsibilities}
       fallback={<Lines count={3} />}
       render={(items) => <Bullets items={items} />}
     />
@@ -93,7 +100,7 @@ export const Responsibilities: FC = () => (
 export const Requirements: FC = () => (
   <Section id='requirements' title='Requirements'>
     <SuspenseControlConsumer
-      control={$listing.requirements}
+      control={useListing().$listing.requirements}
       fallback={<Lines count={3} />}
       render={(items) => <Bullets items={items} />}
     />
@@ -106,28 +113,32 @@ export const Requirements: FC = () => (
  * folds "loading or non-empty" into one boolean and re-renders only when that
  * boolean flips.
  */
-export const Benefits: FC = () => (
-  <CombinedControlsConsumer
-    controls={[$listing.benefits, selectLoading($listing)]}
-    combiner={(benefits, isLoading) => isLoading || !!benefits?.length}
-    render={(isWorthShowing) =>
-      isWorthShowing && (
-        <Section id='benefits' title='Benefits'>
-          <SuspenseControlConsumer
-            control={$listing.benefits}
-            fallback={<Lines count={3} />}
-            render={(items) => <Bullets items={items} />}
-          />
-        </Section>
-      )
-    }
-  />
-);
+export const Benefits: FC = () => {
+  const { $listing } = useListing();
+
+  return (
+    <CombinedControlsConsumer
+      controls={[$listing.benefits, selectLoading($listing)]}
+      combiner={(benefits, isLoading) => isLoading || !!benefits?.length}
+      render={(isWorthShowing) =>
+        isWorthShowing && (
+          <Section id='benefits' title='Benefits'>
+            <SuspenseControlConsumer
+              control={$listing.benefits}
+              fallback={<Lines count={3} />}
+              render={(items) => <Bullets items={items} />}
+            />
+          </Section>
+        )
+      }
+    />
+  );
+};
 
 export const Company: FC = () => (
   <Section id='company' title='Company'>
     <SuspenseControlConsumer
-      control={$company}
+      control={useListing().$company}
       fallback={<Lines count={2} />}
       renderIfError={(error: Error) => <p className='error'>{error.message}</p>}
       render={(company) => (

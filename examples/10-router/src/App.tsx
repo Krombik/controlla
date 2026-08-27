@@ -13,15 +13,17 @@
 import createRouterView from 'controlla/router/createRouterView';
 import Link from 'controlla/router/Link';
 import navigate from 'controlla/router/navigate';
+import navigationBlocker from 'controlla/router/navigationBlocker';
 import selectParams from 'controlla/router/selectParams';
 import replaceValue from 'controlla/router/replaceValue';
 import NOT_FOUND from 'controlla/router/NOT_FOUND';
+import setValue from 'controlla/core/setValue';
+import usePrimitiveControl from 'controlla/core/usePrimitiveControl';
 import useValue from 'controlla/core/useValue';
 import ControlConsumer from 'controlla/core/ControlConsumer';
 import type { NavigationTarget } from 'controlla/router/types';
 import {
   useEffect,
-  useState,
   type FC,
   type PropsWithChildren,
   type ReactNode,
@@ -56,70 +58,80 @@ const $filters = selectParams(router.routes.invoices);
 
 const STATUSES: InvoiceStatus[] = ['all', 'open', 'paid', 'overdue'];
 
-const Invoices: FC = () => {
+/**
+ * A component of its own, so a filter change re-renders the row and not the list
+ * of links under it. That is what a separate component is for - `ControlConsumer`
+ * is the same scoping without one, for when extracting a component is not worth
+ * it.
+ */
+const Filters: FC = () => {
   const status = useValue($filters.status);
 
   const page = useValue($filters.page);
 
   return (
-    <>
-      <h2>Invoices</h2>
-      <p className='muted'>
-        Both filters live in the URL. Change them, then use the back button.
-      </p>
+    <div className='row'>
+      <label>
+        <span className='muted'>status</span>
+        <br />
+        <select
+          value={status}
+          onChange={(e) => {
+            // one write per control; both land in the same commit and produce
+            // a single history entry
+            replaceValue($filters.status, e.target.value as InvoiceStatus);
 
-      <div className='row'>
-        <label>
-          <span className='muted'>status</span>
-          <br />
-          <select
-            value={status}
-            onChange={(e) => {
-              // one write per control; both land in the same commit and produce
-              // a single history entry
-              replaceValue($filters.status, e.target.value as InvoiceStatus);
-
-              replaceValue($filters.page, 1);
-            }}
-          >
-            {STATUSES.map((value) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </select>
-        </label>
-        <span className='row'>
-          <button
-            disabled={page === 1}
-            onClick={() => replaceValue($filters.page, (n) => n - 1)}
-          >
-            previous
-          </button>
-          <span>page {page}</span>
-          <button onClick={() => replaceValue($filters.page, (n) => n + 1)}>
-            next
-          </button>
-        </span>
-      </div>
-
-      <p className='muted'>
-        <code>replaceValue</code> instead of <code>setValue</code> keeps paging
-        out of the back button - only the status change pushes an entry.
-      </p>
-
-      <ul>
-        {NUMBERS.map((number) => (
-          <li key={number}>
-            <NavLink to={router.navigation.invoice({ number }).lines()}>
-              {number}
-            </NavLink>
-          </li>
-        ))}
-      </ul>
-    </>
+            replaceValue($filters.page, 1);
+          }}
+        >
+          {STATUSES.map((value) => (
+            <option key={value} value={value}>
+              {value}
+            </option>
+          ))}
+        </select>
+      </label>
+      <span className='row'>
+        <button
+          disabled={page === 1}
+          onClick={() => replaceValue($filters.page, (n) => n - 1)}
+        >
+          previous
+        </button>
+        <span>page {page}</span>
+        <button onClick={() => replaceValue($filters.page, (n) => n + 1)}>
+          next
+        </button>
+      </span>
+    </div>
   );
 };
+
+const Invoices: FC = () => (
+  <>
+    <h2>Invoices</h2>
+    <p className='muted'>
+      Both filters live in the URL. Change them, then use the back button.
+    </p>
+
+    <Filters />
+
+    <p className='muted'>
+      <code>replaceValue</code> instead of <code>setValue</code> keeps paging
+      out of the back button - only the status change pushes an entry.
+    </p>
+
+    <ul>
+      {NUMBERS.map((number) => (
+        <li key={number}>
+          <NavLink to={router.navigation.invoice({ number }).lines()}>
+            {number}
+          </NavLink>
+        </li>
+      ))}
+    </ul>
+  </>
+);
 
 const $invoice = selectParams(router.routes.invoice);
 
@@ -189,16 +201,22 @@ const History: FC = () => {
  * a link, `navigate`, or the back button - is parked instead of applied, and
  * `isPendingNavigation` flips to true so you can ask. `allow()` lets the original
  * navigation continue; `deny()` drops it.
+ *
+ * `navigationBlocker` is a global, not something the router hands out - any page
+ * with unsaved work arms it the same way. Whether *this* page has any is not
+ * global at all, so the control for it is made here and leaves with the page.
  */
 const NewInvoice: FC = () => {
-  const [dirty, setDirty] = useState(false);
+  const $dirty = usePrimitiveControl(false);
 
-  const pending = useValue(router.navigationBlocker.isPendingNavigation);
+  const dirty = useValue($dirty);
+
+  const pending = useValue(navigationBlocker.isPendingNavigation);
 
   useEffect(() => {
     if (dirty) {
-      // returns its own disable, so this is the whole cleanup
-      return router.navigationBlocker.enable();
+      // enable() returns its own disable, so this is the whole cleanup
+      return navigationBlocker.enable();
     }
   }, [dirty]);
 
@@ -210,7 +228,7 @@ const NewInvoice: FC = () => {
         <br />
         <input
           placeholder='type something, then try to leave'
-          onChange={() => setDirty(true)}
+          onChange={() => setValue($dirty, true)}
         />
       </label>
 
@@ -226,17 +244,17 @@ const NewInvoice: FC = () => {
           <div className='row'>
             <button
               onClick={() => {
-                setDirty(false);
+                // disarming first: the guard is global, so leaving it on would
+                // block the page we are about to land on
+                setValue($dirty, false);
 
-                router.navigationBlocker.isPendingNavigation.allow();
+                navigationBlocker.isPendingNavigation.allow();
               }}
             >
               discard and leave
             </button>
             <button
-              onClick={() =>
-                router.navigationBlocker.isPendingNavigation.deny()
-              }
+              onClick={() => navigationBlocker.isPendingNavigation.deny()}
             >
               stay here
             </button>

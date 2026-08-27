@@ -12,7 +12,6 @@
 
 import createAsyncControl from 'controlla/core/createAsyncControl';
 import requestLoader from 'controlla/loader/requestLoader';
-import Suspense from 'controlla/core/Suspense';
 import SuspenseControlConsumer from 'controlla/core/SuspenseControlConsumer';
 import ControlsConsumer from 'controlla/core/ControlsConsumer';
 import selectLoading from 'controlla/core/selectLoading';
@@ -110,13 +109,11 @@ const App: FC = () => (
       single request.
     </p>
 
-    {/* the library's own Suspense, not React's - useSuspenseValue need this above them */}
-    <Suspense fallback={null}>
-      <fieldset>
-        <legend>Suspending read</legend>
-        <Card />
-      </fieldset>
-    </Suspense>
+    {/* no Suspense boundary of our own: SuspenseControlConsumer is one */}
+    <fieldset>
+      <legend>Suspending read</legend>
+      <Card />
+    </fieldset>
 
     <fieldset>
       <legend>Status, without reading the value</legend>

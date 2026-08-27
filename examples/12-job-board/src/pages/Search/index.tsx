@@ -11,20 +11,15 @@
  * partial match set first - see `#controls/listings`.
  */
 
-import selectParams from 'controlla/router/selectParams';
 import replaceValue from 'controlla/router/replaceValue';
 import setValue from 'controlla/core/setValue';
 import useValue from 'controlla/core/useValue';
-import createDerivedControl from 'controlla/core/createDerivedControl';
 import createDebounceScheduler from 'controlla/scheduler/createDebounceScheduler';
-import Suspense from 'controlla/core/Suspense';
 import type { FC } from 'react';
 
-import { router } from '#router';
 import type { Seniority } from '#api';
+import { $params } from '#pages/Search/controls';
 import Results from '#pages/Search/Results';
-
-const $params = selectParams(router.routes.search);
 
 /**
  * Typing should not push a history entry per keystroke, and it should not fire a
@@ -34,41 +29,25 @@ const $params = selectParams(router.routes.search);
  */
 const typing = createDebounceScheduler(400);
 
-/**
- * The registry is keyed by this object. Deriving it - rather than assembling it
- * at each call site - means the key is one value with one identity, so every
- * component asking for "the current query" gets the same control.
- */
-export const $query = createDerivedControl(
-  $params.text,
-  $params.remote,
-  $params.seniority,
-  (text, remoteOnly, seniority) => ({ text, remoteOnly, seniority })
-);
-
 const SENIORITIES: Seniority[] = ['junior', 'mid', 'senior'];
 
-const TextFilter: FC = () => {
-  const text = useValue($params.text);
+const TextFilter: FC = () => (
+  <label>
+    <span>Title, company or tag</span>
+    <input
+      value={useValue($params.text)}
+      placeholder='try: go, kafka, platform'
+      onChange={(e) => {
+        // replaceValue so typing does not fill the back button, and the
+        // debounce scheduler so it commits once the user stops
+        replaceValue($params.text, e.target.value, typing);
 
-  return (
-    <label>
-      <span>Title, company or tag</span>
-      <input
-        value={text}
-        placeholder='try: go, kafka, platform'
-        onChange={(e) => {
-          // replaceValue so typing does not fill the back button, and the
-          // debounce scheduler so it commits once the user stops
-          replaceValue($params.text, e.target.value, typing);
-
-          // a new search starts at page one
-          replaceValue($params.page, 0, typing);
-        }}
-      />
-    </label>
-  );
-};
+        // a new search starts at page one
+        replaceValue($params.page, 0, typing);
+      }}
+    />
+  </label>
+);
 
 const RemoteFilter: FC = () => (
   <label className='row'>
@@ -129,9 +108,7 @@ const Search: FC = () => (
       </div>
     </div>
 
-    <Suspense fallback={null}>
-      <Results />
-    </Suspense>
+    <Results />
   </>
 );
 

@@ -3,31 +3,35 @@
  *
  * By default a write is batched into a microtask: several writes in the same tick
  * become one commit and one render. Pass a scheduler and you choose a different
- * moment instead - after 300ms of quiet, at most once per 200ms, on the next
- * animation frame, or synchronously right now.
+ * moment instead - after 300ms of quiet, at most once per 200ms, or synchronously
+ * right now.
  *
  * The commit counters are the point: they count how many times each control
  * actually notified, which is not the same as how many times you called
- * `setValue`.
+ * `setValue`. They are controls themselves, incremented from a `watchValue` -
+ * so what is counted is the commit, not the call.
+ *
+ * Every control here is made by a hook or a bag, none at module scope: a panel's
+ * draft value is nobody else's, and a control that is not really one per app is
+ * one the server would have to hand out per request. The schedulers *are*
+ * module-level - a debounce is a timer, not state.
  */
 
-import createPrimitiveControl from 'controlla/core/createPrimitiveControl';
 import createControl from 'controlla/core/createControl';
-import useValue from 'controlla/core/useValue';
+import createControlsContext from 'controlla/core/createControlsContext';
+import createPrimitiveControl from 'controlla/core/createPrimitiveControl';
+import usePrimitiveControl from 'controlla/core/usePrimitiveControl';
+import useControl from 'controlla/core/useControl';
 import setValue from 'controlla/core/setValue';
 import getValue from 'controlla/core/getValue';
+import useValue from 'controlla/core/useValue';
 import watchValue from 'controlla/core/watchValue';
 import createDebounceScheduler from 'controlla/scheduler/createDebounceScheduler';
 import createThrottleScheduler from 'controlla/scheduler/createThrottleScheduler';
 import createManualScheduler from 'controlla/scheduler/createManualScheduler';
 import syncScheduler from 'controlla/scheduler/syncScheduler';
-import { useEffect, useState, type FC } from 'react';
-
-const $query = createPrimitiveControl('');
-
-const $pointer = createControl({ x: 0, y: 0 });
-
-const $form = createControl({ street: '', city: '', postcode: '' });
+import type { Control } from 'controlla/core/types';
+import { useEffect, type FC } from 'react';
 
 const debounced = createDebounceScheduler(300);
 
@@ -36,26 +40,40 @@ const throttled = createThrottleScheduler(200);
 /** Commits only when you call `flush()` - useful for "apply" / "cancel" flows. */
 const manual = createManualScheduler();
 
-/** Counts commits rather than calls, by watching the control itself. */
-const useCommitCount = (
-  subscribe: (onCommit: () => void) => () => void
-): number => {
-  const [count, setCount] = useState(0);
+/**
+ * The address is the one thing two panels share, so it is a bag rather than a
+ * hook - `Manual` stages writes into it and `Immediate` commits straight to it.
+ * `createControls` runs once inside a branch, so it is `create*` in here, never
+ * the `use*` hooks.
+ */
+const [AddressProvider, useAddress] = createControlsContext(() => ({
+  $form: createControl({ street: '', city: '', postcode: '' }),
+  $pending: createPrimitiveControl(false),
+}));
 
-  useEffect(() => subscribe(() => setCount((n) => n + 1)), [subscribe]);
+const count = (control: Control<number>) => setValue(control, (n) => n + 1);
 
-  return count;
+/**
+ * A commit is exactly what `watchValue` reports, so watching the control is the
+ * honest tally. It returns its own unwatch, which is the whole effect.
+ */
+const useCommitCount = (control: Control<any>) => {
+  const $commits = usePrimitiveControl(0);
+
+  useEffect(
+    () => watchValue(control, () => count($commits)),
+    [control, $commits]
+  );
+
+  return useValue($commits);
 };
 
-const subscribeQuery = (onCommit: () => void) => watchValue($query, onCommit);
-
-const subscribePointer = (onCommit: () => void) =>
-  watchValue($pointer, onCommit);
-
 const Debounced: FC = () => {
-  const commits = useCommitCount(subscribeQuery);
+  const $query = usePrimitiveControl('');
 
-  const [keystrokes, setKeystrokes] = useState(0);
+  const $keystrokes = usePrimitiveControl(0);
+
+  const commits = useCommitCount($query);
 
   return (
     <fieldset>
@@ -64,13 +82,13 @@ const Debounced: FC = () => {
         style={{ width: '100%' }}
         placeholder='type quickly, then pause'
         onChange={(e) => {
-          setKeystrokes((n) => n + 1);
+          count($keystrokes);
 
           setValue($query, e.target.value, debounced);
         }}
       />
       <p className='muted' style={{ marginBottom: 0 }}>
-        {keystrokes} keystrokes → {commits} commits. Committed value:{' '}
+        {useValue($keystrokes)} keystrokes → {commits} commits. Committed value:{' '}
         <code>{useValue($query) || '(empty)'}</code>
       </p>
     </fieldset>
@@ -78,9 +96,13 @@ const Debounced: FC = () => {
 };
 
 const Throttled: FC = () => {
-  const commits = useCommitCount(subscribePointer);
+  const $pointer = useControl({ x: 0, y: 0 });
 
-  const [moves, setMoves] = useState(0);
+  const $moves = usePrimitiveControl(0);
+
+  const commits = useCommitCount($pointer);
+
+  const moves = useValue($moves);
 
   const { x, y } = useValue($pointer);
 
@@ -96,7 +118,7 @@ const Throttled: FC = () => {
           placeItems: 'center',
         }}
         onPointerMove={(e) => {
-          setMoves((n) => n + 1);
+          count($moves);
 
           setValue(
             $pointer,
@@ -115,9 +137,9 @@ const Throttled: FC = () => {
 };
 
 const Manual: FC = () => {
-  const form = useValue($form);
+  const { $form, $pending } = useAddress();
 
-  const [pending, setPending] = useState(false);
+  const pending = useValue($pending);
 
   return (
     <fieldset>
@@ -131,11 +153,13 @@ const Manual: FC = () => {
           <span className='muted'>{field}</span>
           <br />
           <input
-            defaultValue={form[field]}
+            // uncontrolled: the element holds what was typed, the control holds
+            // what was committed, and the gap between them is the whole point
+            defaultValue={getValue($form[field])}
             onChange={(e) => {
               setValue($form[field], e.target.value, manual);
 
-              setPending(true);
+              setValue($pending, true);
             }}
           />
         </label>
@@ -146,7 +170,7 @@ const Manual: FC = () => {
           onClick={() => {
             manual.flush();
 
-            setPending(false);
+            setValue($pending, false);
           }}
         >
           apply
@@ -156,7 +180,7 @@ const Manual: FC = () => {
           onClick={() => {
             // discard: reset the inputs from the last committed value and
             // simply never flush what was staged
-            setPending(false);
+            setValue($pending, false);
 
             window.location.reload();
           }}
@@ -165,45 +189,49 @@ const Manual: FC = () => {
         </button>
       </div>
       <p className='muted' style={{ marginBottom: 0 }}>
-        Committed: <code>{JSON.stringify(form)}</code>
+        Committed: <code>{JSON.stringify(useValue($form))}</code>
       </p>
     </fieldset>
   );
 };
 
-const Immediate: FC = () => (
-  <fieldset>
-    <legend>Batching, and opting out of it</legend>
-    <div className='row'>
-      <button
-        onClick={() => {
-          // three writes, one commit - the default microtask batch
-          setValue($form.street, '14 Rua da Prata');
-          setValue($form.city, 'Lisbon');
-          setValue($form.postcode, '1100-052');
+const Immediate: FC = () => {
+  const { $form } = useAddress();
 
-          console.log('after the calls, before the flush:', getValue($form));
-        }}
-      >
-        three writes, one commit
-      </button>
-      <button
-        onClick={() => {
-          setValue($form.city, 'Porto', syncScheduler);
+  return (
+    <fieldset>
+      <legend>Batching, and opting out of it</legend>
+      <div className='row'>
+        <button
+          onClick={() => {
+            // three writes, one commit - the default microtask batch
+            setValue($form.street, '14 Rua da Prata');
+            setValue($form.city, 'Lisbon');
+            setValue($form.postcode, '1100-052');
 
-          // already committed by the time this line runs
-          console.log('sync, already committed:', getValue($form.city));
-        }}
-      >
-        syncScheduler - commit now
-      </button>
-    </div>
-    <p className='muted' style={{ marginBottom: 0 }}>
-      Check the console: the default batch has not committed yet on the line
-      after the writes, and the sync one has.
-    </p>
-  </fieldset>
-);
+            console.log('after the calls, before the flush:', getValue($form));
+          }}
+        >
+          three writes, one commit
+        </button>
+        <button
+          onClick={() => {
+            setValue($form.city, 'Porto', syncScheduler);
+
+            // already committed by the time this line runs
+            console.log('sync, already committed:', getValue($form.city));
+          }}
+        >
+          syncScheduler - commit now
+        </button>
+      </div>
+      <p className='muted' style={{ marginBottom: 0 }}>
+        Check the console: the default batch has not committed yet on the line
+        after the writes, and the sync one has.
+      </p>
+    </fieldset>
+  );
+};
 
 const App: FC = () => (
   <>
@@ -213,8 +241,11 @@ const App: FC = () => (
     </p>
     <Debounced />
     <Throttled />
-    <Manual />
-    <Immediate />
+    {/* the two that share an address */}
+    <AddressProvider>
+      <Manual />
+      <Immediate />
+    </AddressProvider>
   </>
 );
 

@@ -15,11 +15,16 @@
 import createRegistry from 'controlla/core/createRegistry';
 import createAsyncControl from 'controlla/core/createAsyncControl';
 import pollLoader from 'controlla/loader/pollLoader';
-import Suspense from 'controlla/core/Suspense';
 import SuspenseControlConsumer from 'controlla/core/SuspenseControlConsumer';
 import ControlConsumer from 'controlla/core/ControlConsumer';
+import usePrimitiveControl from 'controlla/core/usePrimitiveControl';
+import useValue from 'controlla/core/useValue';
+import setValue from 'controlla/core/setValue';
 import selectLoading from 'controlla/core/selectLoading';
-import { useEffect, useState, type FC } from 'react';
+import watchValues from 'controlla/core/watchValues';
+import $pageVisible from 'controlla/dom/pageVisible';
+import type { Control } from 'controlla/core/types';
+import { useEffect, type FC } from 'react';
 
 type StageState = {
   stage: string;
@@ -99,41 +104,43 @@ const Stage: FC<{ stage: string }> = ({ stage }) => {
   );
 };
 
-const PollController = () => {
-  const [paused, setPaused] = useState(false);
+const PollController: FC<{ $paused: Control<boolean> }> = ({ $paused }) => {
+  const paused = useValue($paused);
 
   return (
-    <button
-      onClick={() => {
-        if (paused) {
-          pipelinePolling.resume(PIPELINE);
-        } else {
-          pipelinePolling.pause(PIPELINE);
-        }
-
-        setPaused(!paused);
-      }}
-    >
+    <button onClick={() => setValue($paused, !paused)}>
       {paused ? 'resume' : 'pause'}
     </button>
   );
 };
 
 const App: FC = () => {
-  /** Polling in a background tab is waste - pause the whole pipeline at once. */
-  useEffect(() => {
-    const onVisibility = () => {
-      if (document.hidden) {
-        pipelinePolling.pause(PIPELINE);
-      } else {
-        pipelinePolling.resume(PIPELINE);
-      }
-    };
+  /**
+   * A button's state is nobody else's - the registry and the loader above are
+   * module-level because they are the cache and the clock, and this is not.
+   */
+  const $paused = usePrimitiveControl(false);
 
-    document.addEventListener('visibilitychange', onVisibility);
+  /**
+   * Two reasons to stop polling - the button, and a backgrounded tab - and one
+   * watcher covering both. `watchValues` returns its unwatch, so it is the whole
+   * effect, and the callback's own cleanup resumes exactly what it paused.
+   */
+  useEffect(
+    () =>
+      watchValues(
+        [$paused, $pageVisible],
+        ([paused, visible]) => {
+          if (paused || !visible) {
+            pipelinePolling.pause(PIPELINE);
 
-    return () => document.removeEventListener('visibilitychange', onVisibility);
-  }, []);
+            return () => pipelinePolling.resume(PIPELINE);
+          }
+        },
+        true
+      ),
+    [$paused]
+  );
 
   return (
     <>
@@ -143,23 +150,21 @@ const App: FC = () => {
         itself once it passes.
       </p>
 
-      <Suspense fallback={null}>
-        <fieldset>
-          <legend>Pipeline: {PIPELINE}</legend>
-          {STAGES.map((stage) => (
-            <Stage key={stage} stage={stage} />
-          ))}
-          <p className='muted' style={{ marginBottom: 0 }}>
-            They advance in step because <code>syncedKeysCount: 1</code> gives
-            every stage of a pipeline one shared clock.
-          </p>
-        </fieldset>
-      </Suspense>
+      <fieldset>
+        <legend>Pipeline: {PIPELINE}</legend>
+        {STAGES.map((stage) => (
+          <Stage key={stage} stage={stage} />
+        ))}
+        <p className='muted' style={{ marginBottom: 0 }}>
+          They advance in step because <code>syncedKeysCount: 1</code> gives
+          every stage of a pipeline one shared clock.
+        </p>
+      </fieldset>
 
       <fieldset>
         <legend>Controlling the clock</legend>
         <div className='row'>
-          <PollController />
+          <PollController $paused={$paused} />
           <button
             onClick={() => {
               // start the run over, then poll now instead of waiting out the
@@ -173,7 +178,8 @@ const App: FC = () => {
           </button>
         </div>
         <p className='muted' style={{ marginBottom: 0 }}>
-          Switching to another tab pauses it too - see the effect above.
+          Switching to another tab pauses it too - <code>$pageVisible</code> is
+          in the same watcher.
         </p>
       </fieldset>
     </>
