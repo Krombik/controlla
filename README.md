@@ -129,7 +129,7 @@ For working code rather than snippets, [`examples/`](examples) has fifteen stand
 - **Registry**: [`createRegistry`](#createregistrycreate-initarg-options), [`createBoundControl` / `useBoundControl`](#createboundcontrol--useboundcontrol)
 - **Loaders**: [`requestLoader`](#requestloaderfetch-options-scheduler), [`pollLoader`](#pollloaderfetch-options-scheduler)
 - **Persistence**: [`getPersistStorage`](#getpersiststorageoptions), [`safeLocalStorage`](#safelocalstorage), [`safeSessionStorage`](#safesessionstorage)
-- **DOM**: [`mediaQuery`](#mediaqueryquery), [`$online`](#online), [`$pageVisible`](#pagevisible), [`$windowSize`](#windowsize)
+- **Platform**: [`$appVisible`](#appvisible), [`mediaQuery`](#mediaqueryquery), [`$online`](#online), [`$windowSize`](#windowsize)
 - **Schedulers**: [`batch`](#batchcallback-scheduler), [`createManualScheduler`](#createmanualscheduler), [`createThrottleScheduler`](#createthrottleschedulerms), [`createDebounceScheduler`](#createdebounceschedulerms)
 - **Forms**: [`useForm`](#useformcontrol-options), [`FormProvider`](#formprovider-form), [`useValidator`](#usevalidatorcontrol-validate-validateon--validator), [`usePathValidator`](#usepathvalidatorcontrol-validate-validateon--pathvalidator), [`useNativeField`](#usenativefieldcontrol-options--nativefield), [`useField`](#usefieldcontrol--field), [`useFieldArray`](#usefieldarraycontrol), [`useFieldState`](#usefieldstatecontrol), [`useFormState`](#useformstate)
 - **Router**: [`createRouter`](#createrouterpaths), [`createPath`](#createpathpath), [`createAsyncPath`](#createasyncpathsource), [`param`](#paramoptions), [`query`](#queryoptions), [`oneOf`](#oneofoptions), [`arrayParam`](#arrayparamoptions), [`createRouterView`](#createrouterviewroutes), [`Link` / `useLink`](#link--uselink), [`navigate`](#navigateto-replace-ignoreblock-scrolltotop-scrollrestoration), [params as controls](#route-params-are-controls), [`replaceValue`](#replacevaluecontrol-value-scheduler), [anchors](#anchors), [`registerAnchorOffset`](#registeranchoroffsetroute), [`selectRegisteredAnchors`](#selectregisteredanchorsroute), [`trackScroll`](#trackscrollanchor), [`$navigationState`](#navigationstate), [`navigationBlocker`](#blocking-navigation), [`repairHistory`](#repairhistory)
@@ -748,7 +748,7 @@ Whether the change being handled right now came from **somewhere else** rather t
 | route params, and the routes' matched state, following a back/forward | yes |
 | a bound control whose target or key moved for any of the above | yes |
 | an external storage the control is backed by, written in another tab | yes |
-| the DOM ones - `$online`, `$pageVisible`, `$windowSize`, `mediaQuery` | yes |
+| the platform ones - `$online`, `$appVisible`, `$windowSize`, `mediaQuery` | yes |
 | `setValue`, `replaceValue`, `invalidate`, `navigate`, a `Link` | no |
 
 Mainly for submit-on-change: a reload that answers with values the server normalized must reach the inputs without being taken for an edit and submitted again.
@@ -948,11 +948,14 @@ A `sessionStorage`-backed storage (observable within browsing contexts sharing t
 
 ---
 
-## DOM
+## Platform
 
-Ready-made controls bound to browser state - import and read, no setup. Safe to import on the server (default values, no listeners attached).
+Ready-made controls bound to the state of whatever the app runs in - import and read, no setup. Safe to import on the server (default values, no listeners attached).
 
 They're readonly, and what they follow is nobody's write, so [`isSourceUpdate()`](#issourceupdate) is `true` in their listeners - going offline included.
+
+### `$appVisible`
+A `boolean` control - `true` while the app is in front of the user, `false` while it isn't. On the web that's the tab being visible.
 
 ### `mediaQuery(query)`
 
@@ -963,7 +966,7 @@ Returns a boolean control tracking whether the media `query` matches, kept in sy
 | `query` | `string` | A media query string (as passed to [`matchMedia`](https://developer.mozilla.org/en-US/docs/Web/API/Window/matchMedia)). |
 
 ```tsx
-import mediaQuery from 'controlla/dom/mediaQuery';
+import mediaQuery from 'controlla/platform/mediaQuery';
 import useValue from 'controlla/core/useValue';
 
 const Nav = () => {
@@ -979,15 +982,12 @@ An **async control** of connectivity - `true` while online, `undefined` while of
 await toPromise($online);   // wait until back online, then retry
 ```
 
-### `$pageVisible`
-A `boolean` control - `true` while the tab is visible, `false` while hidden.
-
 ### `$windowSize`
 A `{ width, height }` control of the window's inner size, kept in sync with `resize` and `orientationchange` (committed once per animation frame). `width` and `height` are nested controls - subscribe to one without re-rendering on the other.
 
 ```tsx
-import $online from 'controlla/dom/online';
-import $windowSize from 'controlla/dom/windowSize';
+import $online from 'controlla/platform/online';
+import $windowSize from 'controlla/platform/windowSize';
 import useValue from 'controlla/core/useValue';
 
 const StatusBar = () => {

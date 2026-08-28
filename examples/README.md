@@ -44,7 +44,7 @@ run the lot.
 |---|---|---|
 | **07** | [persistence](07-persistence) | Controls backed by `localStorage` and `sessionStorage`, shared across tabs, with `isValid` as the version guard against a stale shape. |
 | **08** | [scheduling](08-scheduling) | When a write commits. Debounce, throttle, manual apply/cancel, `syncScheduler`, and `batch`. Counts commits rather than calls, so the difference is visible. |
-| **09** | [dom](09-dom) | `mediaQuery`, `$windowSize`, `$pageVisible`, and `$online` - which is an *async* control, so being offline reads as "not ready" and a component can suspend on it. |
+| **09** | [platform](09-platform) | `mediaQuery`, `$windowSize`, `$appVisible`, and `$online` - which is an *async* control, so being offline reads as "not ready" and a component can suspend on it. |
 
 ## Router
 

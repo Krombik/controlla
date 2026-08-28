@@ -9,7 +9,7 @@ import { sourceUpdate } from '#internal/sourceUpdate';
  * - route params, and the routes' matched state, following a back/forward
  * - a bound control whose target or key moved for any of those reasons
  * - an external storage the control is backed by, written in another tab
- * - the DOM ones: `$online`, `$pageVisible`, `$windowSize`, `mediaQuery`
+ * - the platform ones: `$online`, `$appVisible`, `$windowSize`, `mediaQuery`
  *
  * Made for submit-on-change: a reload answering with values the server changed
  * has to reach the fields without being taken for an edit and submitted again.

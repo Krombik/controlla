@@ -1,7 +1,7 @@
 import tseslint from 'typescript-eslint';
 
 /** Domains with private internals; core's `_internal` (#internal/*) is shared. */
-const nonCoreDomains = ['router', 'persist', 'scheduler', 'dom'];
+const nonCoreDomains = ['router', 'persist', 'scheduler', 'platform'];
 
 /**
  * `syncScheduler` is the flush contract core already owns (`Scheduler._sync`)

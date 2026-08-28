@@ -13,7 +13,7 @@ import useValue from 'controlla/core/useValue';
 import selectLoading from 'controlla/core/selectLoading';
 import watchValues from 'controlla/core/watchValues';
 import SuspenseControlConsumer from 'controlla/core/SuspenseControlConsumer';
-import $pageVisible from 'controlla/dom/pageVisible';
+import $appVisible from 'controlla/platform/appVisible';
 import { useEffect, type FC } from 'react';
 
 import { PAGE_SIZE, resetSearchRounds } from '#api';
@@ -77,7 +77,7 @@ const Results: FC = () => {
    */
   useEffect(
     () =>
-      watchValues([$query, $pageVisible], ([query, isVisible]) => {
+      watchValues([$query, $appVisible], ([query, isVisible]) => {
         if (!isVisible) {
           searchPolling.pause(query);
 

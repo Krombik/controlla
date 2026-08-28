@@ -12,10 +12,10 @@
  * that resolves when the connection comes back.
  */
 
-import mediaQuery from 'controlla/dom/mediaQuery';
-import $online from 'controlla/dom/online';
-import $pageVisible from 'controlla/dom/pageVisible';
-import $windowSize from 'controlla/dom/windowSize';
+import mediaQuery from 'controlla/platform/mediaQuery';
+import $online from 'controlla/platform/online';
+import $appVisible from 'controlla/platform/appVisible';
+import $windowSize from 'controlla/platform/windowSize';
 import useValue from 'controlla/core/useValue';
 import ControlConsumer from 'controlla/core/ControlConsumer';
 import SuspenseControlConsumer from 'controlla/core/SuspenseControlConsumer';
@@ -132,9 +132,9 @@ const App: FC = () => {
       </fieldset>
 
       <fieldset>
-        <legend>$pageVisible</legend>
+        <legend>$appVisible</legend>
         <p style={{ margin: 0 }}>
-          visible: <ControlConsumer control={$pageVisible} render={String} />{' '}
+          visible: <ControlConsumer control={$appVisible} render={String} />{' '}
           <span className='muted'>
             switch to another tab and come back - it updates while hidden
           </span>

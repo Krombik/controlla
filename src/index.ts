@@ -59,10 +59,10 @@ export { default as useFieldState } from './form/useFieldState';
 export { default as useForm } from './form/useForm';
 export { default as useFormState } from './form/useFormState';
 
-export { default as mediaQuery } from './dom/mediaQuery';
-export { default as $online } from './dom/online';
-export { default as $pageVisible } from './dom/pageVisible';
-export { default as $windowSize } from './dom/windowSize';
+export { default as $appVisible } from './platform/appVisible';
+export { default as mediaQuery } from './platform/mediaQuery';
+export { default as $online } from './platform/online';
+export { default as $windowSize } from './platform/windowSize';
 
 export { default as pollLoader } from './loader/pollLoader';
 export { default as requestLoader } from './loader/requestLoader';

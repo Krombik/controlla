@@ -22,7 +22,7 @@ import useValue from 'controlla/core/useValue';
 import setValue from 'controlla/core/setValue';
 import selectLoading from 'controlla/core/selectLoading';
 import watchValues from 'controlla/core/watchValues';
-import $pageVisible from 'controlla/dom/pageVisible';
+import $appVisible from 'controlla/platform/appVisible';
 import type { Control } from 'controlla/core/types';
 import { useEffect, type FC } from 'react';
 
@@ -129,7 +129,7 @@ const App: FC = () => {
   useEffect(
     () =>
       watchValues(
-        [$paused, $pageVisible],
+        [$paused, $appVisible],
         ([paused, visible]) => {
           if (paused || !visible) {
             pipelinePolling.pause(PIPELINE);
@@ -178,7 +178,7 @@ const App: FC = () => {
           </button>
         </div>
         <p className='muted' style={{ marginBottom: 0 }}>
-          Switching to another tab pauses it too - <code>$pageVisible</code> is
+          Switching to another tab pauses it too - <code>$appVisible</code> is
           in the same watcher.
         </p>
       </fieldset>

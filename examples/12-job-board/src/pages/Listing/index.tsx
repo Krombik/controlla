@@ -13,7 +13,7 @@
 
 import SuspenseControlConsumer from 'controlla/core/SuspenseControlConsumer';
 import useValue from 'controlla/core/useValue';
-import mediaQuery from 'controlla/dom/mediaQuery';
+import mediaQuery from 'controlla/platform/mediaQuery';
 import navigate from 'controlla/router/navigate';
 import type { FC, PropsWithChildren } from 'react';
 

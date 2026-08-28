@@ -129,7 +129,7 @@ importers:
         specifier: 'catalog:'
         version: 19.2.8(react@19.2.8)
 
-  09-dom:
+  09-platform:
     dependencies:
       controlla:
         specifier: link:../../build
