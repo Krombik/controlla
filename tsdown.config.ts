@@ -164,7 +164,10 @@ export default defineConfig({
   outDir,
   clean: true,
   sourcemap: true,
-  platform: 'browser',
+  // not `browser`: that one substitutes `process.env.NODE_ENV` in the esm
+  // output, baking the dev branches in. `neutral` leaves the check for the
+  // app's own bundler to resolve
+  platform: 'neutral',
   target: 'es2021',
   treeshake: true,
   dts: true,
