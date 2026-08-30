@@ -8,12 +8,14 @@ import type {
 } from '#form/internal/types';
 import type { NativeFieldOptions, NativeFieldRenderProps } from '#form/types';
 import { INTERNALS } from '#internal/constants';
-import setValue from '#core/setValue';
+import syncScheduler from '#scheduler/syncScheduler';
 import watchValue from '#core/watchValue';
 import identity from '#internal/identity';
 import isNotEqual from '#internal/isNotEqual';
 import { holdEntry, releaseEntry } from '#form/internal/entry';
 import { handleBlur } from '#form/internal/validator';
+import { getSchedulerLane, scheduleFlush } from '#internal/flushQueue';
+import { replacing } from '#router/internal/replacing';
 
 const writeValue = (element: NativeFieldElement, value: any) => {
   // `NaN` is what an empty numeric field reads back as, and a type without
@@ -279,6 +281,10 @@ const useNativeProps = (
   if (cache === null || cache._entry !== entry) {
     const kind = (entry._native = KINDS[options.type]);
 
+    const afterChange = options.onChange;
+
+    const replace = !!options.replace;
+
     entry._parse = options.parse || identity;
 
     entry._format = options.format || identity;
@@ -287,7 +293,13 @@ const useNativeProps = (
 
     entry._describedBy = options.describedBy;
 
-    const path = entry._control[INTERNALS]._path;
+    const control = entry._control;
+
+    const internals = control[INTERNALS];
+
+    const root = internals._root;
+
+    const path = internals._path;
 
     const filter = kind._filter;
 
@@ -297,10 +309,38 @@ const useNativeProps = (
 
     let typed = false;
 
+    // the commit is sync so that whatever the callback sets lands in the same
+    // one, and the element is written back before anything else reads it
+    const commit = (event: Event) => {
+      const value = readElement(entry, event);
+
+      const lane = getSchedulerLane(syncScheduler);
+
+      // a write to router params is a history entry, and a field would leave
+      // one per keystroke
+      replacing._value = replace;
+
+      try {
+        root._enqueueSet(value, lane, false, path);
+      } finally {
+        replacing._value = false;
+      }
+
+      if (afterChange) {
+        if (lane._canScheduleFlush) {
+          lane._beforeFlushHooks.push(() => afterChange(value));
+        } else {
+          afterChange(value);
+        }
+      }
+
+      scheduleFlush(lane);
+    };
+
     const onInput = (event: Event) => {
       typed = true;
 
-      setValue(entry._control, readElement(entry, event));
+      commit(event);
     };
 
     // `change` is here for a password manager assigning the value and
@@ -310,7 +350,7 @@ const useNativeProps = (
       if (typed) {
         typed = false;
       } else {
-        setValue(entry._control, readElement(entry, event));
+        commit(event);
       }
     };
 
@@ -345,7 +385,7 @@ const useNativeProps = (
 
               // immediate fills the element, waiting for a value still loading
               unwatch = watchValue(
-                entry._control,
+                control,
                 (value) => {
                   const input = element as HTMLInputElement;
 
@@ -415,7 +455,7 @@ const useNativeProps = (
             release = detach;
           }
         },
-        onBlur: handleBlur(form, entry._control),
+        onBlur: handleBlur(form, control),
         ...kind._attrs,
       },
     };

@@ -1,7 +1,7 @@
 import type { AsyncControl, Control, Scheduler } from '#types';
 import { INTERNALS } from '#internal/constants';
 import { getSchedulerLane, scheduleFlush } from '#internal/flushQueue';
-import { replacing } from '#router/internal/state';
+import { replacing } from '#router/internal/replacing';
 
 /**
  * Writes to a **router params** {@link control} like `setValue`, but replaces

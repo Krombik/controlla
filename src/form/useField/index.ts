@@ -14,6 +14,11 @@ import useEntry from '#form/internal/useEntry';
  *
  * Throws outside a `FormProvider`.
  *
+ * {@link onChange} is called with each value the field writes, in the same
+ * commit as it - a set made there lands in the same render. {@link replace} is
+ * for a router params control: it replaces the current history entry instead
+ * of pushing one.
+ *
  * Reading the value here means this component rerenders on every keystroke,
  * which a component taking a `value` prop makes unavoidable. For an `input`,
  * `select` or `textarea`, `useNativeField` lets the element own the value and
@@ -28,11 +33,19 @@ import useEntry from '#form/internal/useEntry';
  * ```
  */
 const useField = <C extends Control>(
-  control: C
+  control: C,
+  onChange?: (value: SelectValue<C>) => void,
+  replace?: boolean
 ): FieldRenderProps<SelectValue<C>> => {
   const form = useContext(FormContext) || throwNoProvider();
 
-  return useFieldProps(control, form, useEntry(form, control));
+  return useFieldProps(
+    control,
+    form,
+    useEntry(form, control),
+    onChange,
+    !!replace
+  );
 };
 
 export default useField;

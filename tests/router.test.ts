@@ -39,6 +39,11 @@ import $navigationState from '../build/router/navigationState/index.js';
 import navigationBlocker from '../build/router/navigationBlocker/index.js';
 import isSourceUpdate from '../build/core/isSourceUpdate/index.js';
 import watchValues from '../build/core/watchValues/index.js';
+import useForm from '../build/form/useForm/index.js';
+import Field from '../build/form/Field/index.js';
+import FormProvider from '../build/form/FormProvider/index.js';
+import { renderHook } from './_env/hooks.ts';
+import { contextOf } from './_env/context.ts';
 
 // ---------- router ----------
 
@@ -146,6 +151,51 @@ assert.equal(
   'replace',
   'replaceValue: action'
 );
+
+// 3c. a field told to replace does what `replaceValue` does - a field on
+// router params would otherwise leave a history entry per keystroke. Told
+// nothing it writes like `setValue`, which 3. covers
+{
+  const $posts = selectParams(router.routes.user.posts);
+
+  const FormContext: any = contextOf(
+    FormProvider({ form: undefined as any, children: null })
+  );
+
+  const form = renderHook(() =>
+    useForm($posts as any, { submit: () => {} } as any)
+  ).result;
+
+  const props: any = renderHook(
+    () =>
+      Field({
+        control: $posts as any,
+        replace: true,
+        render: ((renderProps: any) => renderProps) as any,
+      }) as any,
+    (run) => {
+      FormContext._currentValue = form;
+
+      try {
+        return run();
+      } finally {
+        FormContext._currentValue = undefined;
+      }
+    }
+  ).result;
+
+  props.onChange({ sort: 'new' });
+
+  await tick();
+
+  assert.equal(location.search, '?sort=new', 'field replace: url');
+  assert.equal(entries.length, 3, 'field replace: no new entry');
+  assert.equal(
+    getValue($navigationState).action,
+    'replace',
+    'field replace: action'
+  );
+}
 
 replaceValue(selectParams(router.routes.user.posts), { sort: 'desc' });
 await tick();

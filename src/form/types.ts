@@ -254,6 +254,17 @@ export type FieldRenderProps<V = any> = {
 
 export type FieldProps<C extends Control = Control> = {
   control: C;
+  /**
+   * Called with the value the field just wrote. Anything it sets is committed
+   * together with that value, in one render.
+   */
+  onChange?(value: SelectValue<C>): void;
+  /**
+   * For a **router params** control: replace the current history entry rather
+   * than push one, the way `replaceValue` does - a field otherwise leaves a
+   * history entry per keystroke. Does nothing on any other control.
+   */
+  replace?: boolean;
   render(
     props: FieldRenderProps<SelectValue<C>>,
     state: FieldState<C>
@@ -388,6 +399,17 @@ export type NativeFieldOptions<
    * than setting the attribute yourself: React would overwrite it.
    */
   describedBy?: string;
+  /**
+   * Called with the value the field just wrote — parsed, as the control holds
+   * it. Anything it sets is committed together with that value, in one render.
+   */
+  onChange?(value: SelectValue<C>): void;
+  /**
+   * For a **router params** control: replace the current history entry rather
+   * than push one, the way `replaceValue` does - a field otherwise leaves a
+   * history entry per keystroke. Does nothing on any other control.
+   */
+  replace?: boolean;
 } & Partial<NativeFieldConverters<T, C>>;
 
 export type NativeFieldProps<

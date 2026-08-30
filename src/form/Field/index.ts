@@ -16,7 +16,7 @@ const Field = ((props: FieldProps) => {
   const entry = useEntry(form, control);
 
   return props.render(
-    useFieldProps(control, form, entry),
+    useFieldProps(control, form, entry, props.onChange, !!props.replace),
     getFieldState(entry)
   );
 }) as {
@@ -32,7 +32,8 @@ const Field = ((props: FieldProps) => {
    * nothing at all.
    *
    * Validation is `Validator`/`PathValidator`; this only reports whether some
-   * validator holds an error for the field.
+   * validator holds an error for the field. {@link FieldProps.onChange onChange}
+   * is called with each value written, in the same commit as it.
    *
    * @example
    * ```tsx

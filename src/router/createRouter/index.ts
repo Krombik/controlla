@@ -52,9 +52,9 @@ import {
   getRouterPatch,
   historyState,
   paramsHandler,
-  replacing,
   urlFinalizer,
 } from '#router/internal/state';
+import { replacing } from '#router/internal/replacing';
 import queueRouterPatch from '#router/internal/queueRouterPatch';
 import removeFromArray from '#internal/removeFromArray';
 import scheduleSet from '#internal/scheduleSet';

@@ -131,7 +131,7 @@ For working code rather than snippets, [`examples/`](examples) has fifteen stand
 - **Persistence**: [`getPersistStorage`](#getpersiststorageoptions), [`safeLocalStorage`](#safelocalstorage), [`safeSessionStorage`](#safesessionstorage)
 - **Platform**: [`$appVisible`](#appvisible), [`mediaQuery`](#mediaqueryquery), [`$online`](#online), [`$windowSize`](#windowsize)
 - **Schedulers**: [`batch`](#batchcallback-scheduler), [`createManualScheduler`](#createmanualscheduler), [`createThrottleScheduler`](#createthrottleschedulerms), [`createDebounceScheduler`](#createdebounceschedulerms)
-- **Forms**: [`useForm`](#useformcontrol-options), [`FormProvider`](#formprovider-form), [`useValidator`](#usevalidatorcontrol-validate-validateon--validator), [`usePathValidator`](#usepathvalidatorcontrol-validate-validateon--pathvalidator), [`useNativeField`](#usenativefieldcontrol-options--nativefield), [`useField`](#usefieldcontrol--field), [`useFieldArray`](#usefieldarraycontrol), [`useFieldState`](#usefieldstatecontrol), [`useFormState`](#useformstate)
+- **Forms**: [`useForm`](#useformcontrol-options), [`FormProvider`](#formprovider-form), [`useValidator`](#usevalidatorcontrol-validate-validateon--validator), [`usePathValidator`](#usepathvalidatorcontrol-validate-validateon--pathvalidator), [`useNativeField`](#usenativefieldcontrol-options--nativefield), [`useField`](#usefieldcontrol-onchange-replace--field), [`useFieldArray`](#usefieldarraycontrol), [`useFieldState`](#usefieldstatecontrol), [`useFormState`](#useformstate)
 - **Router**: [`createRouter`](#createrouterpaths), [`withPrefixes`](#withprefixesprefixes-paths), [`go`](#godelta), [`createPath`](#createpathpath), [`createAsyncPath`](#createasyncpathsource), [`param`](#paramoptions), [`query`](#queryoptions), [`oneOf`](#oneofoptions), [`arrayParam`](#arrayparamoptions), [`createRouterView`](#createrouterviewroutes), [`Link` / `useLink`](#link--uselink), [`navigate`](#navigateto-replace-ignoreblock-scrolltotop-scrollrestoration), [params as controls](#route-params-are-controls), [`replaceValue`](#replacevaluecontrol-value-scheduler), [anchors](#anchors), [`registerAnchorOffset`](#registeranchoroffsetroute), [`selectRegisteredAnchors`](#selectregisteredanchorsroute), [`trackScroll`](#trackscrollanchor), [`$navigationState`](#navigationstate), [`navigationBlocker`](#blocking-navigation), [`repairHistory`](#repairhistory)
 - **[Troubleshooting](#troubleshooting)**: [param value type + `stringify`](#paramquery-value-type-breaks-when-stringify-is-present), [named import suggestions in VS Code](#get-named-controlla-import-suggestions-in-vs-code)
 
@@ -1277,10 +1277,14 @@ A field the **element itself owns**: read on every `input`/`change`, written bac
 | `type`                      | `NativeFieldType` | What the field _is_, not which element renders it - see below. |
 | `parse?` / `format?` | `(value) => …` | Converts on the way to the control and back. |
 | `errorId?` / `describedBy?` | `string` | Composed into the element's `aria-describedby`. |
+| `onChange?` | `(value) => void` | Called with each value written, in the same commit as it. |
+| `replace?` | `boolean` | Router params only: replace the history entry instead of pushing one. |
 
 **Returns**: `name`, `ref`, `onBlur` and the attributes the type implies - spread them onto your `input`, `select` or `textarea`. Everything but `control` is read once.
 
 The element writes on every `input`/`change`, with nothing in between: what the validators read is always what was typed. To have readers of the control settle instead, debounce on their side - a `createDebounceScheduler` on the write that feeds them, or a derived control they watch.
+
+Nothing here hands you an `onChange` - the element is the one writing. The `onChange` **option** is a notification of that write: it's called with each value the field wrote, parsed, inside that same commit, so a control it sets lands in the same render. Read once, like the rest of the options: wrap it in `useEffectEvent` where it has to see the latest render.
 
 `type` covers `text`, `search`, `url`, `tel`, `password`, `color`, `hidden`, `email`, `numeric`, `decimal`, `range`, `checkbox`, `radio`, `file`, `date`, `month`, `week`, `time`, `datetime-local`, `textarea`, `select`, `multiselect`. The value type follows from it (`checkbox` → `boolean`, `numeric` → `number`, `file` → `FileList | null`, `multiselect` → `string[]`), and a control that can't hold everything the field may write is a compile error. `numeric`/`decimal`/`email` render as `text` with an `inputmode`: the native types have no text cursor to restore a caret in, and run validation of their own before yours.
 
@@ -1307,7 +1311,7 @@ The component form takes the same options as props, and hands `render` the wirin
 
 The same props can go on several elements - a radio group, one field shown twice - on React 19. Below that, one element per field.
 
-### `useField(control)` / `<Field>`
+### `useField(control, onChange?, replace?)` / `<Field>`
 
 The wiring for a component that owns its own rendering - a date picker, a combobox, anything taking `value`/`onChange`.
 
@@ -1324,7 +1328,19 @@ Reading the value means re-rendering on every keystroke, which a component takin
 />
 ```
 
-`onChange` takes the value itself, not an event, and writes straight through - a delayed write with a controlled input freezes what's typed.
+The `onChange` **it hands you** takes the value itself, not an event, and writes straight through - a delayed write with a controlled input freezes what's typed.
+
+The `onChange` **you pass in** - an argument to the hook, a prop on the component - is the other direction: not the write, but a notification of it. It's called with each value the field wrote, inside that same commit, so a control it sets lands in the same render. Read once, like the rest of the wiring: wrap it in `useEffectEvent` where it has to see the latest render.
+
+`replace` is for a field on **router params**: every write there is a history entry, so a field would leave one per keystroke - it makes them replace the current entry instead, the way [`replaceValue`](#replacevaluecontrol-value-scheduler) does. It does nothing on any other control.
+
+```tsx
+<Field
+  control={$values.country}
+  onChange={() => setValue($values.city, '')}
+  render={/* … */}
+/>
+```
 
 ### `useFieldArray(control)`
 

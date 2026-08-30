@@ -8,6 +8,7 @@ import createAsyncControl from '../build/core/createAsyncControl/index.js';
 import createAsyncDerivedControl from '../build/core/createAsyncDerivedControl/index.js';
 import getValue from '../build/core/getValue/index.js';
 import setValue from '../build/core/setValue/index.js';
+import syncScheduler from '../build/scheduler/syncScheduler/index.js';
 import invalidate from '../build/core/invalidate/index.js';
 import watchValue from '../build/core/watchValue/index.js';
 import type { SyncExternalStorage } from '../build/core/types.js';
@@ -86,12 +87,17 @@ const createForm = (control: any, options: Partial<FormOptions> = {}) =>
     .result;
 
 /** A mounted `Field` - registration is the mount, and it ends at the unmount. */
-const field = (form: FormState, control: any) =>
+const field = (
+  form: FormState,
+  control: any,
+  onChange?: (value: any) => void
+) =>
   mount(
     form,
     () =>
       Field({
         control,
+        onChange,
         render: ((props: any, state: any) => ({ props, state })) as any,
       }) as unknown as {
         props: {
@@ -306,6 +312,91 @@ test('an uncontrolled field lets the element own the value both ways', async () 
   await tick();
 
   assert.equal(input.value, 'jill');
+});
+
+test('a change commits synchronously, with whatever its handler sets', async () => {
+  const $values = createControl({ name: 'jane', slug: '' });
+
+  const form = createForm($values);
+
+  let commits = 0;
+
+  const unwatch = watchValue($values, () => {
+    commits++;
+  });
+
+  const seen: string[] = [];
+
+  const onChange = (value: string) => {
+    seen.push(value);
+
+    setValue($values.slug, value.toLowerCase());
+  };
+
+  const rendered = field(form, $values.name, onChange);
+
+  rendered.result.props.onChange('John');
+
+  // no await: React restores a controlled element to the value it last
+  // rendered once the event ends, so the commit cannot wait for a microtask
+  assert.deepEqual(seen, ['John']);
+  assert.equal(getValue($values.name), 'John');
+  assert.equal(getValue($values.slug), 'john');
+  assert.equal(commits, 1);
+
+  rendered.unmount();
+
+  const input = fakeInput();
+
+  const detach = nativeField(form, {
+    type: 'text',
+    control: $values.name,
+    onChange,
+  }).ref(input)!;
+
+  input.value = 'Jack';
+
+  emit(input, 'input');
+
+  assert.deepEqual(seen, ['John', 'Jack']);
+  assert.equal(getValue($values.name), 'Jack');
+  assert.equal(getValue($values.slug), 'jack');
+  assert.equal(commits, 2);
+
+  detach();
+
+  unwatch();
+
+  await tick();
+});
+
+test('a change dispatched inside a flush joins the one it is running in', async () => {
+  const $values = createControl({ name: 'jane', slug: '' });
+
+  const $trigger = createControl(0);
+
+  const form = createForm($values);
+
+  const rendered = field(form, $values.name, (value: string) => {
+    setValue($values.slug, value.toLowerCase());
+  });
+
+  // the field is driven from a listener, which runs while its lane commits -
+  // the callback has to run in that flush rather than wait for the next one
+  const unwatch = watchValue($trigger, () => {
+    rendered.result.props.onChange('John');
+  });
+
+  setValue($trigger, 1, syncScheduler);
+
+  assert.equal(getValue($values.name), 'John');
+  assert.equal(getValue($values.slug), 'john');
+
+  unwatch();
+
+  rendered.unmount();
+
+  await tick();
 });
 
 test('a failed submit focuses the invalid field first in the document', async () => {

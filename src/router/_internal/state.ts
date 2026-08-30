@@ -50,12 +50,6 @@ export const urlFinalizer: Mutable<PendingItem> = {
 };
 
 /**
- * True only while `replaceValue`'s enqueue runs; the router turns such
- * writes into history replaces.
- */
-export const replacing = { _value: false };
-
-/**
  * What `repairHistory` and `go` share with the router. `_entries` and `_pop`
  * are native only - the router fills them there, and the web build carries
  * neither.
