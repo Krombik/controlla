@@ -22,7 +22,9 @@ export const getRouterPatch = (lane: Lane) => {
         _navigation: undefined,
         _updates: [],
         _replace: true,
-        _hashChanged: false,
+        ...(__NATIVE__
+          ? ({} as Pick<RouterPatch, '_hashChanged'>)
+          : { _hashChanged: false }),
       })
     );
 
@@ -53,13 +55,34 @@ export const urlFinalizer: Mutable<PendingItem> = {
  */
 export const replacing = { _value: false };
 
-/** What `repairHistory` shares with the router. */
+/**
+ * What `repairHistory` and `go` share with the router. `_entries` and `_pop`
+ * are native only - the router fills them there, and the web build carries
+ * neither.
+ */
+type HistoryState = {
+  _knownLength: number;
+  _index: number;
+  _repairedUrl: string;
+  _resolveRepair: (() => void) | undefined;
+  //#region react-native ONLY
+  /**
+   * There is no address bar to read, so the stack of urls *is* the history,
+   * and `_index` is where in it we are.
+   */
+  _entries: string[];
+  /** Moving to another entry, which is the router's `popstate` path. */
+  _pop(index: number): void;
+  //#endregion
+};
+
 export const historyState = {
   _knownLength: 0,
   _index: 0,
   _repairedUrl: '',
-  _resolveRepair: undefined as (() => void) | undefined,
-};
+  _resolveRepair: undefined,
+  ...(__NATIVE__ ? { _entries: [], _pop: noop } : {}),
+} as HistoryState;
 
 /** What `navigationBlocker` shares with the router. */
 export const blocker = {

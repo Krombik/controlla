@@ -1,12 +1,12 @@
 import { tick } from './_env/dom.ts';
 import assert from 'node:assert';
 import test from 'node:test';
-import createControl from '../src/core/createControl/index.ts';
-import setValue from '../src/core/setValue/index.ts';
-import getValue from '../src/core/getValue/index.ts';
-import watchValue from '../src/core/watchValue/index.ts';
-import createDebounceScheduler from '../src/scheduler/createDebounceScheduler/index.ts';
-import createThrottleScheduler from '../src/scheduler/createThrottleScheduler/index.ts';
+import createControl from '../build/core/createControl/index.js';
+import setValue from '../build/core/setValue/index.js';
+import getValue from '../build/core/getValue/index.js';
+import watchValue from '../build/core/watchValue/index.js';
+import createDebounceScheduler from '../build/scheduler/createDebounceScheduler/index.js';
+import createThrottleScheduler from '../build/scheduler/createThrottleScheduler/index.js';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 

@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "~platform/*": ["./src/_platform/native/*"]
+    }
+  },
+  "include": ["src"]
+}

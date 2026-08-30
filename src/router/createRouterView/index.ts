@@ -86,11 +86,13 @@ const handleRouter = (
 
         let clearLane: Lane | undefined;
 
-        routes[i]._anchor?._hash._set!(
-          undefined,
-          (clearLane ||= getSchedulerLane(syncScheduler)),
-          true
-        );
+        if (!__NATIVE__) {
+          routes[i]._anchor?._hash._set!(
+            undefined,
+            (clearLane ||= getSchedulerLane(syncScheduler)),
+            true
+          );
+        }
 
         do {
           (routes[i]._params as RouterControlRoot | null)?._set!(

@@ -1,4 +1,5 @@
 import type { NavigationTarget } from '#router/types';
+import type { Navigate } from '~platform/navigate';
 import {
   ROUTE_METHODS,
   ROUTE_PARAMS,
@@ -6,39 +7,39 @@ import {
 } from '#router/internal/constants';
 import navigateRoute from '#router/internal/navigateRoute';
 
-/**
- * Navigates to the given {@link to target}: pushes a history entry, or
- * replaces the current one with {@link replace}. The target's anchor, when
- * set, scrolls to its registered element after the navigation commits.
- * {@link ignoreBlock} bypasses an enabled `navigationBlocker`;
- * {@link scrollToTop} and {@link scrollRestoration} override the defaults
- * (both happen only on a new page otherwise).
- *
- * @example
- * ```ts
- * navigate(router.navigation.product({ id: '42' }));
- *
- * navigate(router.navigation.docs('usage'));         // with an anchor
- *
- * navigate(router.navigation.home(), true);          // replace
- * ```
- */
+// the parameters are spelled out rather than taken from `Navigate`: the branch
+// this target drops still has to compile, and there the type is the other one
 const navigate = (
-  to: NavigationTarget<true>,
-  replace?: boolean,
-  ignoreBlock?: boolean,
-  scrollToTop?: boolean,
-  scrollRestoration?: boolean
-) => {
-  navigateRoute(
-    to[ROUTE_METHODS],
-    to[ROUTE_PARAMS],
-    to[ROUTE_HASH],
-    replace || false,
-    ignoreBlock,
-    scrollToTop,
-    scrollRestoration
-  );
-};
+  __NATIVE__
+    ? (
+        to: NavigationTarget<true>,
+        replace?: boolean,
+        ignoreBlock?: boolean
+      ) => {
+        navigateRoute(
+          to[ROUTE_METHODS],
+          to[ROUTE_PARAMS],
+          replace || false,
+          ignoreBlock
+        );
+      }
+    : (
+        to: NavigationTarget<true>,
+        replace?: boolean,
+        ignoreBlock?: boolean,
+        scrollToTop?: boolean,
+        scrollRestoration?: boolean
+      ) => {
+        navigateRoute(
+          to[ROUTE_METHODS],
+          to[ROUTE_PARAMS],
+          replace || false,
+          ignoreBlock,
+          to[ROUTE_HASH],
+          scrollToTop,
+          scrollRestoration
+        );
+      }
+) as Navigate;
 
 export default navigate;

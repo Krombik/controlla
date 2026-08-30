@@ -20,6 +20,22 @@ import type {
 } from '#router/types';
 import type { DerivedControlInternals } from '#internal/derivedControlUtils';
 
+/**
+ * What a link reads off a click to tell whether the navigation is its own -
+ * a `MouseEvent` is one. A native press carries none of it, so there the
+ * handler takes nothing.
+ */
+export type LinkClickEvent = {
+  currentTarget: { target: string };
+  button: number;
+  metaKey: boolean;
+  altKey: boolean;
+  ctrlKey: boolean;
+  shiftKey: boolean;
+  defaultPrevented: boolean;
+  preventDefault(): void;
+};
+
 export type IsUnion<T, U = T> = T extends any
   ? [U] extends [T]
     ? false
@@ -119,8 +135,10 @@ export type PageRoute<IsPage extends boolean> = ReadonlyControl<boolean> & {
   [IS_PAGE_BRAND]: IsPage;
   /** @internal */
   _register(setComponents: () => void): void;
+  //#region web ONLY
   /** @internal */
   readonly _anchor: AnchorParam | undefined;
+  //#endregion
   /** @internal */
   readonly _routes: RouteData[];
 };
@@ -221,7 +239,9 @@ export type ChunkBuilder = {
 export type RouteData = {
   readonly _params: ControlInternals | DerivedControlInternals | null;
   readonly _isMatched: PrimitiveControlInternals;
+  //#region web ONLY
   readonly _anchor: AnchorParam | undefined;
+  //#endregion
   readonly _source: ControlInternalsChild | undefined;
   _buildPath: ChunkBuilder;
   _buildSearch: ChunkBuilder;
@@ -262,8 +282,10 @@ type RouterNavigation = {
   _isNewPage: boolean;
   readonly _isHistoryEvent: boolean;
   _ignoreBlock: boolean | undefined;
-  readonly _scrollToTop: boolean | undefined;
-  readonly _scrollRestoration: boolean | undefined;
+  //#region web ONLY
+  readonly _scrollToTop?: boolean;
+  readonly _scrollRestoration?: boolean;
+  //#endregion
 };
 
 /** @internal */
@@ -271,7 +293,9 @@ export type RouterPatch = {
   _navigation: RouterNavigation | undefined;
   readonly _updates: RouterWrite[];
   _replace: boolean;
+  //#region web ONLY
   _hashChanged: boolean;
+  //#endregion
 };
 
 /** @internal */
@@ -563,8 +587,10 @@ export interface Path<
   readonly _path: string[];
   /** @internal */
   readonly _regexStr: string;
+  //#region web ONLY
   /** @internal */
   readonly _anchor: AnchorParam | undefined;
+  //#endregion
   /** @internal */
   readonly _children: AnyPaths | undefined;
   /** @internal */

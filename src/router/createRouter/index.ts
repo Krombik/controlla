@@ -20,12 +20,14 @@ import {
   ROUTE_METHODS,
   ROUTE_PARAMS,
   ROUTE_HASH,
+  PREFIXES,
   EMPTY_OBJECT,
 } from '#router/internal/constants';
 import makePrimitiveInternals from '#internal/makePrimitiveInternals';
 import append from '#internal/append';
 
 import NOT_FOUND from '#router/NOT_FOUND';
+import go from '#router/go';
 import { INTERNALS, EMPTY_ARR, PASSIVE } from '#internal/constants';
 import { getLane, getSchedulerLane, scheduleFlush } from '#internal/flushQueue';
 import addToQueue from '#internal/addToQueue';
@@ -38,6 +40,8 @@ import type {
 import type { NavigationTarget } from '#router/types';
 import createManualScheduler from '#scheduler/createManualScheduler';
 import parseSearch from '#router/internal/parseSearch';
+import $routerReady from '#router/routerReady';
+import { Linking, BackHandler } from 'react-native';
 import decodePathParams from '#router/internal/decodePathParams';
 import decodeParam from '#router/internal/decodeParam';
 import encodePathValue from '#router/internal/encodePathValue';
@@ -70,6 +74,9 @@ let devPopStateListener: undefined | ((e: PopStateEvent) => void);
 let devScrollListener: undefined | (() => void);
 
 let stopRestore = noop;
+
+/** Native only: what the previous `createRouter` of a dev reload subscribed. */
+let nativeCleanup: undefined | (() => void);
 
 function buildStaticPath(
   this: RouteData,
@@ -118,7 +125,11 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
   const SCROLL_SAVE_DELAY = 100;
 
   if (process.env.NODE_ENV !== 'production') {
-    if (devPopStateListener) {
+    if (__NATIVE__) {
+      if (nativeCleanup) {
+        nativeCleanup();
+      }
+    } else if (devPopStateListener) {
       window.removeEventListener('popstate', devPopStateListener);
 
       window.removeEventListener('scroll', devScrollListener!);
@@ -129,23 +140,24 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
     clearWrites();
   }
 
-  if ('scrollRestoration' in history) {
+  if (!__NATIVE__ && 'scrollRestoration' in history) {
     history.scrollRestoration = 'manual';
   }
 
-  const saveScrollPosHistory: () => void = safeSessionStorage
-    ? () => {
-        try {
-          safeSessionStorage!.setItem(
-            SCROLL_POS_HISTORY_KEY,
-            scrollPosHistory.join()
-          );
-        } catch (err) {
-          // a storage that is full or refused is not what a navigation dies on
-          reportError(err);
+  const saveScrollPosHistory: () => void =
+    !__NATIVE__ && safeSessionStorage
+      ? () => {
+          try {
+            safeSessionStorage!.setItem(
+              SCROLL_POS_HISTORY_KEY,
+              scrollPosHistory.join()
+            );
+          } catch (err) {
+            // a storage that is full or refused is not what a navigation dies on
+            reportError(err);
+          }
         }
-      }
-    : noop;
+      : noop;
 
   const restoreScroll = (x: number, y: number) => {
     const documentElement = document.documentElement;
@@ -266,7 +278,9 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
           _path: path,
         });
 
-        patch._hashChanged ||= isHash;
+        if (!__NATIVE__) {
+          patch._hashChanged ||= isHash;
+        }
 
         patch._replace &&= replacing._value;
       }
@@ -334,18 +348,20 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
         const prevRoutesCount = currentRoutes.length;
 
-        const nextAnchor = nextRoutes[nextRoutesCount - 1]._anchor;
-
         if (prevRoutesCount > count) {
           count = prevRoutesCount;
         }
 
-        if (prevRoutesCount) {
-          currentRoutes[prevRoutesCount - 1]._anchor?._clear();
-        }
+        if (!__NATIVE__) {
+          const nextAnchor = nextRoutes[nextRoutesCount - 1]._anchor;
 
-        if (nextAnchor) {
-          nextAnchor._activate(lane, patch._hashChanged);
+          if (prevRoutesCount) {
+            currentRoutes[prevRoutesCount - 1]._anchor?._clear();
+          }
+
+          if (nextAnchor) {
+            nextAnchor._activate(lane, patch._hashChanged);
+          }
         }
       }
 
@@ -454,29 +470,38 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
     path = (path || '/') + search;
 
-    const anchorParam = route!._anchor;
+    const anchorParam = __NATIVE__ ? undefined : route!._anchor;
 
-    if (patch._hashChanged || (nav && nav._isNewPage)) {
-      if (anchorParam) {
-        // unmatched reads as `undefined`, like a route's params do
-        anchorValue = anchorParam._hash._value || '';
+    if (!__NATIVE__) {
+      if (patch._hashChanged || (nav && nav._isNewPage)) {
+        if (anchorParam) {
+          // unmatched reads as `undefined`, like a route's params do
+          anchorValue = anchorParam._hash._value || '';
+        }
+
+        if (anchorValue) {
+          scrollToAnchor = patch._hashChanged && (!nav || !nav._isHistoryEvent);
+
+          path += '#' + anchorValue;
+        }
+      } else {
+        path += location.hash;
       }
-
-      if (anchorValue) {
-        scrollToAnchor = patch._hashChanged && (!nav || !nav._isHistoryEvent);
-
-        path += '#' + anchorValue;
-      }
-    } else {
-      path += location.hash;
     }
 
-    if (path != location.pathname + location.search + location.hash) {
-      const state = history.state;
-
+    if (
+      path !=
+      (__NATIVE__
+        ? historyState._entries[historyState._index]
+        : location.pathname + location.search + location.hash)
+    ) {
       try {
         if (patch._replace) {
-          history.replaceState(state, '', path);
+          if (__NATIVE__) {
+            historyState._entries[historyState._index] = path;
+          } else {
+            history.replaceState(history.state, '', path);
+          }
 
           if (!nav || !nav._isHistoryEvent) {
             navigationStateRoot._enqueueSet(
@@ -488,41 +513,51 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
         } else {
           const nextHistoryIndex = historyState._index + 1;
 
-          history.pushState(
-            {
-              ...state,
-              idx: nextHistoryIndex,
-            } satisfies HistoryState,
-            '',
-            path
-          );
+          if (__NATIVE__) {
+            // whatever was ahead of here is unreachable now, same as a push
+            // over a browser's forward entries
+            historyState._entries.length = nextHistoryIndex;
 
-          const nextPosHistorySize = nextHistoryIndex * 2;
-
-          scrollPosHistory.length = nextPosHistorySize;
-
-          if (
-            nav &&
-            (nav._scrollRestoration == null
-              ? nav._isNewPage
-              : nav._scrollRestoration)
-          ) {
-            scrollPosHistory[nextPosHistorySize - 2] = Math.round(
-              window.scrollX
-            );
-            scrollPosHistory[nextPosHistorySize - 1] = Math.round(
-              window.scrollY
-            );
+            historyState._entries.push(path);
           } else {
-            // whatever an earlier departure left here is stale now
-            scrollPosHistory[nextPosHistorySize - 2] = undefined;
+            history.pushState(
+              {
+                ...history.state,
+                idx: nextHistoryIndex,
+              } satisfies HistoryState,
+              '',
+              path
+            );
 
-            scrollPosHistory[nextPosHistorySize - 1] = undefined;
+            const nextPosHistorySize = nextHistoryIndex * 2;
+
+            scrollPosHistory.length = nextPosHistorySize;
+
+            if (
+              nav &&
+              (nav._scrollRestoration == null
+                ? nav._isNewPage
+                : nav._scrollRestoration)
+            ) {
+              scrollPosHistory[nextPosHistorySize - 2] = Math.round(
+                window.scrollX
+              );
+              scrollPosHistory[nextPosHistorySize - 1] = Math.round(
+                window.scrollY
+              );
+            } else {
+              // whatever an earlier departure left here is stale now
+              scrollPosHistory[nextPosHistorySize - 2] = undefined;
+
+              scrollPosHistory[nextPosHistorySize - 1] = undefined;
+            }
+
+            saveScrollPosHistory();
           }
 
-          saveScrollPosHistory();
-
-          historyState._knownLength = history.length;
+          historyState._knownLength = __NATIVE__
+            ? historyState._entries.length
+            : history.length;
 
           // only once the entry exists, or the index outruns the real history
           historyState._index = nextHistoryIndex;
@@ -540,13 +575,15 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
       }
     }
 
-    if (scrollToAnchor) {
-      anchorParam!._scrollTo(anchorValue);
-    } else if (
-      nav &&
-      (nav._scrollToTop == null ? nav._isNewPage : nav._scrollToTop)
-    ) {
-      window.scroll(0, 0);
+    if (!__NATIVE__) {
+      if (scrollToAnchor) {
+        anchorParam!._scrollTo(anchorValue);
+      } else if (
+        nav &&
+        (nav._scrollToTop == null ? nav._isNewPage : nav._scrollToTop)
+      ) {
+        window.scroll(0, 0);
+      }
     }
   };
 
@@ -570,6 +607,8 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
     for (let i = 0; i < keys.length; i++) {
       const key = keys[i] as string;
 
+      const path = paths[key];
+
       const {
         _children,
         _parsers,
@@ -578,11 +617,12 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
         _pathParams,
         _queryParams,
         _regexStr,
-        _anchor,
         _source,
         _createControlScope,
         _defaults,
-      } = paths[key];
+      } = path;
+
+      const _anchor = __NATIVE__ ? undefined : path._anchor;
 
       const pathParamsCount = _pathParams.length;
 
@@ -681,7 +721,9 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
           ? makeParse(_queryParams, _parsers)
           : noop,
         _isMatched: isMatchedRoot,
-        _anchor: _anchor,
+        ...(__NATIVE__
+          ? ({} as Pick<RouteData, '_anchor'>)
+          : { _anchor: _anchor }),
         _params: null,
         _defaults,
         _source: _source && _source[INTERNALS],
@@ -728,7 +770,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
         }
       }
 
-      if (_anchor) {
+      if (!__NATIVE__ && _anchor) {
         wrapRoot(_anchor._hash as RouterControlRoot, routeData, true);
       }
 
@@ -823,7 +865,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
         const emptyTarget = {
           [ROUTE_METHODS]: methods,
-          [ROUTE_HASH]: undefined,
+          ...(__NATIVE__ ? {} : { [ROUTE_HASH]: undefined }),
           [ROUTE_PARAMS]: undefined,
         } as NavigationTarget<boolean>;
 
@@ -835,7 +877,9 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
           methods._setComponents = setComponents;
         };
 
-        (route as Mutable<typeof route>)._anchor = _anchor;
+        if (!__NATIVE__) {
+          (route as Mutable<typeof route>)._anchor = _anchor;
+        }
 
         (route as Mutable<typeof route>)._routes = routesData;
 
@@ -847,7 +891,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
                 params !== undefined
                   ? {
                       [ROUTE_METHODS]: methods,
-                      [ROUTE_HASH]: hash,
+                      ...(__NATIVE__ ? {} : { [ROUTE_HASH]: hash }),
                       [ROUTE_PARAMS]: parentParams
                         ? append(parentParams, {
                             _params: params,
@@ -863,25 +907,38 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
                   : parentParams
                     ? {
                         [ROUTE_METHODS]: methods,
-                        [ROUTE_HASH]: undefined,
+                        ...(__NATIVE__ ? {} : { [ROUTE_HASH]: undefined }),
                         [ROUTE_PARAMS]: parentParams,
                       }
                     : emptyTarget
               ) as NavigationTarget<boolean>;
             }
-          : function (hash) {
-              const parentParams = this[ROUTE_PARAMS];
+          : __NATIVE__
+            ? function () {
+                const parentParams = this[ROUTE_PARAMS];
 
-              return (
-                parentParams || hash !== undefined
-                  ? {
-                      [ROUTE_METHODS]: methods,
-                      [ROUTE_HASH]: hash as Hash,
-                      [ROUTE_PARAMS]: parentParams,
-                    }
-                  : emptyTarget
-              ) as NavigationTarget<boolean>;
-            };
+                return (
+                  parentParams
+                    ? {
+                        [ROUTE_METHODS]: methods,
+                        [ROUTE_PARAMS]: parentParams,
+                      }
+                    : emptyTarget
+                ) as NavigationTarget<boolean>;
+              }
+            : function (hash) {
+                const parentParams = this[ROUTE_PARAMS];
+
+                return (
+                  parentParams || hash !== undefined
+                    ? {
+                        [ROUTE_METHODS]: methods,
+                        [ROUTE_HASH]: hash as Hash,
+                        [ROUTE_PARAMS]: parentParams,
+                      }
+                    : emptyTarget
+                ) as NavigationTarget<boolean>;
+              };
 
         if (routesData.length > maxLinkSlots) {
           maxLinkSlots = routesData.length;
@@ -892,7 +949,8 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
         const queueMatch = (updates: RouterWrite[], initial: boolean) => {
           clearWrites();
 
-          if (_anchor) {
+          // native has no anchors to carry, so nothing here reads a hash
+          if (!__NATIVE__ && _anchor) {
             updates.push({
               _root: _anchor._hash,
               _params: decodeParam(location.hash.slice(1)),
@@ -906,12 +964,15 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
               _isNewPage: false,
               _isHistoryEvent: true,
               _ignoreBlock: false,
-              _scrollToTop: false,
-              _scrollRestoration: false,
+              ...(__NATIVE__
+                ? {}
+                : { _scrollToTop: false, _scrollRestoration: false }),
             },
             _updates: updates,
             _replace: true,
-            _hashChanged: initial,
+            ...(__NATIVE__
+              ? ({} as Pick<RouterPatch, '_hashChanged'>)
+              : { _hashChanged: initial }),
           });
         };
 
@@ -996,17 +1057,19 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
   const navigationStateRoot = $navigationState[INTERNALS] as ControlInternals;
 
-  const state = history.state as HistoryState | null;
+  const state = __NATIVE__ ? null : (history.state as HistoryState | null);
 
   const navigations: Record<string, Navigation<AnyPaths, any>> = {};
 
   const routes: Route<any, any, any> = {} as any;
 
-  const { search } = location;
+  // native has no address bar to read: nothing below matches anything, and
+  // `openUrl` does the first match once `Linking` answers
+  const search = __NATIVE__ ? '' : location.search;
 
   const searchParams = parseSearch(search);
 
-  let { pathname } = location;
+  let pathname = __NATIVE__ ? '' : location.pathname;
 
   let delta = 0;
 
@@ -1014,12 +1077,12 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
   let canBlockPop = true;
 
-  historyState._knownLength = history.length;
+  historyState._knownLength = __NATIVE__ ? 0 : history.length;
 
   historyState._index = 0;
 
   const popStateListener = (e: PopStateEvent) => {
-    const resolveRepair = historyState._resolveRepair;
+    const resolveRepair = !__NATIVE__ && historyState._resolveRepair;
 
     if (resolveRepair) {
       history.pushState(
@@ -1045,7 +1108,7 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
     const nextHistoryIndex = state && state.idx;
 
     if (nextHistoryIndex != null) {
-      if (isBlockedPop) {
+      if (!__NATIVE__ && isBlockedPop) {
         isBlockedPop = false;
 
         scheduleSet(pendingNavigationRoot, true, true);
@@ -1053,48 +1116,62 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
         delta = nextHistoryIndex - historyState._index;
 
         if (delta) {
-          // blocker active: undo the pop and park it for allow()/deny()
-          isBlockedPop = canBlockPop && !blocker._canNavigate;
-
-          if (isBlockedPop) {
+          if (canBlockPop && !blocker._canNavigate) {
             blocker._resume = () => {
               canBlockPop = false;
 
-              history.go(delta);
+              if (__NATIVE__) {
+                popStateListener({
+                  state: { idx: nextHistoryIndex },
+                } as PopStateEvent);
+              } else {
+                history.go(delta);
+              }
             };
 
-            history.go(-delta);
+            if (__NATIVE__) {
+              scheduleSet(pendingNavigationRoot, true, true);
+            } else {
+              // blocker active: undo the pop and park it for allow()/deny()
+              isBlockedPop = true;
+
+              // the browser has already moved - put it back until allow() says
+              // otherwise
+              history.go(-delta);
+            }
 
             return;
           }
 
-          const nextScrollPosHistoryIndex = nextHistoryIndex * 2;
+          if (!__NATIVE__) {
+            const nextScrollPosHistoryIndex = nextHistoryIndex * 2;
 
-          const currScrollPosHistoryIndex = historyState._index * 2;
+            const currScrollPosHistoryIndex = historyState._index * 2;
 
-          const nextScrollX = scrollPosHistory[nextScrollPosHistoryIndex];
+            const nextScrollX = scrollPosHistory[nextScrollPosHistoryIndex];
 
-          if (nextScrollX != null) {
-            scrollPosHistory[currScrollPosHistoryIndex] = Math.round(
-              window.scrollX
-            );
+            if (nextScrollX != null) {
+              scrollPosHistory[currScrollPosHistoryIndex] = Math.round(
+                window.scrollX
+              );
 
-            scrollPosHistory[currScrollPosHistoryIndex + 1] = Math.round(
-              window.scrollY
-            );
+              scrollPosHistory[currScrollPosHistoryIndex + 1] = Math.round(
+                window.scrollY
+              );
 
-            saveScrollPosHistory();
+              saveScrollPosHistory();
 
-            restoreScroll(
-              nextScrollX,
-              scrollPosHistory[nextScrollPosHistoryIndex + 1]!
-            );
-          } else if (scrollPosHistory[currScrollPosHistoryIndex] != null) {
-            scrollPosHistory[currScrollPosHistoryIndex] = undefined;
+              restoreScroll(
+                nextScrollX,
+                scrollPosHistory[nextScrollPosHistoryIndex + 1]!
+              );
+            } else if (scrollPosHistory[currScrollPosHistoryIndex] != null) {
+              scrollPosHistory[currScrollPosHistoryIndex] = undefined;
 
-            scrollPosHistory[currScrollPosHistoryIndex + 1] = undefined;
+              scrollPosHistory[currScrollPosHistoryIndex + 1] = undefined;
 
-            saveScrollPosHistory();
+              saveScrollPosHistory();
+            }
           }
 
           historyState._index = nextHistoryIndex;
@@ -1112,7 +1189,19 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
       true
     );
 
-    matchLocation(location.pathname, parseSearch(location.search), false);
+    if (__NATIVE__) {
+      const url = historyState._entries[historyState._index];
+
+      const query = url.indexOf('?');
+
+      matchLocation(
+        query < 0 ? url : url.slice(0, query),
+        parseSearch(query < 0 ? '' : url.slice(query)),
+        false
+      );
+    } else {
+      matchLocation(location.pathname, parseSearch(location.search), false);
+    }
   };
 
   buildRoutes(routes, navigations, paths, EMPTY_ARR, '', 0, false);
@@ -1123,118 +1212,139 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
   (navigationStateRoot as Mutable<typeof navigationStateRoot>)._level =
     urlFinalizer._level = maxParamControlLevel + 1;
 
-  if (pathname.length > 1 && pathname.at(-1) == '/') {
+  if (
+    !__NATIVE__ &&
+    pathname.length > 1 &&
+    pathname[pathname.length - 1] == '/'
+  ) {
     pathname = pathname.slice(0, -1);
 
     history.replaceState(state, '', pathname + search + location.hash);
   }
 
-  let isKnownEntry = true;
+  // native owns the stack outright, so its first entry is always a fresh one
+  let isKnownEntry = !__NATIVE__;
 
-  if (state && state.idx != null) {
-    historyState._index = state.idx;
-  } else {
-    isKnownEntry = false;
+  if (!__NATIVE__) {
+    if (state && state.idx != null) {
+      historyState._index = state.idx;
+    } else {
+      isKnownEntry = false;
 
-    history.replaceState(
-      {
-        ...(typeof state == 'object' ? state : null),
-        idx: historyState._index,
-      } satisfies HistoryState,
-      ''
-    );
+      history.replaceState(
+        {
+          ...(typeof state == 'object' ? state : null),
+          idx: historyState._index,
+        } satisfies HistoryState,
+        ''
+      );
 
-    if (safeSessionStorage) {
-      safeSessionStorage.removeItem(SCROLL_POS_HISTORY_KEY);
+      if (safeSessionStorage) {
+        safeSessionStorage.removeItem(SCROLL_POS_HISTORY_KEY);
 
-      safeSessionStorage.removeItem(CURRENT_SCROLL_POS_KEY);
+        safeSessionStorage.removeItem(CURRENT_SCROLL_POS_KEY);
+      }
     }
   }
 
   let scrollPosHistory: (number | undefined)[];
 
-  const rawScrollPosHistory =
-    isKnownEntry &&
-    safeSessionStorage &&
-    safeSessionStorage.getItem(SCROLL_POS_HISTORY_KEY);
-
-  if (rawScrollPosHistory) {
-    scrollPosHistory = [];
-
-    const rawSize = rawScrollPosHistory.length;
-
-    let start = 0;
-    let comma;
-    let end;
-
-    do {
-      comma = rawScrollPosHistory.indexOf(',', start);
-
-      end = rawScrollPosHistory.indexOf(',', comma + 1);
-
-      if (end < 0) {
-        end = rawSize;
-      }
-
-      if (comma > start) {
-        scrollPosHistory.push(
-          +rawScrollPosHistory.slice(start, comma),
-          +rawScrollPosHistory.slice(comma + 1, end)
-        );
-      } else {
-        scrollPosHistory.push(undefined, undefined);
-      }
-
-      start = end + 1;
-    } while (start <= rawSize);
-  } else {
-    scrollPosHistory = Array(historyState._index * 2);
-  }
-
-  const rawSavedScroll =
-    isKnownEntry &&
-    safeSessionStorage &&
-    safeSessionStorage.getItem(CURRENT_SCROLL_POS_KEY);
-
   let restoreX: number | undefined;
 
   let restoreY: number | undefined;
 
-  if (rawSavedScroll) {
-    let comma = rawSavedScroll.indexOf(',');
+  if (__NATIVE__) {
+    scrollPosHistory = EMPTY_ARR as (number | undefined)[];
+  } else {
+    const rawScrollPosHistory =
+      isKnownEntry &&
+      safeSessionStorage &&
+      safeSessionStorage.getItem(SCROLL_POS_HISTORY_KEY);
 
-    if (+rawSavedScroll.slice(0, comma) == historyState._index) {
-      const start = comma + 1;
+    if (rawScrollPosHistory) {
+      scrollPosHistory = [];
 
-      comma = rawSavedScroll.indexOf(',', start);
+      const rawSize = rawScrollPosHistory.length;
 
-      restoreX = +rawSavedScroll.slice(start, comma);
+      let start = 0;
+      let comma;
+      let end;
 
-      restoreY = +rawSavedScroll.slice(comma + 1);
+      do {
+        comma = rawScrollPosHistory.indexOf(',', start);
+
+        end = rawScrollPosHistory.indexOf(',', comma + 1);
+
+        if (end < 0) {
+          end = rawSize;
+        }
+
+        if (comma > start) {
+          scrollPosHistory.push(
+            +rawScrollPosHistory.slice(start, comma),
+            +rawScrollPosHistory.slice(comma + 1, end)
+          );
+        } else {
+          scrollPosHistory.push(undefined, undefined);
+        }
+
+        start = end + 1;
+      } while (start <= rawSize);
+    } else {
+      scrollPosHistory = Array(historyState._index * 2);
+    }
+
+    const rawSavedScroll =
+      isKnownEntry &&
+      safeSessionStorage &&
+      safeSessionStorage.getItem(CURRENT_SCROLL_POS_KEY);
+
+    if (rawSavedScroll) {
+      let comma = rawSavedScroll.indexOf(',');
+
+      if (+rawSavedScroll.slice(0, comma) == historyState._index) {
+        const start = comma + 1;
+
+        comma = rawSavedScroll.indexOf(',', start);
+
+        restoreX = +rawSavedScroll.slice(start, comma);
+
+        restoreY = +rawSavedScroll.slice(comma + 1);
+      }
+    }
+
+    if (restoreX === undefined) {
+      const currentScrollPosHistoryIndex = historyState._index * 2;
+
+      restoreX = scrollPosHistory[currentScrollPosHistoryIndex];
+
+      restoreY = scrollPosHistory[currentScrollPosHistoryIndex + 1];
     }
   }
 
-  if (restoreX === undefined) {
-    const currentScrollPosHistoryIndex = historyState._index * 2;
-
-    restoreX = scrollPosHistory[currentScrollPosHistoryIndex];
-
-    restoreY = scrollPosHistory[currentScrollPosHistoryIndex + 1];
+  // Native matches nothing yet: the url the app was launched with only comes
+  // back from `Linking` a tick later, and matching a placeholder first would
+  // render the wrong page for a frame. Until it lands no route is matched, so
+  // a `createRouterView` renders nothing and whatever splash the app is
+  // showing stays up - which is where a native app wants it anyway.
+  //
+  // On the web, nothing to restore means this entry has not been visited, so
+  // the params' initial values apply - and the url's hash is a fresh
+  // instruction, not something being returned to
+  if (!__NATIVE__) {
+    matchLocation(pathname, searchParams, restoreX === undefined);
   }
-
-  // nothing to restore means this entry has not been visited, so the params'
-  // initial values apply - and the url's hash is a fresh instruction, not
-  // something being returned to
-  matchLocation(pathname, searchParams, restoreX === undefined);
 
   wasBooted = true;
 
-  if (currentChainIndex < 0) {
-    throw new Error(`no path matched "${pathname}" - use withNotFound`);
-  }
+  if (!__NATIVE__) {
+    if (currentChainIndex < 0) {
+      throw new Error(`no path matched "${pathname}" - use withNotFound`);
+    }
 
-  if (restoreX !== undefined) {
-    restoreScroll(restoreX, restoreY!);
+    if (restoreX !== undefined) {
+      restoreScroll(restoreX, restoreY!);
+    }
   }
 
   let scrollSaveTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -1252,16 +1362,129 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
     }
   };
 
-  window.addEventListener('popstate', popStateListener);
+  if (__NATIVE__) {
+    const prefixes: string[] | undefined = (paths as any)[PREFIXES];
 
-  if (safeSessionStorage) {
-    window.addEventListener('scroll', scrollListener, PASSIVE);
-  }
+    /**
+     * A url from the OS. The one the app launched with replaces the entry
+     * nothing has matched yet; every one after it is a push onto what is
+     * showing. Only the launch one is `initial` - what an `initialValue` is
+     * applied on is the first load of the session, which is exactly what that
+     * url is.
+     */
+    const openUrl = (url: string, isLaunch: boolean) => {
+      let rest: string | undefined;
 
-  if (process.env.NODE_ENV !== 'production') {
-    devPopStateListener = popStateListener;
+      if (prefixes) {
+        const lowerUrl = url.toLowerCase();
 
-    devScrollListener = scrollListener;
+        for (let i = 0; i < prefixes.length; i++) {
+          const prefix = prefixes[i];
+
+          if (lowerUrl.startsWith(prefix.toLowerCase())) {
+            rest = url.slice(prefix.length);
+
+            break;
+          }
+        }
+
+        if (rest === undefined) {
+          // somebody else's url - what is showing stays, and a launch one
+          // means nothing more than an app opened from its icon
+          if (!isLaunch) {
+            return;
+          }
+
+          rest = '';
+        }
+      } else {
+        // an http(s) link carries a host to drop; a custom scheme carries none -
+        // `myapp://product/42` is a path, not a `product` host. Nothing here can
+        // tell the two apart but the scheme
+        rest = url
+          .replace(/^https?:\/\/[^/]*/i, '')
+          .replace(/^[a-zA-Z][\w+.-]*:\/\//, '/');
+      }
+
+      // a prefix may or may not have carried the slash with it
+      const stripped = ('/' + rest).replace(/^\/{2,}/, '/');
+
+      const query = stripped.indexOf('?');
+
+      const search = query < 0 ? '' : stripped.slice(query);
+
+      let pathname = query < 0 ? stripped : stripped.slice(0, query);
+
+      // the same trailing slash the web boot drops off `location.pathname`
+      if (pathname.length > 1 && pathname[pathname.length - 1] == '/') {
+        pathname = pathname.slice(0, -1);
+      }
+
+      if (isLaunch) {
+        historyState._entries[historyState._index] = pathname + search;
+      } else {
+        // whatever was ahead of here is unreachable now, same as a push
+        historyState._entries.length = ++historyState._index;
+
+        historyState._entries.push(pathname + search);
+
+        navigationStateRoot._enqueueSet(
+          { action: 'push', delta: 1 },
+          historyLane,
+          true
+        );
+      }
+
+      historyState._knownLength = historyState._entries.length;
+
+      matchLocation(pathname, parseSearch(search), isLaunch);
+
+      if (isLaunch) {
+        // whatever waited outside the view for a location now has one
+        scheduleSet($routerReady[INTERNALS]._root, true, true);
+      }
+    };
+
+    const urlSubscription = Linking.addEventListener('url', ({ url }) => {
+      openUrl(url, false);
+    });
+
+    // the first match of all, whether the app was deep-linked into or just
+    // opened: until this lands no route is matched and nothing renders
+    Linking.getInitialURL().then((url) => {
+      openUrl(url || '/', true);
+    }, reportError);
+
+    historyState._pop = (index) => {
+      popStateListener({ state: { idx: index } } as PopStateEvent);
+    };
+
+    // `false` is what tells the OS to leave the app, which is what should
+    // happen once there is nothing of ours left to pop
+    const backSubscription = BackHandler.addEventListener(
+      'hardwareBackPress',
+      () => go(-1)
+    );
+
+    if (process.env.NODE_ENV !== 'production') {
+      nativeCleanup = () => {
+        urlSubscription.remove();
+
+        backSubscription.remove();
+      };
+    }
+  } else {
+    window.addEventListener('popstate', popStateListener);
+
+    if (safeSessionStorage) {
+      window.addEventListener('scroll', scrollListener, PASSIVE);
+    }
+
+    if (process.env.NODE_ENV !== 'production') {
+      devPopStateListener = popStateListener;
+
+      devScrollListener = scrollListener;
+    }
   }
 
   return {

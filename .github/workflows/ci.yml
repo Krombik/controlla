@@ -31,4 +31,7 @@ jobs:
 
       - run: pnpm exec prettier --check src tests
 
-      - run: pnpm exec node --test --experimental-transform-types "tests/*.test.ts"
+      - run: pnpm exec node --test --experimental-transform-types "tests/!(native-)*.test.ts"
+
+      # the native build, with `react-native` resolved to the test's double
+      - run: pnpm exec node --test --experimental-transform-types --import ./tests/_env/nativeRegister.js "tests/native-*.test.ts"

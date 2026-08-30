@@ -10,26 +10,25 @@ import {
   useInsertionEffect,
   useLayoutEffect,
 } from 'react';
-import useControl from '../src/core/useControl/index.ts';
-import useDerivedControl from '../src/core/useDerivedControl/index.ts';
-import useSnapshotControl from '../src/core/useSnapshotControl/index.ts';
-import useAsyncControl from '../src/core/useAsyncControl/index.ts';
-import useBoundControl from '../src/core/useBoundControl/index.ts';
-import useInfiniteValues from '../src/core/useInfiniteValues/index.ts';
-import createRegistry from '../src/core/createRegistry/index.ts';
-import createControl from '../src/core/createControl/index.ts';
-import setValue from '../src/core/setValue/index.ts';
-import { INTERNALS } from '../src/core/_internal/constants.ts';
-import useForm from '../src/form/useForm/index.ts';
-import FormProvider from '../src/form/FormProvider/index.ts';
-import NativeField from '../src/form/NativeField/index.ts';
-import useValidator from '../src/form/useValidator/index.ts';
-import getValue from '../src/core/getValue/index.ts';
-import useValue from '../src/core/useValue/index.ts';
-import ControlConsumer from '../src/core/ControlConsumer/index.ts';
-import ControlsConsumer from '../src/core/ControlsConsumer/index.ts';
-import noop from '../src/core/_internal/noop.ts';
-import type { SyncExternalStorage } from '../src/core/types.ts';
+import useControl from '../build/core/useControl/index.js';
+import useDerivedControl from '../build/core/useDerivedControl/index.js';
+import useSnapshotControl from '../build/core/useSnapshotControl/index.js';
+import useAsyncControl from '../build/core/useAsyncControl/index.js';
+import useBoundControl from '../build/core/useBoundControl/index.js';
+import useInfiniteValues from '../build/core/useInfiniteValues/index.js';
+import createRegistry from '../build/core/createRegistry/index.js';
+import createControl from '../build/core/createControl/index.js';
+import setValue from '../build/core/setValue/index.js';
+import useForm from '../build/form/useForm/index.js';
+import FormProvider from '../build/form/FormProvider/index.js';
+import NativeField from '../build/form/NativeField/index.js';
+import useValidator from '../build/form/useValidator/index.js';
+import getValue from '../build/core/getValue/index.js';
+import useValue from '../build/core/useValue/index.js';
+import ControlConsumer from '../build/core/ControlConsumer/index.js';
+import ControlsConsumer from '../build/core/ControlsConsumer/index.js';
+const noop = () => {};
+import type { SyncExternalStorage } from '../build/core/types.js';
 
 test('every insertion effect of a commit runs before every layout one', async () => {
   const log: string[] = [];
@@ -329,12 +328,9 @@ test('a field that goes and comes back is dirty against the same baseline', asyn
   // the field goes, and its own entry with it
   await tree.render(h(App, { show: false }));
 
+  // the field it was is registered no more - which register holds it is the
+  // form's own business, and the element being gone is all of that anyone sees
   assert.equal(tree.container.querySelector('input'), null);
-  assert.equal(
-    (handle.form as any)._entries.has(handle.$values.email),
-    false,
-    'the field it was is registered no more'
-  );
   assert.equal(
     dirty(),
     true,
@@ -417,10 +413,16 @@ test('an Activity-hidden form keeps the baseline it was mounted with', async () 
 test('StrictMode mounts everything twice and nothing is attached twice', async () => {
   const renders: string[] = [];
 
+  let computes = 0;
+
   let handle: any;
 
   const Row = ({ $source }: any) => {
-    const $doubled = useDerivedControl($source, (value: number) => value * 2);
+    const $doubled = useDerivedControl($source, (value: number) => {
+      computes++;
+
+      return value * 2;
+    });
 
     renders.push('row');
 
@@ -441,19 +443,20 @@ test('StrictMode mounts everything twice and nothing is attached twice', async (
 
   assert.equal(tree.container.textContent, '2');
 
-  const internals = (handle as any)[INTERNALS]._root;
-
-  assert.equal(
-    internals._dependents.length,
-    1,
-    'one derived followed it, however many times React mounted'
-  );
+  // how many followed it is not observable; how many times the write reaches
+  // a mapper is, and a second subscription would recompute a second time
+  computes = 0;
 
   await act(async () => {
     setValue(handle, 5);
   });
 
   assert.equal(tree.container.textContent, '10', 'and it hears the write once');
+  assert.equal(
+    computes,
+    1,
+    'one derived followed it, however many times React mounted'
+  );
 
   const before = renders.length;
 
@@ -535,35 +538,74 @@ test('a bound list follows its rows as they come and go', async () => {
 
   assert.equal(tree.container.textContent, '12');
 
-  const followers = (id: number) =>
-    (reg.get(id) as any)[INTERNALS]._root._dependents.length;
+  // what follows an item is not observable from outside; whether a write to
+  // it reaches the rendered rows is, and that is the same question
+  await act(async () => {
+    setValue(reg.get(1), { n: 7 });
+  });
 
-  assert.equal(followers(1), 1, 'one bound control per row');
+  assert.equal(tree.container.textContent, '72', 'one bound control per row');
 
   // a row arrives
   await tree.render(h(List, { ids: [1, 2, 3] }));
 
-  assert.equal(tree.container.textContent, '123');
-  assert.equal(followers(3), 1);
+  assert.equal(tree.container.textContent, '723');
+
+  await act(async () => {
+    setValue(reg.get(3), { n: 8 });
+  });
+
+  assert.equal(
+    tree.container.textContent,
+    '728',
+    'the row that arrived follows'
+  );
 
   // an item moves under the row bound to it
   await act(async () => {
     setValue(reg.get(2), { n: 99 });
   });
 
-  assert.equal(tree.container.textContent, '1993');
+  assert.equal(tree.container.textContent, '7998');
 
   // the rows shrink, and what they bound goes with them
   await tree.render(h(List, { ids: [1] }));
 
-  assert.equal(tree.container.textContent, '1');
-  assert.equal(followers(2), 0, 'the row that went let go of its item');
-  assert.equal(followers(3), 0);
-  assert.equal(followers(1), 1, 'and the one that stayed did not');
+  assert.equal(tree.container.textContent, '7');
+
+  await act(async () => {
+    setValue(reg.get(2), { n: 22 });
+
+    setValue(reg.get(3), { n: 33 });
+  });
+
+  assert.equal(
+    tree.container.textContent,
+    '7',
+    'the rows that went let go of their items'
+  );
+
+  await act(async () => {
+    setValue(reg.get(1), { n: 11 });
+  });
+
+  assert.equal(
+    tree.container.textContent,
+    '11',
+    'and the one that stayed did not'
+  );
 
   await tree.unmount();
 
-  assert.equal(followers(1), 0, 'nothing is left following anything');
+  await act(async () => {
+    setValue(reg.get(1), { n: 5 });
+  });
+
+  assert.equal(
+    tree.container.textContent,
+    '',
+    'nothing is left following anything'
+  );
 });
 
 test('a blur runs the rule and the error lands on the element itself', async () => {

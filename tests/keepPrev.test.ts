@@ -1,20 +1,19 @@
 import { tick } from './_env/dom.ts';
 import assert from 'node:assert';
 import test from 'node:test';
-import createRegistry from '../src/core/createRegistry/index.ts';
-import createAsyncControl from '../src/core/createAsyncControl/index.ts';
-import createPrimitiveControl from '../src/core/createPrimitiveControl/index.ts';
-import createBoundControl from '../src/core/createBoundControl/index.ts';
-import getValue from '../src/core/getValue/index.ts';
-import setValue from '../src/core/setValue/index.ts';
-import retain from '../src/core/retain/index.ts';
-import selectError from '../src/core/selectError/index.ts';
-import selectReady from '../src/core/selectReady/index.ts';
-import selectLoading from '../src/core/selectLoading/index.ts';
-import invalidate from '../src/core/invalidate/index.ts';
-import watchValue from '../src/core/watchValue/index.ts';
-import { cleanupScope } from '../src/core/_internal/cleanup.ts';
-import type { Subscription } from '../src/core/_internal/types.ts';
+import createRegistry from '../build/core/createRegistry/index.js';
+import createAsyncControl from '../build/core/createAsyncControl/index.js';
+import createPrimitiveControl from '../build/core/createPrimitiveControl/index.js';
+import createBoundControl from '../build/core/createBoundControl/index.js';
+import getValue from '../build/core/getValue/index.js';
+import setValue from '../build/core/setValue/index.js';
+import retain from '../build/core/retain/index.js';
+import selectError from '../build/core/selectError/index.js';
+import selectReady from '../build/core/selectReady/index.js';
+import selectLoading from '../build/core/selectLoading/index.js';
+import invalidate from '../build/core/invalidate/index.js';
+import watchValue from '../build/core/watchValue/index.js';
+const noop = () => {};
 
 /** A registry whose loads answer only when the test says so. */
 const controllable = (options: any = {}) => {
@@ -57,18 +56,14 @@ const controllable = (options: any = {}) => {
   return [registry, answer] as const;
 };
 
+/**
+ * Created and then watched - which is what a mount is from outside, and what
+ * puts a bound control's retargeting in motion.
+ */
 const mounted = <T>(create: () => T) => {
-  const scope: Subscription[] = (cleanupScope._value = []);
+  const control = create();
 
-  try {
-    const control = create();
-
-    scope[0]._subscribe();
-
-    return [control, scope[0]] as const;
-  } finally {
-    cleanupScope._value = null;
-  }
+  return [control, watchValue(control as any, noop)] as const;
 };
 
 test('a retarget keeps the previous value while the next item loads', async () => {

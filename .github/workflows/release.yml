@@ -29,13 +29,18 @@ jobs:
 
       - run: pnpm exec tsc --noEmit
 
-      - run: pnpm exec node --test --experimental-transform-types "tests/*.test.ts"
+      - run: pnpm exec node --test --experimental-transform-types "tests/!(native-)*.test.ts"
+
+      - run: pnpm exec node --test --experimental-transform-types --import ./tests/_env/nativeRegister.js "tests/native-*.test.ts"
 
       # trusted publishing needs npm >= 11.5.1
       - run: npm install -g npm@latest
 
-      # prerelease versions (1.0.0-alpha.0) go to the `alpha` dist-tag, so
-      # `latest` only ever points at stable releases
+      # `controlla-native` is the same source built with __NATIVE__=true and
+      # carries the same version, so one tag releases both. Prerelease
+      # versions (1.0.0-alpha.0) go to the `alpha` dist-tag, leaving `latest`
+      # pointing only at stable releases
       - run: |
           TAG=$(node -p "require('./build/package.json').version.includes('-') ? 'alpha' : 'latest'")
           npm publish ./build --provenance --access public --tag "$TAG"
+          npm publish ./build-native --provenance --access public --tag "$TAG"

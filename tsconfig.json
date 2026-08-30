@@ -22,7 +22,12 @@
     "strictBindCallApply": true,
     "isolatedModules": false,
     "preserveConstEnums": false,
-    "types": ["node"]
+    "types": ["node"],
+    // the platform folder the build swaps per target - the web one by default,
+    // so an editor and `tsc` see what the web package ships
+    "paths": {
+      "~platform/*": ["./src/_platform/web/*"]
+    }
   },
   "include": ["src", "tests", "tsdown.config.ts"],
   "exclude": ["node_modules"]

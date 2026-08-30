@@ -20,8 +20,10 @@
   "scripts": {
     "build": "tsdown",
     "watch": "tsdown --watch",
-    "release": "tsdown && npm publish ./build",
-    "test": "tsdown && node --test --experimental-transform-types --no-warnings \"tests/*.test.ts\""
+    "release": "tsdown && npm publish ./build && npm publish ./build-native",
+    "test": "tsdown && npm run test:web && npm run test:native",
+    "test:web": "node --test --experimental-transform-types --no-warnings \"tests/!(native-)*.test.ts\"",
+    "test:native": "node --test --experimental-transform-types --no-warnings --import ./tests/_env/nativeRegister.js \"tests/native-*.test.ts\""
   },
   "peerDependencies": {
     "@types/react": ">=18.0.0",
@@ -71,12 +73,13 @@
     "@types/node": "^22.7.4",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.5",
+    "esbuild": "^0.28.2",
     "eslint": "^10.7.0",
     "happy-dom": "^20.11.6",
     "prettier": "^3.9.5",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "terser": "^5.49.0",
+    "react-native": "^0.87.1",
     "tsdown": "^0.22.8",
     "typescript": "^7.0.2",
     "typescript-eslint": "^8.64.0",

@@ -1,6 +1,7 @@
 /** Browser mocks for router tests — must be imported before any lib module. */
 
 import { setTimeout as sleep } from 'node:timers/promises';
+import './flags.ts';
 
 export { sleep };
 

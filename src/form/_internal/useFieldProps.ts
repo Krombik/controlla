@@ -2,7 +2,7 @@ import { useRef } from 'react';
 
 import type { Control } from '#types';
 import type { FieldEntry, FormInternals } from '#form/internal/types';
-import type { FieldRenderProps } from '#form/types';
+import type { FieldElement, FieldRenderProps } from '#form/types';
 import { INTERNALS } from '#internal/constants';
 import useValue from '#core/useValue';
 import setValue from '#core/setValue';
@@ -34,14 +34,14 @@ const useFieldProps = (
 
     // one field of a control lets go of its own element, not of the one
     // another field of the same control has bound
-    let bound: HTMLElement | undefined;
+    let bound: FieldElement | undefined;
 
     ref.current = cache = {
       _entry: entry,
       _props: {
         name: path ? path.join('.') : undefined,
         // nothing binds to it here - it is what `focus` reaches the field by
-        ref(element: HTMLElement | null) {
+        ref(element: FieldElement | null) {
           if (element) {
             entry._element = bound = element;
           } else if (entry._element === bound) {

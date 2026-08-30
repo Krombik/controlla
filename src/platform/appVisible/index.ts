@@ -1,3 +1,5 @@
+import { AppState } from 'react-native';
+
 import createPrimitiveControl from '#core/createPrimitiveControl';
 import scheduleSet from '#internal/scheduleSet';
 import { INTERNALS } from '#internal/constants';
@@ -6,13 +8,23 @@ import type { Control, ReadonlyControl } from '#types';
 const isVisible = () => document.visibilityState === 'visible';
 
 const $appVisible: Control<boolean> = createPrimitiveControl(
-  typeof document !== 'undefined' ? isVisible() : true
+  __NATIVE__
+    ? AppState.currentState === 'active'
+    : typeof document !== 'undefined'
+      ? isVisible()
+      : true
 );
 
-if (typeof document !== 'undefined') {
+const root = $appVisible[INTERNALS]._root;
+
+if (__NATIVE__) {
+  // `inactive` is the app switcher and the incoming call - not in front of anyone
+  AppState.addEventListener('change', (state) => {
+    scheduleSet(root, state === 'active', true);
+  });
+} else if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
-    // the tab being looked at or not is nobody's write
-    scheduleSet($appVisible[INTERNALS]._root, isVisible(), true);
+    scheduleSet(root, isVisible(), true);
   });
 }
 

@@ -1,6 +1,6 @@
 import type { Control } from '#types';
 import type { FieldEntry, FormInternals } from '#form/internal/types';
-import type { FormOptions } from '#form/types';
+import type { FieldElement, FormOptions } from '#form/types';
 import { EMPTY_ARR, INTERNALS } from '#internal/constants';
 import createPrimitiveControl from '#core/createPrimitiveControl';
 import getValue from '#core/getValue';
@@ -154,16 +154,26 @@ const makeForm = (control: Control, options: FormOptions): FormInternals => {
             // order. An error of a whole subtree - a duplicate an array
             // reported, a group rule - marks no field of its own, so the first
             // field under what it validates stands in
-            let focused: HTMLElement | undefined;
+            let focused: FieldElement | undefined;
 
             const consider = (entry: FieldEntry) => {
-              const element = entry._element;
+              // a ref only has to carry a `focus`, so this can be a handle a
+              // component hands out in place of whatever it renders
+              const element = entry._element as HTMLElement | undefined;
 
-              // DOCUMENT_POSITION_PRECEDING
+              if (!element) {
+                return;
+              }
+
+              // DOCUMENT_POSITION_PRECEDING. Nothing orders a native tree by
+              // where it is drawn, and a handle is nowhere in a document, so
+              // both of those keep the order they registered in
               if (
-                element &&
-                (focused === undefined ||
-                  focused.compareDocumentPosition(element) & 2)
+                focused === undefined ||
+                (!__NATIVE__ &&
+                  element.compareDocumentPosition &&
+                  (focused as HTMLElement).compareDocumentPosition &&
+                  (focused as HTMLElement).compareDocumentPosition(element) & 2)
               ) {
                 focused = element;
               }

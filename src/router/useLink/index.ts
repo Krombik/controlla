@@ -1,7 +1,5 @@
-import type { MouseEvent } from 'react';
-
-import type { Hash } from '#router/internal/types';
-import type { NavigationTarget } from '#router/types';
+import type { Hash, LinkClickEvent } from '#router/internal/types';
+import type { LinkHandle, LinkOptions, UseLink } from '~platform/link';
 import {
   ROUTE_METHODS,
   ROUTE_PARAMS,
@@ -14,57 +12,24 @@ import useInternalsValue from '#internal/useInternalsValue';
 import throwNotMatched from '#router/internal/throwNotMatched';
 import fillDefaults from '#router/internal/fillDefaults';
 
-export type LinkOptions = {
-  /** The navigation target. */
-  to: NavigationTarget<true>;
-  /** Runs before the navigation on every click. */
-  onClick?(e: MouseEvent<HTMLAnchorElement, any>): void;
-  /**
-   * Computes {@link LinkHandle.isMatched isMatched}, subscribing to changes:
-   * `true` whether the target route is matched; `'exact'` whether it's
-   * matched with exactly the params and anchor this link navigates to. Read
-   * once - whether a link tracks isn't something that can change.
-   */
-  trackMatch?: boolean | 'exact';
-  /** Bypasses an enabled `navigationBlocker`. */
-  ignoreBlock?: boolean;
-  /** Scrolls to the top after the navigation (default: only on a new page). */
+export type * from '~platform/link';
+
+/** Both halves of them, since the branch this target drops still has to compile. */
+type AnyLinkOptions = LinkOptions & {
+  onClick?(e?: LinkClickEvent): void;
+  onPress?(): void;
   scrollToTop?: boolean;
-  /** Saves the scroll position for the back navigation (default: only on a new page). */
   scrollRestoration?: boolean;
 };
 
-export type LinkHandle = {
-  /** The current href of the target route. */
-  href: string;
-  /** Click handler performing the navigation (respects modifier keys, `target`, `event.preventDefault()`). */
-  onClick(e: MouseEvent<HTMLAnchorElement, any>): void;
-  /**
-   * Whether the target route is currently matched (exactly, with
-   * {@link LinkOptions.trackMatch trackMatch}: `'exact'`); always `false` when {@link LinkOptions.trackMatch trackMatch} isn't set.
-   */
-  isMatched: boolean;
+type AnyLinkHandle = Omit<LinkHandle, 'onClick' | 'onPress'> & {
+  onClick?(e: LinkClickEvent): void;
+  onPress?(): void;
 };
 
-/**
- * Headless link primitive: subscribes to the target route's state and returns
- * everything needed to render an anchor: use it to build your own `Link`.
- *
- * @example
- * ```tsx
- * const { href, onClick, isMatched } = useLink({ to: navigationRoot.home() });
- *
- * return <a href={href} onClick={onClick} className={isMatched ? 'active' : ''} />;
- * ```
- */
-const useLink = ({
-  to,
-  trackMatch,
-  ignoreBlock,
-  scrollToTop,
-  scrollRestoration,
-  onClick,
-}: LinkOptions): LinkHandle => {
+const useLink = (props: AnyLinkOptions): AnyLinkHandle => {
+  const { to, trackMatch, ignoreBlock } = props;
+
   // the hook count must stay identical for any target: useNoopLayoutEffect fills unused slots
   const forceRerender = useForceRerender();
 
@@ -80,7 +45,7 @@ const useLink = ({
 
   const lastRoute = routes[routesCount - 1];
 
-  const anchorParam = lastRoute._anchor;
+  const anchorParam = __NATIVE__ ? undefined : lastRoute._anchor;
 
   const exact = trackMatch === 'exact';
 
@@ -170,66 +135,92 @@ const useLink = ({
     useNoopLayoutEffect();
   }
 
-  if (anchorParam) {
-    hash = to[ROUTE_HASH];
+  if (!__NATIVE__) {
+    if (anchorParam) {
+      hash = to[ROUTE_HASH];
 
-    if (hash === undefined) {
-      anchorValue = useInternalsValue(anchorParam._hash, forceRerender);
-    } else if (exact) {
-      const prev = useInternalsValue(anchorParam._hash, forceRerender);
+      if (hash === undefined) {
+        anchorValue = useInternalsValue(anchorParam._hash, forceRerender);
+      } else if (exact) {
+        const prev = useInternalsValue(anchorParam._hash, forceRerender);
 
-      const next = typeof hash == 'function' ? hash(prev) : hash;
+        const next = typeof hash == 'function' ? hash(prev) : hash;
 
-      if (exactMatch && prev !== next) {
-        exactMatch = false;
+        if (exactMatch && prev !== next) {
+          exactMatch = false;
+        }
+
+        anchorValue = next;
+      } else {
+        anchorValue =
+          typeof hash == 'function'
+            ? hash(useInternalsValue(anchorParam._hash, forceRerender))
+            : (useNoopLayoutEffect(), hash);
       }
-
-      anchorValue = next;
     } else {
-      anchorValue =
-        typeof hash == 'function'
-          ? hash(useInternalsValue(anchorParam._hash, forceRerender))
-          : (useNoopLayoutEffect(), hash);
+      useNoopLayoutEffect();
     }
-  } else {
-    useNoopLayoutEffect();
   }
 
-  return {
-    href: (path || '/') + search + (anchorValue ? '#' + anchorValue : ''),
-    onClick(event) {
-      if (onClick) {
-        onClick(event);
-      }
+  const href = (path || '/') + search + (anchorValue ? '#' + anchorValue : '');
 
-      const { target } = event.currentTarget;
+  const matched = exact ? exactMatch : isMatched;
 
-      if (
-        (target && target != '_self') ||
-        event.button ||
-        event.metaKey ||
-        event.altKey ||
-        event.ctrlKey ||
-        event.shiftKey ||
-        event.defaultPrevented
-      ) {
-        return;
-      }
+  // destructured per branch, not in the parameter: a pattern cannot differ
+  // between the builds, and what the handler closes over is what it keeps alive
+  if (__NATIVE__) {
+    const { onPress } = props;
 
-      event.preventDefault();
+    return {
+      href,
+      onPress() {
+        if (onPress) {
+          onPress();
+        }
 
-      navigateRoute(
-        methods,
-        targetParams,
-        hash,
-        false,
-        ignoreBlock,
-        scrollToTop,
-        scrollRestoration
-      );
-    },
-    isMatched: exact ? exactMatch : isMatched,
-  };
+        navigateRoute(methods, targetParams, false, ignoreBlock);
+      },
+      isMatched: matched,
+    };
+  } else {
+    const { scrollToTop, scrollRestoration, onClick } = props;
+
+    return {
+      href,
+      onClick(event: LinkClickEvent) {
+        if (onClick) {
+          onClick(event);
+        }
+
+        const { target } = event.currentTarget;
+
+        if (
+          (target && target != '_self') ||
+          event.button ||
+          event.metaKey ||
+          event.altKey ||
+          event.ctrlKey ||
+          event.shiftKey ||
+          event.defaultPrevented
+        ) {
+          return;
+        }
+
+        event.preventDefault();
+
+        navigateRoute(
+          methods,
+          targetParams,
+          false,
+          ignoreBlock,
+          hash,
+          scrollToTop,
+          scrollRestoration
+        );
+      },
+      isMatched: matched,
+    };
+  }
 };
 
-export default useLink;
+export default useLink as UseLink;

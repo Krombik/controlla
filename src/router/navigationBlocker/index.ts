@@ -34,21 +34,25 @@ const release = () => {
 /**
  * Blocks navigations while enabled (e.g. over an unsaved form): an attempted
  * navigation is parked instead of applied and `isPendingNavigation` becomes
- * `true`: `allow()` lets it proceed, `deny()` drops it. Closing the tab is
- * guarded via `beforeunload`.
+ * `true`: `allow()` lets it proceed, `deny()` drops it. On the web, closing
+ * the tab is guarded via `beforeunload`.
  */
 const navigationBlocker: NavigationBlocker = {
   enable() {
     blocker._canNavigate = false;
 
-    window.addEventListener('beforeunload', beforeUnloadListener);
+    if (!__NATIVE__) {
+      window.addEventListener('beforeunload', beforeUnloadListener);
+    }
 
     return this.disable;
   },
   disable() {
     blocker._canNavigate = true;
 
-    window.removeEventListener('beforeunload', beforeUnloadListener);
+    if (!__NATIVE__) {
+      window.removeEventListener('beforeunload', beforeUnloadListener);
+    }
 
     // what is parked was parked by this guard, and the guard is going -
     // allowing it later would take the app off wherever it has moved to since

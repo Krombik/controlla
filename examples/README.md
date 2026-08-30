@@ -6,7 +6,7 @@ depends on.
 
 They are ordered by what they assume: `01` assumes nothing, `12` assumes
 everything before it, and `13` to `15` each pick up one part of the API on their
-own again.
+own again. `16` is the odd one out - the React Native build, in a simulator.
 
 ```bash
 pnpm install               # once, from this folder
@@ -66,6 +66,30 @@ run the lot.
 | **13** | [controls-context](13-controls-context) | Three lifetimes for a control: module scope, a `createControlsContext` bag built per mounted provider, and a `useControl` tree that dies with its component. Two panels of the same declarations, sharing one registry and nothing else. |
 | **14** | [forms](14-forms) | The form module. `useForm` over a control it does not own, fields wired both ways (`useNativeField` and the `NativeField`/`Field` components), rules with their own triggers, a path validator finding duplicate rows, `useFieldArray`, and a submit that reports only what moved. |
 | **15** | [infinite-list](15-infinite-list) | `useInfiniteValues` and `useBoundControl` - a list of controls whose *length* changes between renders, which is the one thing the other read hooks cannot do. Pages that load out of order, and a strip of individually bound rows. |
+
+## React Native
+
+| | | |
+|---|---|---|
+| **16** | [react-native](16-react-native) | `controlla-native` in a simulator: the launch url and `withPrefixes`, `$routerReady`, `AppState`, `Dimensions`, `onPress` links, a field on a `TextInput`, a storage of your own, and `ErrorUtils`. Only what differs between the two builds - the rest is the same code as `01` to `15`. |
+
+```bash
+npm run build                          # from the repo root: builds ../build-native too
+cd 16-react-native && pnpm ios         # or `pnpm android`
+```
+
+It is an Expo app, so it needs no Xcode project of its own - Expo Go is enough
+for everything except deep links, which need a scheme only a dev build has
+(`pnpm exec expo run:ios`). With one:
+
+```bash
+xcrun simctl openurl booted "controlla:///product/42"
+```
+
+Two things it declares that a real consumer would not: `keyweaver`, which npm
+would install as a dependency of the library rather than of the app, and a
+`metro.config.js` pinning `react`/`react-native` - both only because the library
+is linked in from `../../build-native` instead of installed.
 
 ## Where state lives
 

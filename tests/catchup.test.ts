@@ -1,77 +1,61 @@
 import { tick } from './_env/dom.ts';
 import assert from 'node:assert';
 import test from 'node:test';
-import createControl from '../src/core/createControl/index.ts';
-import createPrimitiveControl from '../src/core/createPrimitiveControl/index.ts';
-import createAsyncControl from '../src/core/createAsyncControl/index.ts';
-import createDerivedControl from '../src/core/createDerivedControl/index.ts';
-import createAsyncDerivedControl from '../src/core/createAsyncDerivedControl/index.ts';
-import createRegistry from '../src/core/createRegistry/index.ts';
-import createBoundControl from '../src/core/createBoundControl/index.ts';
-import getValue from '../src/core/getValue/index.ts';
-import setValue from '../src/core/setValue/index.ts';
-import retain from '../src/core/retain/index.ts';
-import selectError from '../src/core/selectError/index.ts';
-import noop from '../src/core/_internal/noop.ts';
-import { cleanupScope } from '../src/core/_internal/cleanup.ts';
-import type { Subscription } from '../src/core/_internal/types.ts';
-import type { SyncExternalStorage } from '../src/core/types.ts';
+import createControl from '../build/core/createControl/index.js';
+import createPrimitiveControl from '../build/core/createPrimitiveControl/index.js';
+import createAsyncControl from '../build/core/createAsyncControl/index.js';
+import createDerivedControl from '../build/core/createDerivedControl/index.js';
+import createAsyncDerivedControl from '../build/core/createAsyncDerivedControl/index.js';
+import createRegistry from '../build/core/createRegistry/index.js';
+import createBoundControl from '../build/core/createBoundControl/index.js';
+import getValue from '../build/core/getValue/index.js';
+import setValue from '../build/core/setValue/index.js';
+import retain from '../build/core/retain/index.js';
+import watchValue from '../build/core/watchValue/index.js';
+import selectError from '../build/core/selectError/index.js';
+import type { SyncExternalStorage } from '../build/core/types.js';
 
-const build = <T>(create: () => T) => {
-  const scope: Subscription[] = (cleanupScope._value = []);
-
-  try {
-    return [create(), scope] as const;
-  } finally {
-    cleanupScope._value = null;
-  }
-};
-
-const mount = (scope: Subscription[]) => {
-  for (let i = 0; i < scope.length; i++) {
-    scope[i]._subscribe();
-  }
-};
+const noop = () => {};
 
 /**
- * The same graph twice: one mounted from the start, one left detached until
- * after everything has moved. Whatever the second one is holding once it
- * mounts, the first one is holding too - that is the whole of a catch-up.
+ * The same graph twice: one watched from the start, one left unwatched until
+ * after everything has moved. Whatever the second one reads once it is
+ * watched, the first one reads too - that is the whole of a catch-up.
+ *
+ * `watchValue` is what a mount looks like from outside: it is the subscription
+ * a rendered `useValue` opens, and the function it hands back is the unmount.
  */
 const agree = async (
   name: string,
   create: () => any,
   move: () => void,
   read: (control: any) => any = getValue,
-  remount = false
+  rewatch = false
 ) => {
-  const [mounted, mountedScope] = build(create);
+  const mounted = create();
 
-  mount(mountedScope);
+  const late = create();
 
-  const [late, lateScope] = build(create);
+  const releases = [watchValue(mounted, noop), retain(mounted), retain(late)];
 
-  const releases = [retain(mounted), retain(late)];
-
-  if (remount) {
-    mount(lateScope);
-  }
+  // a remount: watched once, let go, and watched again after the move
+  const unwatchFirst = rewatch ? watchValue(late, noop) : undefined;
 
   await tick();
 
-  if (remount) {
-    for (let i = 0; i < lateScope.length; i++) {
-      lateScope[i]._cleanup();
-    }
+  if (unwatchFirst) {
+    unwatchFirst();
   }
 
   move();
 
   await tick();
 
-  mount(lateScope);
+  const unwatchLate = watchValue(late, noop);
 
   assert.deepEqual(read(late), read(mounted), name);
+
+  unwatchLate();
 
   for (let i = 0; i < releases.length; i++) {
     releases[i]();

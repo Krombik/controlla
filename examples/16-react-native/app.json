@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "controlla-native",
+    "slug": "controlla-example-react-native",
+    "version": "1.0.0",
+    "orientation": "default",
+    "userInterfaceStyle": "light",
+    "scheme": "controlla",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.anonymous.controlla-example-react-native"
+    },
+    "android": {
+      "predictiveBackGestureEnabled": false
+    }
+  }
+}

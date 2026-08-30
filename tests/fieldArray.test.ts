@@ -3,15 +3,15 @@ import assert from 'node:assert';
 import test from 'node:test';
 
 import { renderHook } from './_env/hooks.ts';
-import createControl from '../src/core/createControl/index.ts';
-import getValue from '../src/core/getValue/index.ts';
-import setValue from '../src/core/setValue/index.ts';
-import useFieldArray from '../src/form/useFieldArray/index.ts';
-import usePathValidator from '../src/form/usePathValidator/index.ts';
-import type { ControlErrors } from '../src/form/types.ts';
-import makeForm from '../src/form/_internal/makeForm.ts';
-import FormContext from '../src/form/_internal/FormContext.ts';
-import noop from '../src/core/_internal/noop.ts';
+import createControl from '../build/core/createControl/index.js';
+import getValue from '../build/core/getValue/index.js';
+import setValue from '../build/core/setValue/index.js';
+import useFieldArray from '../build/form/useFieldArray/index.js';
+import usePathValidator from '../build/form/usePathValidator/index.js';
+import type { ControlErrors } from '../build/form/types.js';
+import { mountForm } from './_env/form.ts';
+
+const noop = () => {};
 
 const makeArray = (control: any) =>
   renderHook(() => useFieldArray(control)).result;
@@ -19,36 +19,35 @@ const makeArray = (control: any) =>
 test('the rows that duplicate are the ones the validator marks', async () => {
   const $values = createControl({ tags: ['a', 'b', 'a'] });
 
-  const form = makeForm($values, { submit: noop });
+  const { form, result } = await mountForm(
+    $values,
+    { submit: noop },
+    () =>
+      [
+        useFieldArray($values.tags),
+        usePathValidator($values.tags, (tags: string[]) => {
+          const seen = new Map<string, number>();
 
-  // stands in for the `FormProvider` the hook would read
-  (FormContext as any)._currentValue = form;
+          const errors: ControlErrors<string> = [];
 
-  const { result } = renderHook(() => useFieldArray($values.tags));
+          for (let i = 0; i < tags.length; i++) {
+            const at = seen.get(tags[i]);
 
-  const { result: errorOf } = renderHook(() =>
-    usePathValidator($values.tags, (tags: string[]) => {
-      const seen = new Map<string, number>();
+            if (at !== undefined) {
+              errors.push([$values.tags[at], 'duplicate']);
 
-      const errors: ControlErrors<string> = [];
+              errors.push([$values.tags[i], 'duplicate']);
+            } else {
+              seen.set(tags[i], i);
+            }
+          }
 
-      for (let i = 0; i < tags.length; i++) {
-        const at = seen.get(tags[i]);
-
-        if (at !== undefined) {
-          errors.push([$values.tags[at], 'duplicate']);
-
-          errors.push([$values.tags[i], 'duplicate']);
-        } else {
-          seen.set(tags[i], i);
-        }
-      }
-
-      return errors;
-    })
+          return errors;
+        }),
+      ] as const
   );
 
-  (FormContext as any)._currentValue = undefined;
+  const [array, errorOf] = result;
 
   assert.equal(await form.validate(), false);
   assert.equal(getValue(form.$isValid), false);
@@ -57,7 +56,7 @@ test('the rows that duplicate are the ones the validator marks', async () => {
   assert.equal(getValue(errorOf($values.tags[1])), undefined);
   assert.equal(getValue(errorOf($values.tags[2])), 'duplicate');
 
-  result.remove(0);
+  array.remove(0);
 
   await tick();
 

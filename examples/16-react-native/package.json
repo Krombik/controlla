@@ -1,0 +1,21 @@
+{
+  "name": "controlla-example-16-react-native",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start",
+    "ios": "expo run:ios",
+    "android": "expo run:android",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "controlla-native": "link:../../build-native",
+    "expo": "~57.0.18",
+    "expo-linking": "~57.0.8",
+    "expo-sqlite": "~57.0.2",
+    "keyweaver": "^1.0.4",
+    "react": "19.2.3",
+    "react-native": "0.86.3"
+  },
+  "version": "1.0.0"
+}

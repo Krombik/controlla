@@ -1,3 +1,5 @@
+import { Dimensions, type DimensionsPayload } from 'react-native';
+
 import createControl from '#core/createControl';
 import scheduleSet from '#internal/scheduleSet';
 import { INTERNALS, PASSIVE } from '#internal/constants';
@@ -11,17 +13,29 @@ const getSize = (): Size => ({
 });
 
 const $windowSize: ControlScope<Size> = createControl<Size>(
-  typeof window !== 'undefined' ? getSize() : { width: 0, height: 0 }
+  __NATIVE__
+    ? Dimensions.get('window')
+    : typeof window != 'undefined'
+      ? getSize()
+      : { width: 0, height: 0 }
 );
 
-if (typeof window !== 'undefined') {
+const root = $windowSize[INTERNALS]._root;
+
+if (__NATIVE__) {
+  // react-native types the handler as a bare `Function`, and the payload as
+  // carrying either metric or neither
+  Dimensions.addEventListener(
+    'change',
+    ({ window: size }: DimensionsPayload) => {
+      if (size) {
+        scheduleSet(root, size, true, requestAnimationFrame);
+      }
+    }
+  );
+} else if (typeof window != 'undefined') {
   const listener = () => {
-    scheduleSet(
-      $windowSize[INTERNALS]._root,
-      getSize(),
-      true,
-      requestAnimationFrame
-    );
+    scheduleSet(root, getSize(), true, requestAnimationFrame);
   };
 
   window.addEventListener('resize', listener, PASSIVE);
@@ -30,8 +44,8 @@ if (typeof window !== 'undefined') {
 }
 
 /**
- * Control of the window's inner size, kept in sync with `resize` and
- * `orientationchange` (committed once per animation frame). `width`/`height`
- * are nested controls — subscribe to one without re-rendering on the other.
+ * Control of the size of the window the app is drawn in, kept in sync as it
+ * changes (committed once per animation frame). `width`/`height` are nested
+ * controls — subscribe to one without re-rendering on the other.
  */
 export default $windowSize as ReadonlyControlScope<Size>;

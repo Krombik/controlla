@@ -3,6 +3,7 @@ import type {
   RouterWrite,
   RouteMethods,
   TargetParams,
+  RouterPatch,
 } from '#router/internal/types';
 import { getSchedulerLane, scheduleFlush } from '#internal/flushQueue';
 import queueRouterPatch from '#router/internal/queueRouterPatch';
@@ -13,11 +14,11 @@ import fillDefaults from '#router/internal/fillDefaults';
 const navigateRoute = (
   methods: RouteMethods,
   params: TargetParams[] | undefined,
-  hash: Hash | undefined,
   replace: boolean,
   ignoreBlock: boolean | undefined,
-  enableScrollToTop: boolean | undefined,
-  enableScrollRestoration: boolean | undefined
+  hash?: Hash,
+  enableScrollToTop?: boolean,
+  enableScrollRestoration?: boolean
 ) => {
   const routes = methods._routes();
 
@@ -27,7 +28,7 @@ const navigateRoute = (
 
   const updates: RouterWrite[] = [];
 
-  const toAnchor = hash !== undefined;
+  const toAnchor = !__NATIVE__ && hash !== undefined;
 
   let u = 0;
 
@@ -88,12 +89,18 @@ const navigateRoute = (
       _isNewPage: false,
       _isHistoryEvent: false,
       _ignoreBlock: ignoreBlock,
-      _scrollToTop: enableScrollToTop,
-      _scrollRestoration: enableScrollRestoration,
+      ...(__NATIVE__
+        ? {}
+        : {
+            _scrollToTop: enableScrollToTop,
+            _scrollRestoration: enableScrollRestoration,
+          }),
     },
     _updates: updates,
     _replace: replace,
-    _hashChanged: toAnchor,
+    ...(__NATIVE__
+      ? ({} as Pick<RouterPatch, '_hashChanged'>)
+      : { _hashChanged: toAnchor }),
   });
 
   scheduleFlush(lane);

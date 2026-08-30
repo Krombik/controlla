@@ -10,13 +10,18 @@ import { SILENT_RELOAD, INTERNALS } from '#internal/constants';
 import scheduleSet from '#internal/scheduleSet';
 import reportError from '#internal/reportError';
 import syncScheduler from '#scheduler/syncScheduler';
+import {
+  AppState,
+  type EventSubscription,
+  type AppStateStatus,
+} from 'react-native';
 
 const visibilityChangeQueue: AsyncControlInternals[] = [];
 
 const visibilityChangeIndexMap = new Map<AsyncControlInternals, number>();
 
-const visibilityChangeListener = () => {
-  if (!document.hidden) {
+const visibilityChangeListener = (state: AppStateStatus | Event) => {
+  if (__NATIVE__ ? state === 'active' : !document.hidden) {
     for (let i = 0; i < visibilityChangeQueue.length; i++) {
       const internals = visibilityChangeQueue[i];
 
@@ -36,6 +41,8 @@ const visibilityChangeListener = () => {
     }
   }
 };
+
+let appStateSubscription: EventSubscription | undefined;
 
 const endLoad = (internals: AsyncControlInternals) => {
   const load = internals._load!;
@@ -161,10 +168,14 @@ const handleUnloads = () => {
         }
 
         if (!visibilityChangeQueue.length) {
-          document.removeEventListener(
-            'visibilitychange',
-            visibilityChangeListener
-          );
+          if (__NATIVE__) {
+            appStateSubscription!.remove();
+          } else {
+            document.removeEventListener(
+              'visibilitychange',
+              visibilityChangeListener
+            );
+          }
         }
 
         visibilityChangeIndexMap.delete(internals);
@@ -197,7 +208,17 @@ const attachLoad = (control: AsyncControlInternals) => {
 
     if (data._options.reloadOnFocus) {
       if (!visibilityChangeQueue.length) {
-        document.addEventListener('visibilitychange', visibilityChangeListener);
+        if (__NATIVE__) {
+          appStateSubscription = AppState.addEventListener(
+            'change',
+            visibilityChangeListener
+          );
+        } else {
+          document.addEventListener(
+            'visibilitychange',
+            visibilityChangeListener
+          );
+        }
       }
 
       visibilityChangeIndexMap.set(control, visibilityChangeQueue.length);

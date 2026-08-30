@@ -1,0 +1,12 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    // the library is linked from `../../build-native`, whose own `react` would
+    // otherwise resolve to a second copy of the same react types
+    "preserveSymlinks": true
+  },
+  "include": ["index.ts", "src"]
+}

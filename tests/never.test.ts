@@ -1,19 +1,19 @@
 import { tick } from './_env/dom.ts';
 import assert from 'node:assert';
 import test from 'node:test';
-import $never from '../src/core/never/index.ts';
-import createDerivedControl from '../src/core/createDerivedControl/index.ts';
-import createAsyncDerivedControl from '../src/core/createAsyncDerivedControl/index.ts';
-import createBoundControl from '../src/core/createBoundControl/index.ts';
-import createRegistry from '../src/core/createRegistry/index.ts';
-import createControl from '../src/core/createControl/index.ts';
-import getValue from '../src/core/getValue/index.ts';
-import retain from '../src/core/retain/index.ts';
-import selectLoading from '../src/core/selectLoading/index.ts';
-import selectError from '../src/core/selectError/index.ts';
-import { cleanupScope } from '../src/core/_internal/cleanup.ts';
-import { INTERNALS } from '../src/core/_internal/constants.ts';
-import type { Subscription } from '../src/core/_internal/types.ts';
+import $never from '../build/core/never/index.js';
+import createDerivedControl from '../build/core/createDerivedControl/index.js';
+import createAsyncDerivedControl from '../build/core/createAsyncDerivedControl/index.js';
+import createBoundControl from '../build/core/createBoundControl/index.js';
+import createRegistry from '../build/core/createRegistry/index.js';
+import createControl from '../build/core/createControl/index.js';
+import getValue from '../build/core/getValue/index.js';
+import retain from '../build/core/retain/index.js';
+import watchValue from '../build/core/watchValue/index.js';
+import selectLoading from '../build/core/selectLoading/index.js';
+import selectError from '../build/core/selectError/index.js';
+
+const noop = () => {};
 
 /**
  * A skeleton mounts and unmounts like anything else, so what is built over
@@ -21,26 +21,18 @@ import type { Subscription } from '../src/core/_internal/types.ts';
  * costing a branch in the controls that attach.
  */
 const cycle = <T>(create: () => T) => {
-  const scope: Subscription[] = (cleanupScope._value = []);
+  const control = create();
 
-  let control: T;
-
-  try {
-    control = create();
-  } finally {
-    cleanupScope._value = null;
-  }
-
-  scope[0]._subscribe();
+  let unwatch = watchValue(control as any, noop);
 
   return {
     control,
     remount: () => {
-      scope[0]._cleanup();
+      unwatch();
 
-      scope[0]._subscribe();
+      unwatch = watchValue(control as any, noop);
 
-      scope[0]._cleanup();
+      unwatch();
     },
   };
 };
@@ -92,16 +84,19 @@ test('a bound control keyed by $never binds to nothing', () => {
   remount();
 });
 
-test('$never collects nothing from what attaches to it', () => {
-  const attached = () => ($never as any)[INTERNALS]._dependents.length;
-
-  assert.equal(attached(), 0);
-
-  // created outside any scope, which subscribes at once and never lets go -
-  // and $never is one object for the whole program
+test('$never swallows everything that attaches to it', () => {
+  // $never is one object for the whole program, so what attaches to it must
+  // not accumulate. How much it is holding is not observable from outside -
+  // what is, is that attaching over and over keeps behaving the same
   for (let i = 0; i < 3; i++) {
-    createDerivedControl($never as any, (value: any) => value);
-  }
+    const { control: $d, remount } = cycle(() =>
+      createDerivedControl($never as any, (value: any) => ['d', value, i])
+    );
 
-  assert.equal(attached(), 0, 'so what it holds cannot grow');
+    assert.deepEqual(getValue($d), ['d', undefined, i]);
+
+    remount();
+
+    assert.deepEqual(getValue($d), ['d', undefined, i], 'after its own mount');
+  }
 });

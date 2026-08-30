@@ -8,7 +8,7 @@ const $online = createAsyncControl<true, never>({
     typeof navigator !== 'undefined' && navigator.onLine ? true : undefined,
 });
 
-if (typeof window !== 'undefined') {
+if (typeof window != 'undefined') {
   window.addEventListener('online', () => {
     scheduleSet($online[INTERNALS]._root, true, true);
   });

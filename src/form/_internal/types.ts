@@ -1,5 +1,6 @@
 import type { Control } from '#types';
 import type {
+  FieldElement,
   FieldState,
   FormOptions,
   FormState,
@@ -7,7 +8,7 @@ import type {
 } from '#form/types';
 
 /** The elements `useNativeField` knows how to read and write. */
-export type FieldElement =
+export type NativeFieldElement =
   HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
 
 /**
@@ -16,7 +17,7 @@ export type FieldElement =
  *
  * @internal
  */
-export type NativeKind<E extends FieldElement = FieldElement> = {
+export type NativeKind<E extends NativeFieldElement = NativeFieldElement> = {
   _read(element: E): any;
   _write(element: E, value: any): void;
   /** The element attributes this kind implies, merged into the render props. */
@@ -83,7 +84,7 @@ export type FieldEntry = {
   _refs: number;
   _unwatchDirty: (() => void) | undefined;
   /** What `ref` is holding - the focus target of a failed submit. */
-  _element: HTMLElement | undefined;
+  _element: FieldElement | undefined;
   /** Set by `useNativeField`; the element owns the value while it is. */
   _native: NativeKind | undefined;
   /** Sit between the element and the control, in both directions - `identity` unless converted. */

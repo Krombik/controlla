@@ -1,12 +1,12 @@
 import { tick } from './_env/dom.ts';
 import assert from 'node:assert';
 import test from 'node:test';
-import createAsyncControl from '../src/core/createAsyncControl/index.ts';
-import createAsyncDerivedControl from '../src/core/createAsyncDerivedControl/index.ts';
-import getValue from '../src/core/getValue/index.ts';
-import retain from '../src/core/retain/index.ts';
-import selectError from '../src/core/selectError/index.ts';
-import invalidate from '../src/core/invalidate/index.ts';
+import createAsyncControl from '../build/core/createAsyncControl/index.js';
+import createAsyncDerivedControl from '../build/core/createAsyncDerivedControl/index.js';
+import getValue from '../build/core/getValue/index.js';
+import retain from '../build/core/retain/index.js';
+import selectError from '../build/core/selectError/index.js';
+import invalidate from '../build/core/invalidate/index.js';
 
 /** Two sources whose loads answer when the test says so, and a derived of them. */
 const pair = () => {

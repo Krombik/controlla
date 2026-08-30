@@ -3,8 +3,8 @@ import { act, createElement as h, mount } from './_env/react.ts';
 import assert from 'node:assert';
 import test from 'node:test';
 import { Component, Suspense, type ReactNode } from 'react';
-import createAsyncControl from '../src/core/createAsyncControl/index.ts';
-import useSuspenseValues from '../src/core/useSuspenseValues/index.ts';
+import createAsyncControl from '../build/core/createAsyncControl/index.js';
+import useSuspenseValues from '../build/core/useSuspenseValues/index.js';
 
 /** An async control whose load answers only when the test says so. */
 const loadable = () => {

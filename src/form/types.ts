@@ -1,4 +1,4 @@
-import type { ReactNode, RefCallback, SubmitEvent } from 'react';
+import type { ReactNode, RefCallback } from 'react';
 
 import type {
   Control,
@@ -7,6 +7,17 @@ import type {
   ReadonlyControlScope,
   SelectValue,
 } from '#types';
+
+/**
+ * What a field's `ref` needs of whatever renders it - an `HTMLElement`, a
+ * `TextInput` and a handle a component hands out in place of either all
+ * qualify. A failed submit orders what it can read a document position off
+ * of; the rest keeps the order it registered in.
+ */
+export type FieldElement = { focus(): void };
+
+/** Just enough of a submit event to know where it came from and to stop it. */
+export type SubmitLike = { type: string; preventDefault(): void };
 
 /** When a validator runs on its own, outside of a submit sweep. */
 export type ValidateOn = 'submit' | 'change' | 'blur';
@@ -141,9 +152,7 @@ export type FormState = {
    * {@link event} — so it's usable directly as a `<form onSubmit>`, and as a
    * button's `onClick` without swallowing what the button would have done.
    */
-  submit(
-    event?: Pick<SubmitEvent<HTMLFormElement>, 'type' | 'preventDefault'>
-  ): Promise<void>;
+  submit(event?: SubmitLike): Promise<void>;
   /** Runs every validator, resolving to whether all of them passed. */
   validate(): Promise<boolean>;
   /**
@@ -234,7 +243,7 @@ export type FieldRenderProps<V = any> = {
   /** The control's path, dot-joined — `undefined` for a root control. */
   name: string | undefined;
   /** Attach it for `focus` and for a failed submit to reach this field. */
-  ref: RefCallback<HTMLElement>;
+  ref: RefCallback<FieldElement>;
   onBlur?(): void;
   value: V;
   /** Writes the value - a plain value, not an event. */

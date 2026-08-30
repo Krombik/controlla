@@ -1,6 +1,7 @@
 /** A real DOM on the globals, installed before any lib module reads them. */
 
 import { Window } from 'happy-dom';
+import './flags.ts';
 
 export const win = new Window({ url: 'http://localhost/' });
 

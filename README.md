@@ -132,7 +132,7 @@ For working code rather than snippets, [`examples/`](examples) has fifteen stand
 - **Platform**: [`$appVisible`](#appvisible), [`mediaQuery`](#mediaqueryquery), [`$online`](#online), [`$windowSize`](#windowsize)
 - **Schedulers**: [`batch`](#batchcallback-scheduler), [`createManualScheduler`](#createmanualscheduler), [`createThrottleScheduler`](#createthrottleschedulerms), [`createDebounceScheduler`](#createdebounceschedulerms)
 - **Forms**: [`useForm`](#useformcontrol-options), [`FormProvider`](#formprovider-form), [`useValidator`](#usevalidatorcontrol-validate-validateon--validator), [`usePathValidator`](#usepathvalidatorcontrol-validate-validateon--pathvalidator), [`useNativeField`](#usenativefieldcontrol-options--nativefield), [`useField`](#usefieldcontrol--field), [`useFieldArray`](#usefieldarraycontrol), [`useFieldState`](#usefieldstatecontrol), [`useFormState`](#useformstate)
-- **Router**: [`createRouter`](#createrouterpaths), [`createPath`](#createpathpath), [`createAsyncPath`](#createasyncpathsource), [`param`](#paramoptions), [`query`](#queryoptions), [`oneOf`](#oneofoptions), [`arrayParam`](#arrayparamoptions), [`createRouterView`](#createrouterviewroutes), [`Link` / `useLink`](#link--uselink), [`navigate`](#navigateto-replace-ignoreblock-scrolltotop-scrollrestoration), [params as controls](#route-params-are-controls), [`replaceValue`](#replacevaluecontrol-value-scheduler), [anchors](#anchors), [`registerAnchorOffset`](#registeranchoroffsetroute), [`selectRegisteredAnchors`](#selectregisteredanchorsroute), [`trackScroll`](#trackscrollanchor), [`$navigationState`](#navigationstate), [`navigationBlocker`](#blocking-navigation), [`repairHistory`](#repairhistory)
+- **Router**: [`createRouter`](#createrouterpaths), [`withPrefixes`](#withprefixesprefixes-paths), [`go`](#godelta), [`createPath`](#createpathpath), [`createAsyncPath`](#createasyncpathsource), [`param`](#paramoptions), [`query`](#queryoptions), [`oneOf`](#oneofoptions), [`arrayParam`](#arrayparamoptions), [`createRouterView`](#createrouterviewroutes), [`Link` / `useLink`](#link--uselink), [`navigate`](#navigateto-replace-ignoreblock-scrolltotop-scrollrestoration), [params as controls](#route-params-are-controls), [`replaceValue`](#replacevaluecontrol-value-scheduler), [anchors](#anchors), [`registerAnchorOffset`](#registeranchoroffsetroute), [`selectRegisteredAnchors`](#selectregisteredanchorsroute), [`trackScroll`](#trackscrollanchor), [`$navigationState`](#navigationstate), [`navigationBlocker`](#blocking-navigation), [`repairHistory`](#repairhistory)
 - **[Troubleshooting](#troubleshooting)**: [param value type + `stringify`](#paramquery-value-type-breaks-when-stringify-is-present), [named import suggestions in VS Code](#get-named-controlla-import-suggestions-in-vs-code)
 
 ---
@@ -1115,7 +1115,7 @@ Creates the form handle. Created once and kept for the component's life; `option
 
 **Returns**: a `FormState` - `$isSubmitting`, `$isValidating`, `$isValid`, `$isDirty`, `submit(event?)`, `validate()`, `reset(control?, value?)`, `focus(control)`.
 
-`$isValid` is every mounted validator holding no error - one that never ran counts as valid. `focus(control)` focuses that field's element and returns whether there was one; a field is focusable once it's mounted and passed its `ref` on. A failed `submit` focuses the first invalid field in the _document_, and for an error that marks no field of its own (an array rule, a group rule) the first field under what it validates.
+`$isValid` is every mounted validator holding no error - one that never ran counts as valid. `focus(control)` focuses that field's element and returns whether there was one; a field is focusable once it's mounted and passed its `ref` on. A failed `submit` focuses the first invalid field in the _document_, and for an error that marks no field of its own (an array rule, a group rule) the first field under what it validates. A `ref` only has to carry a `focus`, so a component handle works in place of an element - one has no document position to read, so it's ordered by when it registered instead.
 
 The **baseline** is the form control's value, taken when the form mounts, and it moves to whatever a `reset` wrote. `$isDirty` and `changed` are both measured against it. It is the only baseline there is: a field over some other control is validated, swept and submitted like any other, but has nothing to compare against, so its `$isDirty` stays `false`, it counts towards nothing, and a bare `reset()` clears its rules without touching its value. A submit leaves it alone - `reset(control, values)` from the handler is what makes what was sent the new baseline, so an autosaving form gets what moved since the _previous_ submit:
 
@@ -1400,6 +1400,25 @@ const router = createRouter(paths);
 - `router.navigation` - target builders, for [`navigate`](#navigateto-replace-ignoreblock-scrolltotop-scrollrestoration) and [`Link`](#link--uselink) below.
 - [`$navigationState`](#navigationstate) and [`navigationBlocker`](#blocking-navigation) are standalone imports, not part of the router.
 
+### `withPrefixes(prefixes, paths)`
+
+**React Native only.** Declares which URLs are the app's own. A URL handed over by the OS is matched against the prefixes in order, the first one that fits is cut off, and what's left is the path. A URL fitting none of them belongs to something else - another app's link, a development launcher - and is ignored, leaving the screen where it is.
+
+Without it every URL the app is opened with is read as a path, whatever it came from.
+
+```ts
+import createRouter from 'controlla-native/router/createRouter';
+import withPrefixes from 'controlla-native/router/withPrefixes';
+import { createURL } from 'expo-linking';
+
+const router = createRouter(
+  // the app's website, plus whatever the current build answers to
+  withPrefixes(['https://app.example.com', createURL('/')], paths)
+);
+```
+
+There's no web counterpart: the address bar is the only source of a URL a browser has.
+
 ### `createPath(...path)`
 
 Declares one path of the route tree. Arguments come in order - static string segments and param declarators (`param`, `query`, `oneOf`, `arrayParam`) building up the path, an optional `anchor(...)`, and an optional children record for nested paths.
@@ -1565,6 +1584,20 @@ navigate(router.navigation.home(), true);                   // replace
 ```
 
 Calling a chained segment with no arguments, like `.product()` above, keeps that route's params as currently set instead of changing them (it only works while that route is already matched - a required param can't be left unspecified otherwise). The same "leave as currently set" rule applies to the trailing anchor argument - pass `undefined`, or leave it off, to keep the hash untouched.
+
+### `go(delta)`
+
+Moves through the app's own history the way `history.go` does - `-1` is the back button, `1` the forward one. An enabled [`navigationBlocker`](#blocking-navigation) parks the move like any other navigation.
+
+Returns `false` when there is no such entry and nothing moved - going back past where the app started would leave it, which is a decision only the app can make. A move further than the stack goes is refused whole rather than clamped to the nearest entry.
+
+```tsx
+import go from 'controlla/router/go';
+
+<button onClick={() => go(-1)}>back</button>;
+```
+
+React Native has no back button of its own, which is what makes this the only way to offer one there; Android's hardware button already does `go(-1)`, and leaves the app when that answers `false`.
 
 ### Route params are controls
 

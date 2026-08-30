@@ -65,7 +65,9 @@ const handlePath = (
     let last = path[end - 1];
 
     if (typeof last == 'object') {
-      if ((last as AnchorParam)._anchor !== true) {
+      // natively there is nothing to scroll to, so `anchor()` is not exported
+      // there and a trailing object can only be the children record
+      if (__NATIVE__ || (last as AnchorParam)._anchor !== true) {
         children = last as Record<string, Path>;
       } else {
         anchorParam = last as AnchorParam;
@@ -99,7 +101,7 @@ const handlePath = (
     _pathParams: pathParams,
     _queryParams: queryParams,
     _path,
-    _anchor: anchorParam,
+    ...(__NATIVE__ ? {} : { _anchor: anchorParam }),
     _source: source,
     _createControlScope: createControlScope,
     _defaults: defaults,

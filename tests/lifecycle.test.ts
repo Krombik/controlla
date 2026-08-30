@@ -3,38 +3,31 @@ import { tick, reportedErrors } from './_env/dom.ts';
 import assert from 'node:assert';
 import test from 'node:test';
 
-import createControl from '../src/core/createControl/index.ts';
-import createAsyncControl from '../src/core/createAsyncControl/index.ts';
-import createPrimitiveControl from '../src/core/createPrimitiveControl/index.ts';
-import createRegistry from '../src/core/createRegistry/index.ts';
-import createBoundControl from '../src/core/createBoundControl/index.ts';
-import useBoundControl from '../src/core/useBoundControl/index.ts';
-import createDerivedControl from '../src/core/createDerivedControl/index.ts';
-import useControl from '../src/core/useControl/index.ts';
-import useDerivedControl from '../src/core/useDerivedControl/index.ts';
-import getValue from '../src/core/getValue/index.ts';
-import watchValue from '../src/core/watchValue/index.ts';
-import selectLoading from '../src/core/selectLoading/index.ts';
-import retain from '../src/core/retain/index.ts';
-import useValue from '../src/core/useValue/index.ts';
-import setValue from '../src/core/setValue/index.ts';
-import noop from '../src/core/_internal/noop.ts';
-import { INTERNALS } from '../src/core/_internal/constants.ts';
-import {
-  actualizePending,
-  cleanupScope,
-} from '../src/core/_internal/cleanup.ts';
-import {
-  flushLane,
-  getSchedulerLane,
-} from '../src/core/_internal/flushQueue.ts';
-import type { Subscription } from '../src/core/_internal/types.ts';
+import createControl from '../build/core/createControl/index.js';
+import createAsyncControl from '../build/core/createAsyncControl/index.js';
+import createPrimitiveControl from '../build/core/createPrimitiveControl/index.js';
+import createRegistry from '../build/core/createRegistry/index.js';
+import createBoundControl from '../build/core/createBoundControl/index.js';
+import useBoundControl from '../build/core/useBoundControl/index.js';
+import createDerivedControl from '../build/core/createDerivedControl/index.js';
+import useControl from '../build/core/useControl/index.js';
+import useDerivedControl from '../build/core/useDerivedControl/index.js';
+import getValue from '../build/core/getValue/index.js';
+import watchValue from '../build/core/watchValue/index.js';
+import selectLoading from '../build/core/selectLoading/index.js';
+import retain from '../build/core/retain/index.js';
+import useValue from '../build/core/useValue/index.js';
+import setValue from '../build/core/setValue/index.js';
 import { renderHook } from './_env/hooks.ts';
-import type { SyncExternalStorage } from '../src/core/types.ts';
+import type { SyncExternalStorage } from '../build/core/types.js';
 
-/** How many dependents the control is notifying. */
-const dependents = (control: any) =>
-  (control[INTERNALS]._dependents as unknown[]).length;
+const noop = () => {};
+
+/**
+ * Nothing counts subscribers from outside. What stands in for it: a control
+ * that is attached moves as its source does, and one that is detached stays
+ * exactly where it was left - reading it does not catch it up.
+ */
 
 const countingStorage = () => {
   let observers = 0;
@@ -62,50 +55,44 @@ const countingStorage = () => {
 test('created outside a hook, a derived control subscribes at once', async () => {
   const $src = createControl(1);
 
-  assert.equal(dependents($src), 0);
-
   const $doubled = createDerivedControl($src, (value: number) => value * 2);
-
-  assert.equal(dependents($src), 1, 'nothing to wait for, so it is attached');
 
   setValue($src, 2);
 
   await tick();
 
-  assert.equal(getValue($doubled), 4);
+  // it moved without anyone reading it first
+  assert.equal(getValue($doubled), 4, 'nothing to wait for, so it is attached');
 });
 
 test('created by a hook, it subscribes at the commit and drops at the unmount', async () => {
   const $src = createControl(1);
 
-  const duringRender: number[] = [];
-
-  const rendered = renderHook(() => {
-    const $doubled = useDerivedControl($src, (value: number) => value * 2);
-
-    duringRender.push(dependents($src));
-
-    return $doubled;
-  });
-
-  assert.deepEqual(duringRender, [0], 'the render attached nothing');
-  assert.equal(dependents($src), 1, 'the effect did');
+  const rendered = renderHook(() =>
+    useDerivedControl($src, (value: number) => value * 2)
+  );
 
   setValue($src, 2);
 
   await tick();
 
-  assert.equal(getValue(rendered.result), 4);
+  assert.equal(getValue(rendered.result), 4, 'the commit attached it');
 
   rendered.unmount();
 
-  assert.equal(dependents($src), 0);
+  setValue($src, 3);
+
+  await tick();
+
+  assert.equal(getValue(rendered.result), 4, 'the unmount dropped it');
 
   rendered.remount();
 
+  await tick();
+
   assert.equal(
-    dependents($src),
-    1,
+    getValue(rendered.result),
+    6,
     'and an <Activity> coming back re-attaches'
   );
 });
@@ -159,7 +146,7 @@ test('an observable external storage is observed on the same terms', async () =>
   });
 
   assert.deepEqual(duringRender, [0], 'the render observed nothing');
-  assert.equal(inHook.observers, 1);
+  assert.equal(inHook.observers, 1, 'the commit did');
 
   rendered.unmount();
 
@@ -184,30 +171,19 @@ test('every bound control is its own, and a hook mounts and drops it', async () 
   assert.deepEqual(getValue($first), { n: 2 });
   assert.deepEqual(getValue($second), { n: 2 }, 'both follow the key');
 
-  const attached = dependents($key);
-
-  const duringRender: number[] = [];
-
-  const rendered = renderHook(() => {
-    const $bound = useBoundControl(registry)($key);
-
-    duringRender.push(dependents($key));
-
-    return $bound;
-  });
-
-  assert.deepEqual(duringRender, [attached], 'the render attached nothing');
-  assert.equal(dependents($key), attached + 1, 'its effect did');
+  const rendered = renderHook(() => useBoundControl(registry)($key));
 
   setValue($key, 3);
 
   await tick();
 
-  assert.deepEqual(getValue(rendered.result), { n: 3 });
+  assert.deepEqual(
+    getValue(rendered.result),
+    { n: 3 },
+    'the commit attached it'
+  );
 
   rendered.unmount();
-
-  assert.equal(dependents($key), attached);
 
   setValue($key, 4);
 
@@ -327,8 +303,6 @@ test('a bound hook keeps one control per call position, however many there are',
 
   const $b = createPrimitiveControl(2);
 
-  const attached = dependents($a);
-
   let keys = [$a];
 
   const rendered = renderHook(() => {
@@ -339,19 +313,41 @@ test('a bound hook keeps one control per call position, however many there are',
 
   const [$first] = rendered.result;
 
-  assert.equal(dependents($a), attached + 1, 'the first position mounted');
+  setValue($a, 5);
+
+  await tick();
+
+  assert.deepEqual(getValue($first), { n: 5 }, 'the first position mounted');
 
   keys = [$a, $b];
 
-  assert.equal(rendered.render()[0], $first, 'the position kept its control');
-  assert.equal(dependents($b), 1, 'and the one the render grew into mounted');
+  const [, $grown] = rendered.render();
+
+  assert.equal(rendered.result[0], $first, 'the position kept its control');
+
+  setValue($b, 7);
+
+  await tick();
+
+  assert.deepEqual(
+    getValue($grown),
+    { n: 7 },
+    'and the one the render grew into mounted'
+  );
 
   keys = [$a];
 
   rendered.render();
 
-  assert.equal(dependents($b), 0, 'a position a render stops reaching drops');
-  assert.equal(dependents($a), attached + 1);
+  setValue($b, 8);
+
+  await tick();
+
+  assert.deepEqual(
+    getValue($grown),
+    { n: 7 },
+    'a position a render stops reaching drops'
+  );
 
   keys = [$b];
 
@@ -360,69 +356,69 @@ test('a bound hook keeps one control per call position, however many there are',
   await tick();
 
   assert.notStrictEqual($rebuilt, $first, 'other keys rebuild the position');
-  assert.deepEqual(getValue($rebuilt), { n: 2 }, 'following the key it got');
-  assert.equal(dependents($a), attached, 'and letting go of the previous one');
-  assert.equal(dependents($b), 1);
+  assert.deepEqual(getValue($rebuilt), { n: 8 }, 'following the key it got');
+
+  setValue($a, 9);
+
+  await tick();
+
+  assert.deepEqual(
+    getValue($first),
+    { n: 5 },
+    'and letting go of the previous one'
+  );
 
   rendered.unmount();
 
-  assert.equal(dependents($b), 0, 'the unmount drops what is left');
+  setValue($b, 10);
+
+  await tick();
+
+  assert.deepEqual(
+    getValue($rebuilt),
+    { n: 8 },
+    'the unmount drops what is left'
+  );
 });
 
-/** Creates in a scope, the way a hook does, and hands back what it collected. */
-const inScope = <T>(create: () => T): [T, Subscription[]] => {
-  const scope: Subscription[] = (cleanupScope._value = []);
-
-  try {
-    return [create(), scope];
-  } finally {
-    cleanupScope._value = null;
-  }
-};
-
-/** A mount, with whatever was queued for it landed first - what a tick does. */
-const pull = (control: any) => {
-  const lane = getSchedulerLane();
-
-  if (lane._maxPendingLevel) {
-    flushLane(lane);
-  }
-
-  actualizePending(control[INTERNALS]._root);
-};
-
-test('a catch-up commits at once, not on the scheduled flush', () => {
+test('a catch-up commits at once, not on the scheduled flush', async () => {
   const $src = createControl(1);
 
-  const [$doubled] = inScope(() =>
-    createDerivedControl($src, (value: number) => value * 2)
+  const rendered = renderHook(() =>
+    useDerivedControl($src, (value: number) => value * 2)
   );
+
+  rendered.unmount();
 
   setValue($src, 5);
 
-  // no tick after it: the catch-up commits, so the commit running it sees it
-  pull($doubled);
+  await tick();
 
-  assert.equal(getValue($doubled), 10);
+  // no tick after the mount: it is the catch-up, and it commits right there
+  rendered.remount();
+
+  assert.equal(getValue(rendered.result), 10);
 });
 
-test('a chain catches up from the bottom, so nothing reads a stale source', () => {
+test('a chain catches up from the bottom, so nothing reads a stale source', async () => {
   const $src = createControl(1);
 
-  const [$doubled] = inScope(() =>
-    createDerivedControl($src, (value: number) => value * 2)
-  );
+  const rendered = renderHook(() => {
+    const $doubled = useDerivedControl($src, (value: number) => value * 2);
 
-  const [$quadrupled] = inScope(() =>
-    createDerivedControl($doubled, (value: number) => value * 2)
-  );
+    return useDerivedControl($doubled, (value: number) => value * 2);
+  });
+
+  rendered.unmount();
 
   setValue($src, 5);
 
-  pull($quadrupled);
+  await tick();
+
+  rendered.remount();
 
   assert.equal(
-    getValue($quadrupled),
+    getValue(rendered.result),
     20,
     'the one in the middle was caught up with first'
   );
@@ -457,23 +453,26 @@ test('an unmount arms the catch-up again, so a remount re-reads the storage', ()
 test('the mount takes the value, and the reader after it renders with it', async () => {
   const $src = createControl(1);
 
-  // created, not mounted - the state a parent's control is in while the child
-  // that reads it is already committing
-  const [$doubled, scope] = inScope(() =>
-    createDerivedControl($src, (value: number) => value * 2)
+  // detached - the state a parent's control is in while the child that reads
+  // it is already committing
+  const rendered = renderHook(() =>
+    useDerivedControl($src, (value: number) => value * 2)
   );
+
+  const $doubled = rendered.result;
+
+  rendered.unmount();
 
   setValue($src, 5);
 
   await tick();
 
-  assert.equal(dependents($src), 0, 'nothing of it is attached yet');
+  assert.equal(getValue($doubled), 2, 'nothing of it is attached yet');
 
   // the mount, an insertion effect - which every reader of the commit renders
   // before and attaches after, so the catch-up reaches none of them
-  scope[0]._subscribe();
+  rendered.remount();
 
-  assert.equal(dependents($src), 1);
   assert.equal(getValue($doubled), 10, 'and it took the value on the way');
 
   const seen: number[] = [];
@@ -488,9 +487,13 @@ test('the mount takes the value, and the reader after it renders with it', async
 test('nothing takes the value of one whose creation never mounts', async () => {
   const $src = createControl(1);
 
-  const [$doubled] = inScope(() =>
-    createDerivedControl($src, (value: number) => value * 2)
+  const rendered = renderHook(() =>
+    useDerivedControl($src, (value: number) => value * 2)
   );
+
+  const $doubled = rendered.result;
+
+  rendered.unmount();
 
   setValue($src, 5);
 
@@ -517,15 +520,12 @@ test('an item a bound control resolves is observed like any other', () => {
   const $key = createPrimitiveControl(7);
 
   // a hook's scope is around this, and the item outlives whatever it belongs to
-  const [, scope] = inScope(() => createBoundControl(reg, $key));
+  renderHook(() => useBoundControl(reg)($key));
 
   assert.equal(counter.observers, 1, 'the item it resolved observes');
-  assert.equal(scope.length, 1, 'and the scope holds the bound control alone');
-
-  const item: any = reg.get(7);
 
   assert.equal(
-    item[INTERNALS]._root._pending,
+    getValue(reg.get(7)),
     undefined,
     'so a later get of it owes no catch-up'
   );
@@ -543,7 +543,7 @@ test('clearing a registry stops observing what a bind resolved', () => {
 
   const $key = createPrimitiveControl(2);
 
-  inScope(() => createBoundControl(reg, $key));
+  renderHook(() => useBoundControl(reg)($key));
 
   assert.equal(counter.observers, 2);
 
@@ -664,13 +664,10 @@ test('a dropped item is still what the control bound to it reads', async () => {
 
   const $key = createPrimitiveControl(1);
 
-  const scope: Subscription[] = (cleanupScope._value = []);
-
   const $bound: any = createBoundControl(registry as any, $key as any);
 
-  cleanupScope._value = null;
-
-  scope[0]._subscribe();
+  // watching is the mount: it is what a rendered `useValue` opens
+  const unwatch = watchValue($bound, noop);
 
   setValue(registry.get(1) as any, 'edited');
 
@@ -695,7 +692,7 @@ test('a dropped item is still what the control bound to it reads', async () => {
 
   assert.equal(getValue($bound), 'item-1', 'and a key move binds a fresh one');
 
-  scope[0]._cleanup();
+  unwatch();
 });
 
 test('a registry that throws while an item is built keeps the flush', async () => {
@@ -709,19 +706,16 @@ test('a registry that throws while an item is built keeps the flush', async () =
 
   const $key = createPrimitiveControl(1);
 
-  const scope: Subscription[] = (cleanupScope._value = []);
-
   const $bound: any = createBoundControl(registry as any, $key as any);
 
-  cleanupScope._value = null;
-
-  scope[0]._subscribe();
+  // watching is the mount: it is what a rendered `useValue` opens
+  const unwatch = watchValue($bound, noop);
 
   const $other = createPrimitiveControl('start');
 
   const seen: string[] = [];
 
-  const unwatch = watchValue($other, (value: string) => {
+  const unwatchOther = watchValue($other, (value: string) => {
     seen.push(value);
   });
 
@@ -755,5 +749,5 @@ test('a registry that throws while an item is built keeps the flush', async () =
 
   unwatch();
 
-  scope[0]._cleanup();
+  unwatchOther();
 });

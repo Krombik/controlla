@@ -1,7 +1,7 @@
 import { useRef, version } from 'react';
 
 import type {
-  FieldElement,
+  NativeFieldElement,
   FieldEntry,
   FormInternals,
   NativeKind,
@@ -15,13 +15,13 @@ import isNotEqual from '#internal/isNotEqual';
 import { holdEntry, releaseEntry } from '#form/internal/entry';
 import { handleBlur } from '#form/internal/validator';
 
-const writeValue = (element: FieldElement, value: any) => {
+const writeValue = (element: NativeFieldElement, value: any) => {
   // `NaN` is what an empty numeric field reads back as, and a type without
   // value sanitization would spell it out
   element.value = value != null && value === value ? value : '';
 };
 
-const readValue = (element: FieldElement) => element.value;
+const readValue = (element: NativeFieldElement) => element.value;
 
 /**
  * `NaN` is the empty one, which keeps the value a `number` all the way to the
@@ -32,7 +32,7 @@ const readValue = (element: FieldElement) => element.value;
  * A decimal keypad emits the locale separator, and `-` alone is a state the
  * field passes through while being typed into.
  */
-const readNumber = (element: FieldElement) => {
+const readNumber = (element: NativeFieldElement) => {
   const value = element.value;
 
   return value ? +value.replace(',', '.') : NaN;
@@ -85,7 +85,7 @@ const makeFilter = (filter: RegExp) => (event: InputEvent) => {
   }
 };
 
-const makeKind = <E extends FieldElement>(
+const makeKind = <E extends NativeFieldElement>(
   read: (element: E) => any,
   write: (element: E, value: any) => void,
   attrs: Record<string, string | boolean | undefined> | undefined,
@@ -207,7 +207,9 @@ const KINDS: Record<string, NativeKind> = {
  * would drop an id appended behind its back.
  */
 function syncAria(this: FieldEntry) {
-  const element = this._element;
+  // this only ever runs for a field `useNativeField` bound, so the entry's
+  // focus target is an element
+  const element = this._element as HTMLElement | undefined;
 
   if (element) {
     const invalid = !!this._errorCount;
@@ -246,7 +248,7 @@ function syncAria(this: FieldEntry) {
 
 /** The element is the value: what it holds is read back on every event. */
 const readElement = (entry: FieldEntry, event: Pick<Event, 'target'>) =>
-  entry._parse(entry._native!._read(event.target as FieldElement));
+  entry._parse(entry._native!._read(event.target as NativeFieldElement));
 
 /**
  * React 19 refs hand back their own cleanup, so each element is released

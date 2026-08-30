@@ -6,7 +6,12 @@ node_modules
 
 # builds
 build
+build-native
 dist
+
+# generated at build time - one barrel per target
+src/index.ts
+src/index.native.ts
 .rpt2_cache
 
 # misc
