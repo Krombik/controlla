@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsdown';
 import fs from 'fs/promises';
 import { join, relative } from 'path';
-import { transform } from 'esbuild';
+import { minify } from 'terser';
 
 /**
  * One cache per target, shared across every chunk of every format of it, so
@@ -9,11 +9,10 @@ import { transform } from 'esbuild';
  * runtime). Targets build in parallel and ship separately - sharing one
  * across them would just be two writers on the same object.
  *
- * Nothing else is minified: the names a reader came for are the ones this
- * leaves alone.
+ * Nothing is compressed: this is a rename pass, not a minification.
  */
 const _makeMangleInternals = () => {
-  const mangleCache: Record<string, string | false> = {};
+  const nameCache = {};
 
   // one chunk at a time: two of them starting from the same cache would hand
   // the same field two different names
@@ -28,19 +27,19 @@ const _makeMangleInternals = () => {
 
       const mangled = queue
         .then(() =>
-          transform(code, {
+          minify(code, {
+            module: chunk.fileName.endsWith('.js'),
+            compress: false,
+            nameCache,
             // covers `o._x`, `o['_x']` and `'_x' in o`
-            mangleProps: /^_/,
-            mangleQuoted: true,
-            mangleCache,
-            sourcemap: true,
+            mangle: { keep_fnames: true, properties: { regex: /^_/ } },
+            sourceMap: true,
           })
         )
-        .then((result) => {
-          Object.assign(mangleCache, result.mangleCache);
-
-          return { code: result.code, map: result.map };
-        });
+        .then((result) => ({
+          code: result.code!,
+          map: result.map as string,
+        }));
 
       queue = mangled;
 
