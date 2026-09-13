@@ -9,6 +9,10 @@ import { INTERNALS, EMPTY_ARR } from '#internal/constants';
 import type { AsyncControlScope } from '#types';
 import alwaysTrue from '#internal/alwaysTrue';
 
+function alwaysThis(this: any) {
+  return this;
+}
+
 // $never never emits, so a derived or bound control attaching to it must
 // register nothing: this sink swallows the push, leaving $never's _dependents
 // untouched. Kept here rather than as a check in those controls - they attach
@@ -19,9 +23,7 @@ const inertDependents = {
 } as unknown as Notifier[];
 
 const NOOP_PROMISE_DESCRIPTOR: PropertyDescriptor = {
-  value(this: any) {
-    return this;
-  },
+  value: alwaysThis,
 };
 
 const errorControl = {
@@ -113,10 +115,16 @@ const internals = {
  * );
  * ```
  */
-const $never: AsyncControlScope = new Proxy(internals, {
-  get(target, key, proxy) {
-    return key === INTERNALS ? target : proxy;
-  },
-}) as any;
+const $never: AsyncControlScope =
+  typeof __CONTROLLA_PROXYLESS__ != 'undefined' && __CONTROLLA_PROXYLESS__
+    ? {
+        [INTERNALS]: internals,
+        a: alwaysThis,
+      }
+    : (new Proxy(internals, {
+        get(target, key, proxy) {
+          return key === INTERNALS ? target : proxy;
+        },
+      }) as any);
 
 export default $never;
