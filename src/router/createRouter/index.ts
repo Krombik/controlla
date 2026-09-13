@@ -12,6 +12,7 @@ import type {
   AnyPaths,
   RouterWrite,
   ChunkBuilder,
+  WithNotFound,
 } from '#router/internal/types';
 
 import noop from '#internal/noop';
@@ -27,6 +28,7 @@ import makePrimitiveInternals from '#internal/makePrimitiveInternals';
 import append from '#internal/append';
 
 import NOT_FOUND from '#router/NOT_FOUND';
+import withNotFound from '#router/withNotFound';
 import go from '#router/go';
 import { INTERNALS, EMPTY_ARR, PASSIVE } from '#internal/constants';
 import { getLane, getSchedulerLane, scheduleFlush } from '#internal/flushQueue';
@@ -106,19 +108,22 @@ function buildEmpty(_params: any, _typed: boolean, peek: boolean): any {
  * a `navigationState` control (`push` / `replace` / `pop`) and the
  * `navigationBlocker`.
  *
+ * The root carries a {@link NOT_FOUND} route of its own, so every url matches
+ * something - reach its page through `router.routes[NOT_FOUND]`.
+ *
  * @example
  * ```ts
- * const router = createRouter(
- *   withNotFound({
- *     home: createPath(),
- *     product: createPath('product', param({ id: false })),
- *   })
- * );
+ * const router = createRouter({
+ *   home: createPath(),
+ *   product: createPath('product', param({ id: false })),
+ * });
  *
  * navigate(router.navigation.product({ id: '42' }));
  * ```
  */
-const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
+const createRouter = <Paths extends AnyPaths>(
+  paths: Paths
+): Router<WithNotFound<Paths>> => {
   const SCROLL_POS_HISTORY_KEY = 'controlla.SPH';
   const CURRENT_SCROLL_POS_KEY = 'controlla.CSP';
 
@@ -213,25 +218,11 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
     searchParams: Record<string, string>,
     initial: boolean
   ) => {
-    let i = 0;
-
     for (
-      ;
+      let i = 0;
       i < matchers.length && matchers[i](pathname, searchParams, initial);
       i++
     ) {}
-
-    // the boot throws over this, and every navigation after it went quiet: the
-    // url moved on while the routes stayed on whatever matched last
-    if (
-      process.env.NODE_ENV !== 'production' &&
-      wasBooted &&
-      i == matchers.length
-    ) {
-      reportError(
-        new Error(`no path matched "${pathname}" - use withNotFound`)
-      );
-    }
 
     scheduleFlush(historyLane);
 
@@ -1204,7 +1195,15 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
     }
   };
 
-  buildRoutes(routes, navigations, paths, EMPTY_ARR, '', 0, false);
+  buildRoutes(
+    routes,
+    navigations,
+    NOT_FOUND in paths ? paths : withNotFound(paths),
+    EMPTY_ARR,
+    '',
+    0,
+    false
+  );
 
   // the finalizer commits after every params control, and the state it writes
   // sits with it - it is the routes' change, so whatever derives from it must
@@ -1337,14 +1336,8 @@ const createRouter = <Paths extends AnyPaths>(paths: Paths): Router<Paths> => {
 
   wasBooted = true;
 
-  if (!__NATIVE__) {
-    if (currentChainIndex < 0) {
-      throw new Error(`no path matched "${pathname}" - use withNotFound`);
-    }
-
-    if (restoreX !== undefined) {
-      restoreScroll(restoreX, restoreY!);
-    }
+  if (!__NATIVE__ && restoreX !== undefined) {
+    restoreScroll(restoreX, restoreY!);
   }
 
   let scrollSaveTimeout: ReturnType<typeof setTimeout> | undefined;

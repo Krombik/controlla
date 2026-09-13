@@ -1,4 +1,5 @@
 import type { ROUTE_PARAMS } from '#router/internal/constants';
+import type NOT_FOUND from '#router/NOT_FOUND';
 import type {
   AsyncControlScope,
   Control,
@@ -90,6 +91,14 @@ export type Route<
           ? Route<Children, Params, Async, Anchor>
           : never;
       });
+
+/**
+ * The catch-all `createRouter` puts on the root, so a url the paths don't
+ * describe still has a page.
+ */
+export type WithNotFound<Paths> = Paths & {
+  [NOT_FOUND]: Path<never, { notFoundPath: string }>;
+};
 
 export type Router<
   Paths extends AnyPaths,

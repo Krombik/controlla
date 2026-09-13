@@ -1,6 +1,6 @@
 import identity from '#internal/identity';
 import createPath from '#router/createPath';
-import type { AnyPaths, Path, PathParam } from '#router/internal/types';
+import type { AnyPaths, PathParam, WithNotFound } from '#router/internal/types';
 import NOT_FOUND from '#router/NOT_FOUND';
 
 const NAME = 'notFoundPath';
@@ -26,27 +26,27 @@ const notFoundPath = createPath(((
 }) as PathParam<{ [NAME]: [string, false] }>);
 
 /**
- * Adds a catch-all route to the path tree under the {@link NOT_FOUND} symbol:
- * it matches any URL the other paths didn't, so the router always has a page.
+ * Adds a catch-all route to a children record under the {@link NOT_FOUND}
+ * symbol: it matches any URL the siblings beside it didn't, so a section of the
+ * tree has a page of its own for one. The root already has one - `createRouter`
+ * puts it there.
  *
  * @example
  * ```ts
- * const router = createRouter(withNotFound({ home: createPath() }));
+ * const paths = {
+ *   docs: createPath('docs', withNotFound({ intro: createPath('intro') })),
+ * };
  *
  * const RouterView = createRouterView([
- *   [router.routes.home, HomePage],
- *   [router.routes[NOT_FOUND], NotFoundPage],
+ *   [router.routes.docs.intro, IntroPage],
+ *   [router.routes.docs[NOT_FOUND], DocsNotFoundPage],
  * ]);
  * ```
  */
-const withNotFound = <Paths extends AnyPaths>(
-  paths: Paths
-): Paths & {
-  [NOT_FOUND]: Path<never, { [NAME]: string }>;
-} =>
+const withNotFound = <Paths extends AnyPaths>(paths: Paths) =>
   ({
     ...paths,
     [NOT_FOUND]: notFoundPath,
-  }) as any;
+  }) as WithNotFound<Paths>;
 
 export default withNotFound;

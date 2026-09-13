@@ -132,7 +132,7 @@ For working code rather than snippets, [`examples/`](examples) has fifteen stand
 - **Platform**: [`$appVisible`](#appvisible), [`mediaQuery`](#mediaqueryquery), [`$online`](#online), [`$windowSize`](#windowsize)
 - **Schedulers**: [`batch`](#batchcallback-scheduler), [`createManualScheduler`](#createmanualscheduler), [`createThrottleScheduler`](#createthrottleschedulerms), [`createDebounceScheduler`](#createdebounceschedulerms)
 - **Forms**: [`useForm`](#useformcontrol-validateon), [`FormProvider`](#formprovider-form), [`useValidator`](#usevalidatorcontrol-validate-validateon--validator), [`usePathValidator`](#usepathvalidatorcontrol-validate-validateon--pathvalidator), [`useNativeField`](#usenativefieldcontrol-options--nativefield), [`useField`](#usefieldcontrol-onchange-replace--field), [`useFieldArray`](#usefieldarraycontrol), [`useFieldState`](#usefieldstatecontrol), [`useFormState`](#useformstate)
-- **Router**: [`createRouter`](#createrouterpaths), [`withPrefixes`](#withprefixesprefixes-paths), [`go`](#godelta), [`createPath`](#createpathpath), [`createAsyncPath`](#createasyncpathsource), [`param`](#paramoptions), [`query`](#queryoptions), [`oneOf`](#oneofoptions), [`arrayParam`](#arrayparamoptions), [`createRouterView`](#createrouterviewroutes), [`Link` / `useLink`](#link--uselink), [`navigate`](#navigateto-replace-ignoreblock-scrolltotop-scrollrestoration), [params as controls](#route-params-are-controls), [`replaceValue`](#replacevaluecontrol-value-scheduler), [anchors](#anchors), [`registerAnchorOffset`](#registeranchoroffsetroute), [`selectRegisteredAnchors`](#selectregisteredanchorsroute), [`trackScroll`](#trackscrollanchor), [`$navigationState`](#navigationstate), [`navigationBlocker`](#blocking-navigation), [`repairHistory`](#repairhistory)
+- **Router**: [`createRouter`](#createrouterpaths), [`withNotFound`](#withnotfoundpaths), [`withPrefixes`](#withprefixesprefixes-paths), [`go`](#godelta), [`createPath`](#createpathpath), [`createAsyncPath`](#createasyncpathsource), [`param`](#paramoptions), [`query`](#queryoptions), [`oneOf`](#oneofoptions), [`arrayParam`](#arrayparamoptions), [`createRouterView`](#createrouterviewroutes), [`Link` / `useLink`](#link--uselink), [`navigate`](#navigateto-replace-ignoreblock-scrolltotop-scrollrestoration), [params as controls](#route-params-are-controls), [`replaceValue`](#replacevaluecontrol-value-scheduler), [anchors](#anchors), [`registerAnchorOffset`](#registeranchoroffsetroute), [`selectRegisteredAnchors`](#selectregisteredanchorsroute), [`trackScroll`](#trackscrollanchor), [`$navigationState`](#navigationstate), [`navigationBlocker`](#blocking-navigation), [`repairHistory`](#repairhistory)
 - **[Build plugin](#build-plugin)**: [`controlla-unplugin`](#build-plugin), [opting out](#not-using-it)
 - **[Troubleshooting](#troubleshooting)**: [param value type + `stringify`](#paramquery-value-type-breaks-when-stringify-is-present), [named import suggestions in VS Code](#get-named-controlla-import-suggestions-in-vs-code)
 
@@ -1430,7 +1430,21 @@ const router = createRouter(paths);
 
 - `router.routes` - the typed route tree, where every route is a readonly control of whether it's matched.
 - `router.navigation` - target builders, for [`navigate`](#navigateto-replace-ignoreblock-scrolltotop-scrollrestoration) and [`Link`](#link--uselink) below.
+- `router.routes[NOT_FOUND]` - the catch-all the root always has, so every URL matches something. Give a section its own with [`withNotFound`](#withnotfoundpaths).
 - [`$navigationState`](#navigationstate) and [`navigationBlocker`](#blocking-navigation) are standalone imports, not part of the router.
+
+### `withNotFound(paths)`
+
+Adds a catch-all under the [`NOT_FOUND`](#createrouterviewroutes) symbol to a **children** record, so that branch answers a URL its siblings didn't. The root already has one - `createRouter` puts it there, and `router.routes[NOT_FOUND]` is it.
+
+```ts
+const paths = {
+  docs: createPath('docs', withNotFound({ intro: createPath('intro') })),
+};
+
+// /docs/anything-else
+router.routes.docs[NOT_FOUND];
+```
 
 ### `withPrefixes(prefixes, paths)`
 
@@ -1458,16 +1472,15 @@ Declares one path of the route tree. Arguments come in order - static string seg
 ```ts
 import createPath from 'controlla/router/createPath';
 import param from 'controlla/router/param';
-import withNotFound from 'controlla/router/withNotFound';
 
-const paths = withNotFound({
+const paths = {
   home: createPath(),
   product: createPath(
     'product',
     param({ id: { parse: Number, stringify: String } }),
     { reviews: createPath('reviews') }              // /product/42/reviews
   ),
-});
+};
 ```
 
 ### `createAsyncPath(source)`
