@@ -1,3 +1,4 @@
+import { defineConfig, globalIgnores } from 'eslint/config';
 import tseslint from 'typescript-eslint';
 
 /** Domains with private internals; core's `_internal` (#internal/*) is shared. */
@@ -48,10 +49,8 @@ const boundaries = [
   })),
 ];
 
-export default tseslint.config(
-  {
-    ignores: ['build/**', 'node_modules/**'],
-  },
+export default defineConfig([
+  globalIgnores(['build/**', 'node_modules/**']),
   {
     files: ['**/*.{ts,tsx,mts,cts}'],
     languageOptions: {
@@ -76,5 +75,5 @@ export default tseslint.config(
       ],
     },
   },
-  ...boundaries
-);
+  ...boundaries,
+]);
