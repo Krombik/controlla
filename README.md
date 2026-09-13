@@ -133,6 +133,7 @@ For working code rather than snippets, [`examples/`](examples) has fifteen stand
 - **Schedulers**: [`batch`](#batchcallback-scheduler), [`createManualScheduler`](#createmanualscheduler), [`createThrottleScheduler`](#createthrottleschedulerms), [`createDebounceScheduler`](#createdebounceschedulerms)
 - **Forms**: [`useForm`](#useformcontrol-validateon), [`FormProvider`](#formprovider-form), [`useValidator`](#usevalidatorcontrol-validate-validateon--validator), [`usePathValidator`](#usepathvalidatorcontrol-validate-validateon--pathvalidator), [`useNativeField`](#usenativefieldcontrol-options--nativefield), [`useField`](#usefieldcontrol-onchange-replace--field), [`useFieldArray`](#usefieldarraycontrol), [`useFieldState`](#usefieldstatecontrol), [`useFormState`](#useformstate)
 - **Router**: [`createRouter`](#createrouterpaths), [`withPrefixes`](#withprefixesprefixes-paths), [`go`](#godelta), [`createPath`](#createpathpath), [`createAsyncPath`](#createasyncpathsource), [`param`](#paramoptions), [`query`](#queryoptions), [`oneOf`](#oneofoptions), [`arrayParam`](#arrayparamoptions), [`createRouterView`](#createrouterviewroutes), [`Link` / `useLink`](#link--uselink), [`navigate`](#navigateto-replace-ignoreblock-scrolltotop-scrollrestoration), [params as controls](#route-params-are-controls), [`replaceValue`](#replacevaluecontrol-value-scheduler), [anchors](#anchors), [`registerAnchorOffset`](#registeranchoroffsetroute), [`selectRegisteredAnchors`](#selectregisteredanchorsroute), [`trackScroll`](#trackscrollanchor), [`$navigationState`](#navigationstate), [`navigationBlocker`](#blocking-navigation), [`repairHistory`](#repairhistory)
+- **[Build plugin](#build-plugin)**: [`controlla-unplugin`](#build-plugin), [opting out](#not-using-it)
 - **[Troubleshooting](#troubleshooting)**: [param value type + `stringify`](#paramquery-value-type-breaks-when-stringify-is-present), [named import suggestions in VS Code](#get-named-controlla-import-suggestions-in-vs-code)
 
 ---
@@ -1786,6 +1787,37 @@ const repaired = await repairHistory();
 Every navigation repairs the history first, so call this only to fix the back button while staying on the page. Resolves to `false` when there was nothing to drop, or when the current entry is the session's first - that one has nothing in front of it to push from.
 
 The router also handles what you'd expect from the platform - scroll position is restored on back/forward and across refreshes, and the anchor is scrolled on first load.
+
+## Build plugin
+
+A control scope is a `Proxy`, and a proxy trap costs far more than a call - enough to matter on Hermes. [`controlla-unplugin`](https://github.com/Krombik/controlla-unplugin) rewrites every scope access at build time so there is no proxy left to trap:
+
+```ts
+$user.contact.name        // →  $user.a('contact').a('name')
+const { name } = $contact // →  const name = $contact.a('name')
+```
+
+Which accesses walk a control is answered by the TypeScript compiler, not by a naming convention, so nothing it can't type is touched. Vite, rolldown, webpack, rspack, esbuild, rollup and Metro:
+
+```ts
+import controllaPlugin from 'controlla-unplugin/vite';
+
+export default defineConfig({
+  plugins: [controllaPlugin()],
+});
+```
+
+It runs in production builds only - development keeps the proxy, so an access the rewrite missed still works while you're writing it.
+
+### Not using it?
+
+Both scope implementations ship, and the proxyless one costs about 70 gzipped bytes in a build that never rewrites anything. To drop those too, define the flag `false`:
+
+```ts
+define: { __CONTROLLA_PROXYLESS__: 'false' }
+```
+
+Left undefined it's the proxy either way - this is only about size.
 
 ## Troubleshooting
 

@@ -5,3 +5,12 @@
  * flag narrows no declaration a build emits.
  */
 declare const __NATIVE__: boolean;
+
+/**
+ * `true` where a build plugin rewrote every scope access into `a('key')` calls,
+ * so the proxy is dead weight. The *app's* bundler defines it, not this one -
+ * hence the `typeof` guard around it: a free identifier is also the one thing
+ * rolldown won't fold, and a folded one takes the branch the plugin exists to
+ * reach with it. Left undefined, the proxy is what stands there.
+ */
+declare const __CONTROLLA_PROXYLESS__: boolean;
