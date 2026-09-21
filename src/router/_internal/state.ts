@@ -57,7 +57,12 @@ export const urlFinalizer: Mutable<PendingItem> = {
 type HistoryState = {
   _knownLength: number;
   _index: number;
-  _repairedUrl: string;
+  /**
+   * The entry this document loaded at - web only. Everything below it belongs
+   * to a document that is gone (a reload, a duplicated tab), so going there is
+   * a load rather than a pop.
+   */
+  _baseIndex: number;
   _resolveRepair: (() => void) | undefined;
   //#region react-native ONLY
   /**
@@ -73,9 +78,8 @@ type HistoryState = {
 export const historyState = {
   _knownLength: 0,
   _index: 0,
-  _repairedUrl: '',
   _resolveRepair: undefined,
-  ...(__NATIVE__ ? { _entries: [], _pop: noop } : {}),
+  ...(__NATIVE__ ? { _entries: [], _pop: noop } : { _baseIndex: 0 }),
 } as HistoryState;
 
 /** What `navigationBlocker` shares with the router. */

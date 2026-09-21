@@ -1076,19 +1076,6 @@ const createRouter = <Paths extends AnyPaths>(
     const resolveRepair = !__NATIVE__ && historyState._resolveRepair;
 
     if (resolveRepair) {
-      history.pushState(
-        {
-          ...(history.state as HistoryState),
-          idx: historyState._index,
-        } satisfies HistoryState,
-        '',
-        historyState._repairedUrl
-      );
-
-      historyState._knownLength = history.length;
-
-      historyState._resolveRepair = undefined;
-
       resolveRepair();
 
       return;
@@ -1226,7 +1213,9 @@ const createRouter = <Paths extends AnyPaths>(
 
   if (!__NATIVE__) {
     if (state && state.idx != null) {
-      historyState._index = state.idx;
+      // an entry of a document that is gone - a reload, a duplicated tab - so
+      // this is as far back as a pop reaches
+      historyState._baseIndex = historyState._index = state.idx;
     } else {
       isKnownEntry = false;
 
