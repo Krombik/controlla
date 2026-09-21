@@ -5,6 +5,7 @@ import type { ValidatorInternals } from '#form/internal/types';
 import type { Validate, ValidateAll, ValidateOn } from '#form/types';
 import createControl from '#core/createControl';
 import noop from '#internal/noop';
+import getChild from '#internal/getChild';
 import watchValue from '#core/watchValue';
 import FormContext from '#form/internal/FormContext';
 import throwNoProvider from '#form/internal/throwNoProvider';
@@ -89,7 +90,7 @@ const useValidator = ((
     errors = validator._errors = Array(controls.length);
 
     for (let i = controls.length; i--;) {
-      errors[i] = errorControl[i];
+      errors[i] = getChild(errorControl, i);
     }
   }
 

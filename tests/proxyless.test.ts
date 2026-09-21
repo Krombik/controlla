@@ -84,3 +84,57 @@ test('$never answers a() with itself, however deep', () => {
     'a path of it is loading forever too'
   );
 });
+
+const { default: useValidator } =
+  await import('../build/form/useValidator/index.js');
+const { default: useForm } = await import('../build/form/useForm/index.js');
+const { default: FormProvider } =
+  await import('../build/form/FormProvider/index.js');
+
+const { renderHook } = await import('./_env/hooks.ts');
+const { contextOf } = await import('./_env/context.ts');
+
+const FormContext = contextOf(
+  (FormProvider as any)({ form: undefined, children: null })
+);
+
+/** Renders with the form in context, the way `FormProvider` puts it there. */
+const mount = <T>(form: any, render: () => T) =>
+  renderHook(render, (run) => {
+    (FormContext as any)._currentValue = form;
+
+    try {
+      return run();
+    } finally {
+      (FormContext as any)._currentValue = undefined;
+    }
+  });
+
+test('a tuple validator answers with a control per slot', async () => {
+  const $values: any = createControl({ password: 'a', repeat: 'b' });
+
+  const form: any = mount(undefined, () => useForm($values)).result;
+
+  const [$passwordError, $repeatError]: any = mount(form, () =>
+    useValidator(
+      [$values.a('password'), $values.a('repeat')],
+      ([first, second]: any[]) =>
+        first === second ? undefined : [undefined, 'passwords differ']
+    )
+  ).result;
+
+  assert.equal(await form.validate(), false);
+
+  assert.equal(getValue($passwordError), undefined);
+  assert.equal(
+    getValue($repeatError),
+    'passwords differ',
+    'the slot is a control of its own, not a property that is not there'
+  );
+
+  setValue($values.a('repeat'), 'a');
+
+  await tick();
+
+  assert.equal(getValue($repeatError), undefined);
+});
