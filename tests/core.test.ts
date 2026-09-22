@@ -1070,4 +1070,43 @@ rel2();
   release();
 }
 
+// A sync item carries no loading of its own, so the bound control over it is
+// loading for exactly as long as its keys are.
+{
+  const reg = createRegistry(createControl, (id: string) => ({ id }));
+
+  let handle: any;
+
+  const $key: any = createAsyncControl<string>({
+    load(h: any) {
+      handle = h;
+    },
+  });
+
+  const $bound: any = createBoundControl(reg, $key);
+
+  const release = retain($bound);
+
+  await tick();
+
+  assert.equal(
+    getValue(selectLoading($bound)),
+    true,
+    'sync item: loading while the key is'
+  );
+
+  handle.setValue('a');
+
+  await tick();
+
+  assert.deepEqual(getValue($bound), { id: 'a' });
+  assert.equal(
+    getValue(selectLoading($bound)),
+    false,
+    'sync item: and done when the key answers'
+  );
+
+  release();
+}
+
 console.log('core-smoke.test.ts: all assertions passed');

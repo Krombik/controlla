@@ -47,8 +47,6 @@ let appStateSubscription: EventSubscription | undefined;
 const endLoad = (internals: AsyncControlInternals) => {
   const load = internals._load!;
 
-  internals._attempt = 0;
-
   load._loadedAt =
     load._options.reloadOnFocus || load._options.reloadIfStale ? Date.now() : 1;
 

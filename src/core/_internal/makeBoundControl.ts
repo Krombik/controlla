@@ -69,6 +69,8 @@ interface BoundInternals
   readonly _activeNodes: BoundInternalsChild[];
   readonly _changedNodes: BoundInternalsChild[];
   readonly _selfNotifier: Notifier;
+  /** Async targets only: what carries their loading over, unaggregated. */
+  readonly _loadingNotifier: Notifier;
   _keys: any[];
   /** By key index, for the keys that are controls; the rest are holes. */
   readonly _sources: Array<ControlInternalsChild | undefined>;
@@ -194,6 +196,12 @@ const cleanupPrevTarget = (root: BoundInternals) => {
           ._dependents,
         notifier
       );
+
+      removeFromArray(
+        (prevTarget as AsyncControlInternals)._loadingControl[INTERNALS]
+          ._dependents,
+        root._loadingNotifier
+      );
     }
 
     removeFromArray(prevTarget._dependents, notifier);
@@ -224,6 +232,15 @@ function targetChangeNotify(this: Notifier, lane: Lane) {
   root._fromSource ||= sourceUpdate._value;
 
   addToQueue(lane, root);
+}
+
+/** The target's own, which is the bound control's for as long as it binds it. */
+function targetLoadingNotify(this: Notifier, lane: Lane, value: any) {
+  commitStatusValue(
+    (this._target as BoundInternals)._loadingControl![INTERNALS],
+    value,
+    lane
+  );
 }
 
 function keyChangeNotify(this: Notifier, lane: Lane, value: any) {
@@ -436,8 +453,6 @@ function commitSet(this: BoundInternals, _: any, lane: Lane) {
 
     const prevError: AggregateControlError | undefined = errorInternals._value;
 
-    let nextLoadingValue = true;
-
     let nextReadyValue: undefined | true;
 
     let nextErrorValue: AggregateControlError | undefined;
@@ -451,7 +466,21 @@ function commitSet(this: BoundInternals, _: any, lane: Lane) {
         if (isRetargeted) {
           const nextLoad = currentTarget._load;
 
+          const targetLoadingInternals =
+            currentTarget._loadingControl[INTERNALS];
+
           attachUntrackedNotifier(errorInternals, root._selfNotifier);
+
+          attachUntrackedNotifier(
+            targetLoadingInternals,
+            root._loadingNotifier
+          );
+
+          commitStatusValue(
+            loadingInternals,
+            targetLoadingInternals._value,
+            lane
+          );
 
           if (nextLoad && root._activeCount) {
             currentTarget._attach(undefined, undefined, true);
@@ -472,11 +501,12 @@ function commitSet(this: BoundInternals, _: any, lane: Lane) {
           nextErrorValue = prevError;
         }
 
-        nextLoadingValue = currentTarget._loadingControl[INTERNALS]._value;
-
         nextReadyValue = currentTarget._readyControl[INTERNALS]._value;
       } else {
-        nextLoadingValue = root._value === undefined;
+        // a sync item has no loading of its own to carry over
+        const nextLoadingValue = root._value === undefined;
+
+        commitStatusValue(loadingInternals, nextLoadingValue, lane);
 
         nextReadyValue = !nextLoadingValue || undefined;
       }
@@ -484,6 +514,8 @@ function commitSet(this: BoundInternals, _: any, lane: Lane) {
       const prevErrors = prevError && prevError.errors;
 
       let isError = false;
+
+      let nextLoadingValue = true;
 
       /** Nothing to compare against is nothing the aggregate can be reused from. */
       let isChanged = !prevErrors;
@@ -507,6 +539,8 @@ function commitSet(this: BoundInternals, _: any, lane: Lane) {
           ? new AggregateControlError(errors)
           : prevError;
       }
+
+      commitStatusValue(loadingInternals, nextLoadingValue, lane);
     }
 
     root._holdingPrev = heldPrev;
@@ -519,8 +553,6 @@ function commitSet(this: BoundInternals, _: any, lane: Lane) {
     }
 
     commitErrorValue(root, errorInternals, nextErrorValue, lane);
-
-    commitStatusValue(loadingInternals, nextLoadingValue, lane);
 
     commitStatusValue(readyInternals, nextReadyValue, lane);
   }
@@ -811,6 +843,13 @@ function subscribeBound(this: BoundInternals) {
         target._errorControl[INTERNALS],
         this._selfNotifier
       );
+
+      const loadingInternals = target._loadingControl[INTERNALS];
+
+      attachUntrackedNotifier(loadingInternals, this._loadingNotifier);
+
+      // wherever it got to while nothing carried it over
+      this._loadingControl![INTERNALS]._value = loadingInternals._value;
     }
   }
 
@@ -896,6 +935,7 @@ const makeBoundControl = (registry: Registry<any, any>, keys: any[]): any => {
     _changedNodes: [],
     _commitSet: commitSet,
     _selfNotifier: undefined!,
+    _loadingNotifier: undefined!,
     _errorControl: undefined,
     _loadingControl: undefined,
     _promise: undefined,
@@ -1080,6 +1120,14 @@ const makeBoundControl = (registry: Registry<any, any>, keys: any[]): any => {
     };
 
     (errorInternals as Mutable<typeof errorInternals>)._root = errorInternals;
+
+    (boundInternals as Mutable<BoundInternals>)._loadingNotifier = {
+      _target: boundInternals,
+      _notify: targetLoadingNotify,
+      _index: 0,
+      _attachedTo: EMPTY_ARR,
+      _source: undefined,
+    };
 
     (boundInternals as Mutable<BoundInternals>)._loadingControl = {
       [INTERNALS]: makeStatusInternals(boundInternals, loadingValue),

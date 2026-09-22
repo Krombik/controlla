@@ -16,6 +16,7 @@ const { default: requestLoader } =
 import setValue from '../build/core/setValue/index.js';
 import getValue from '../build/core/getValue/index.js';
 import retain from '../build/core/retain/index.js';
+import selectLoading from '../build/core/selectLoading/index.js';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -264,6 +265,47 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     0,
     'grouped: a loaded answer stops the polling'
   );
+  rel();
+}
+
+// A poll that gives up on the attempt count ends on the value it has been
+// answering with all along. The answer that ended it is the one `isLoaded` was
+// asked about, and a bound control over the item shows what the item does.
+{
+  const resolvers: Array<(v: any) => void> = [];
+  const poll = pollLoader(
+    (_id: string) => new Promise((r) => resolvers.push(r)),
+    {
+      interval: 10,
+      isLoaded: (value: any, _prev: any, attempt: number) =>
+        value !== 'processing' || attempt === 2,
+    }
+  );
+  const reg = createRegistry(createAsyncControl, poll);
+  const $bound = createBoundControl(reg, createPrimitiveControl('p1'));
+  const rel = retain($bound);
+  await tick();
+
+  for (let i = 0; i < 3; i++) {
+    resolvers.shift()!('processing');
+    await tick();
+    await sleep(20);
+  }
+
+  assert.equal(
+    getValue(selectLoading(reg.get('p1'))),
+    false,
+    'the attempt the loader was answered on is the one the commit reads'
+  );
+  assert.equal(
+    getValue(selectLoading($bound)),
+    false,
+    'and a bound control hears it, though the value it ended on never moved'
+  );
+  assert.equal(getValue($bound), 'processing', 'which is the one it holds');
+
+  await sleep(30);
+  assert.equal(resolvers.length, 0, 'nothing polls any more');
   rel();
 }
 
