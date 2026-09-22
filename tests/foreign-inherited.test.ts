@@ -54,36 +54,32 @@ addForeignEntry();
 
 assert.equal(history.length, 4, 'the history grew');
 
-assert.equal(await repairHistory(), true, 'and the app asks for it back');
-
-await settle();
-
 assert.equal(
-  current(),
-  entries[1],
-  'it stepped back onto its own entry, and no further - below it lies another document, which a pop there would load'
+  await repairHistory(),
+  false,
+  'nothing of its own to push from, so it answers instead of reaching'
 );
-assert.equal(location.pathname, '/payment', 'so the page stayed put');
-assert.equal(getValue(router.routes.payment), true, 'and the route with it');
-assert.equal(entries.length, 4, 'the strays are in front of it now');
 
-// which is all the back button needed
-history.go(-1);
 await settle();
 
-assert.equal(location.pathname, '/checkout', 'one press goes back');
-assert.equal(getValue(router.routes.checkout), true, 'and routes');
+assert.equal(current(), entries[3], 'it did not move');
+assert.equal(entries.length, 4, 'nor drop anything');
+assert.equal(
+  location.pathname,
+  '/payment',
+  'which is what keeps the page: a pop below the entry it opened on is a load, and the await would never end'
+);
+assert.equal(getValue(router.routes.payment), true, 'still on the route');
 
-// and the next push is what prunes them
-navigate(router.navigation.payment());
-await settle();
-
-assert.deepEqual(urls(), ['/checkout', '/payment'], 'pruned by the push');
-assert.equal(await repairHistory(), false, 'nothing left to drop');
-
-// ---- with an entry of its own behind, it drops them outright ----
+// ---- an entry it pushed itself is one it can pop to ----
 navigate(router.navigation.checkout());
 await settle();
+
+assert.deepEqual(
+  urls(),
+  ['/checkout', '/payment', '/payment', '/payment', '/checkout'],
+  'the push landed on top of the strays, as a push does'
+);
 
 addForeignEntry();
 addForeignEntry();
@@ -94,10 +90,9 @@ await settle();
 
 assert.deepEqual(
   urls(),
-  ['/checkout', '/payment', '/checkout'],
-  'repaired in place'
+  ['/checkout', '/payment', '/payment', '/payment', '/checkout'],
+  'repaired in place - the strays of this round are gone'
 );
-assert.equal(history.length, 3, 'so the history counts right again');
 assert.equal(location.pathname, '/checkout', 'without moving off the page');
 assert.equal(getValue(router.routes.checkout), true, 'or off the route');
 
