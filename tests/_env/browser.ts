@@ -173,6 +173,9 @@ export const SCROLL_POS_HISTORY_KEY = 'controlla.SPH';
 /** Where the page is right now, as `idx,x,y` - what a refresh restores. */
 export const CURRENT_SCROLL_POS_KEY = 'controlla.CSP';
 
+/** Set for as long as the tab lives, so a second boot in it is a second one. */
+export const TAB_KEY = 'controlla.TAB';
+
 export const session: Record<string, string> = {};
 
 defineGlobal('sessionStorage', {
@@ -184,6 +187,20 @@ defineGlobal('sessionStorage', {
     delete session[key];
   },
 });
+
+let navigationType = 'navigate';
+
+/** What `PerformanceNavigationTiming` says this document's load was. */
+export const setNavigationType = (type: string) => {
+  navigationType = type;
+};
+
+const realGetEntriesByType = performance.getEntriesByType.bind(performance);
+
+(performance as any).getEntriesByType = (type: string) =>
+  type == 'navigation'
+    ? [{ type: navigationType }]
+    : realGetEntriesByType(type as any);
 
 defineGlobal('requestAnimationFrame', (cb: () => void) => setTimeout(cb, 0));
 

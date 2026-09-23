@@ -10,10 +10,11 @@ let pending: Promise<boolean> | undefined;
  * produced them: `await repairHistory()`.
  *
  * Resolves once done, or right away when there is nothing to drop - and with
- * `false` when it has nothing of its own to push from, which is the page the
- * session started at, and the one a duplicated or a restored tab opens on until
- * it navigates. The entries stay there in that case: reaching past them would
- * leave the page.
+ * `false` when there is no entry of its own to push from: the page the session
+ * started at, and every page of a tab that opened on a history it did not build
+ * itself - a restored or a duplicated tab, or a page left and come back to. The
+ * entries stay there in that case, since reaching past them would leave the
+ * page.
  */
 const repairHistory = (): Promise<boolean> => {
   // one repair at a time: a second `history.go` would take over the first

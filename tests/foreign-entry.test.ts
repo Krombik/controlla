@@ -15,7 +15,9 @@ import assert from 'node:assert';
 // and `history.go`, which counts it - so the back button does nothing for as
 // many presses. Nothing prunes them, a push included, so the app has to ask.
 entries.length = 0;
-entries.push({ url: '/checkout', state: { idx: 0 } });
+// a tab that opened here itself: the entry is this document's own, so a repair
+// has something to push from as soon as it navigates once
+entries.push({ url: '/checkout', state: null });
 location.pathname = '/checkout';
 location.search = '';
 location.hash = '';

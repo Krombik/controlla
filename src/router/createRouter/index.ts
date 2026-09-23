@@ -126,6 +126,7 @@ const createRouter = <Paths extends AnyPaths>(
 ): Router<WithNotFound<Paths>> => {
   const SCROLL_POS_HISTORY_KEY = 'controlla.SPH';
   const CURRENT_SCROLL_POS_KEY = 'controlla.CSP';
+  const TAB_KEY = 'controlla.TAB';
 
   const SCROLL_SAVE_DELAY = 100;
 
@@ -1212,10 +1213,33 @@ const createRouter = <Paths extends AnyPaths>(
   let isKnownEntry = !__NATIVE__;
 
   if (!__NATIVE__) {
+    if (safeSessionStorage) {
+      const kept = safeSessionStorage.getItem(TAB_KEY);
+
+      if (kept) {
+        const navigationEntry = performance.getEntriesByType(
+          'navigation'
+        )[0] as PerformanceNavigationTiming | undefined;
+
+        if (
+          kept != '1' ||
+          navigationEntry === undefined ||
+          navigationEntry.type != 'reload'
+        ) {
+          safeSessionStorage.setItem(TAB_KEY, '0');
+
+          historyState._baseIndex = Infinity;
+        }
+      } else {
+        safeSessionStorage.setItem(TAB_KEY, '1');
+      }
+    } else {
+      // nothing tells one boot in this tab from the next, so nothing to trust
+      historyState._baseIndex = Infinity;
+    }
+
     if (state && state.idx != null) {
-      // an entry of a document that is gone - a reload, a duplicated tab - so
-      // this is as far back as a pop reaches
-      historyState._baseIndex = historyState._index = state.idx;
+      historyState._index = state.idx;
     } else {
       isKnownEntry = false;
 

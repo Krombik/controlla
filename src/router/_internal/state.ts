@@ -58,9 +58,9 @@ type HistoryState = {
   _knownLength: number;
   _index: number;
   /**
-   * The entry this document loaded at - web only. Everything below it belongs
-   * to a document that is gone (a reload, a duplicated tab), so going there is
-   * a load rather than a pop.
+   * The lowest entry a repair may push from - web only. The one the document
+   * opened itself, or `Infinity` in a tab that has run this before: popping
+   * anywhere in a history another document built is a load, not a pop.
    */
   _baseIndex: number;
   _resolveRepair: (() => void) | undefined;

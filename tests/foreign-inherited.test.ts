@@ -4,9 +4,11 @@ import {
   entries,
   current,
   history,
+  session,
   tick,
   windowMock,
   addForeignEntry,
+  TAB_KEY,
 } from './_env/browser.ts';
 import assert from 'node:assert';
 
@@ -22,6 +24,10 @@ location.hash = '';
 
 // standing on the last entry, the way a duplicate opens
 history.go(1);
+
+// what the tab kept from the document that built this history - a restored tab
+// carries it over, and a reload never lost it
+session[TAB_KEY] = '1';
 
 const { default: createRouter } =
   await import('../build/router/createRouter/index.js');
@@ -48,6 +54,12 @@ await settle();
 
 assert.equal(getValue(router.routes.payment), true, 'booted where it stands');
 
+assert.equal(
+  session[TAB_KEY],
+  '0',
+  'and marked the tab, so a reload of it inherits the history as well'
+);
+
 // the payment widget navigates its iframe twice
 addForeignEntry();
 addForeignEntry();
@@ -71,7 +83,7 @@ assert.equal(
 );
 assert.equal(getValue(router.routes.payment), true, 'still on the route');
 
-// ---- an entry it pushed itself is one it can pop to ----
+// ---- and pages of its own change nothing: the history is still theirs ----
 navigate(router.navigation.checkout());
 await settle();
 
@@ -81,19 +93,24 @@ assert.deepEqual(
   'the push landed on top of the strays, as a push does'
 );
 
+navigate(router.navigation.payment());
+await settle();
+
 addForeignEntry();
 addForeignEntry();
 
-assert.equal(await repairHistory(), true, 'there was something to drop');
+const before = entries.length;
+
+assert.equal(
+  await repairHistory(),
+  false,
+  'a tab that opened on a history someone else built repairs none of it'
+);
 
 await settle();
 
-assert.deepEqual(
-  urls(),
-  ['/checkout', '/payment', '/payment', '/payment', '/checkout'],
-  'repaired in place - the strays of this round are gone'
-);
-assert.equal(location.pathname, '/checkout', 'without moving off the page');
-assert.equal(getValue(router.routes.checkout), true, 'or off the route');
+assert.equal(entries.length, before, 'so it left them alone again');
+assert.equal(location.pathname, '/payment', 'and stayed on the page');
+assert.equal(getValue(router.routes.payment), true, 'and on the route');
 
 console.log('foreign-inherited.test.ts: all assertions passed');
